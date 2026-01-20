@@ -131,24 +131,24 @@ FTT uses a **Semantic Sigil System** to differentiate between record types. The 
 | **Identity** |  |  |  |
 | `ID:` | **No** | Unique Anchor. | `[ID]` |
 | `PRIVACY:` | **No** | **Privacy/Living Status.** | `OPEN`, `LIVING`, or `PRIVATE` (Default: `OPEN`) |
-| `NAME:` | **Yes** | Name entry. | `[Display_String] | [Sort_Key] | [TYPE] | [STATUS]` |
+| `NAME:` | **Yes** | Name entry. | `[Display_String] \| [Sort_Key] \| [TYPE] \| [STATUS]` |
 | `SEX:` | No | Individual sex. | `M`, `F`, `U`, or `O` |
 | **Vital Events** |  |  |  |
-| `BORN:` | Yes | Date and location of birth. | `[DATE] | [PLACE]` |
-| `DIED:` | Yes | Date and location of death. | `[DATE] | [PLACE]` |
+| `BORN:` | Yes | Date and location of birth. | `[DATE] \| [PLACE]` |
+| `DIED:` | Yes | Date and location of death. | `[DATE] \| [PLACE]` |
 | **Life & Bio** |  |  |  |
-| `EVENT:` | **Yes** | **Inline** Life Event. | `[TYPE] | [START_DATE] | [END_DATE] | [PLACE] | [DETAILS]` |
-| `EVENT_REF:` | **Yes** | **Linked** Shared Event. | `[&EVT-ID] | [ROLE] | [DETAILS]` |
+| `EVENT:` | **Yes** | **Inline** Life Event. | `[TYPE] \| [START_DATE] \| [END_DATE] \| [PLACE] \| [DETAILS]` |
+| `EVENT_REF:` | **Yes** | **Linked** Shared Event. | `[&EVT-ID] \| [ROLE] \| [DETAILS]` |
 | **Relationships** |  |  |  |
-| `PARENT:` | **Yes** | Link to parent. | `[ID] | [TYPE] | [START_DATE] | [END_DATE]` |
+| `PARENT:` | **Yes** | Link to parent. | `[ID] \| [TYPE] \| [START_DATE] \| [END_DATE]` |
 | `CHILD:` | **Yes** | Link to child (Sequence defined by line order). | `[ID]` |
-| `UNION:` | **Yes** | Link to spouse/partner. | `[ID] | [TYPE] | [START_DATE] | [END_DATE] | [END_REASON]` |
-| `ASSOC:` | **Yes** | Link to associate. | `[ID] | [ROLE] | [START_DATE] | [END_DATE] | [DETAILS]` |
+| `UNION:` | **Yes** | Link to spouse/partner. | `[ID] \| [TYPE] \| [START_DATE] \| [END_DATE] \| [END_REASON]` |
+| `ASSOC:` | **Yes** | Link to associate. | `[ID] \| [ROLE] \| [START_DATE] \| [END_DATE] \| [DETAILS]` |
 | **Assets/Meta** |  |  |  |
-| `MEDIA:` | Yes | **Inline** Media file. | `[RELATIVE_PATH] | [DATE] | [CAPTION]` |
+| `MEDIA:` | Yes | **Inline** Media file. | `[RELATIVE_PATH] \| [DATE] \| [CAPTION]` |
 | `SRC:` | **Yes** | **Record-Level Source.** | `[^SRC-ID]` |
 | `NOTES:` | Yes | **Record-Level Note.** | General narrative/biography. |
-| `*_SRC:` | Yes | **Field-Level Citation.** | `[^SRC-ID] | [Detail]` (See Sec 8.2) |
+| `*_SRC:` | Yes | **Field-Level Citation.** | `[^SRC-ID] \| [Detail]` (See Sec 8.2) |
 | `*_NOTE:` | Yes | **Field-Level Note.** | Research notes specific to the preceding field. |
 | `_[TAG]:` | Yes | User-Defined Extension. | Custom tags must start with `_`. |
 
@@ -299,9 +299,9 @@ To avoid parsing ambiguity, events are split into two distinct keys with strict 
 
 | Scenario | End Date Entry | Semantic Meaning | Example |
 | --- | --- | --- | --- |
-| **Point-in-Time** | **Empty** ` |  | ` |
-| **Closed Duration** | **Date** `1990` | The event lasted from Start to End. | `EVENT: Residence |
-| **Ongoing Duration** | **Double Dot** `..` | The event started and is currently ongoing (Open Interval). | `EVENT: Residence |
+| **Point-in-Time** | **Empty** | The event happened at a single moment.  | `EVENT: Graduation \| 1980-05-12 \|\| Oxford; UK` |
+| **Closed Duration** | **Date** `1990` | The event lasted from Start to End. | `EVENT: Residence \| 1920 \| 1925 \| Berlin; DE` |
+| **Ongoing Duration** | **Double Dot** `..` | The event started and is currently ongoing (Open Interval). | `EVENT: Employment \| 1990 \| .. \| Calgary; AB` |
 
 **Examples:**
 
