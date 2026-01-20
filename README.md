@@ -20,16 +20,27 @@ It prioritizes:
 ## ⚡ Quick Example
 
 ```text
-ID: SMITH-01
-NAME: John Smith | Smith, John
-BORN: 1980-05-12 | Calgary; AB
-PARENT: SMITH-DAD | BIO ||
-UNION: DOE-01 | MARR | 2005-06-01 ||
+ID: SMITH-1950-A
+NAME: Arthur Smith | Smith, Arthur | BIRTH | PREF
+SEX: M
+BORN: 1950-01-01 | Calgary; AB
+UNION: DOE-1952-S | MARR | 1975-06-01 | .. |
+CHILD: SMITH-1980-J
 
-ID: DOE-01
-NAME: Jane Doe
-BORN: 1982-08-15 | Toronto; ON
+ID: DOE-1952-S
+NAME: Sarah Doe | Doe, Sarah | BIRTH
+NAME: Sarah Smith | Smith, Sarah | MARR | PREF
+SEX: F
+BORN: 1952-08-15 | Toronto; ON
+UNION: SMITH-1950-A | MARR | 1975-06-01 | .. |
+CHILD: SMITH-1980-J
 
+ID: SMITH-1980-J
+NAME: John Smith | Smith, John | BIRTH | PREF
+SEX: M
+BORN: 1980-05-12 | Vancouver; BC
+PARENT: SMITH-1950-A | BIO
+PARENT: DOE-1952-S | BIO
 ```
 
 ## 🚀 Usage
