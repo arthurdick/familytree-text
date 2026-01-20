@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FTT Visualizer</title>
+    
+    <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+    
+    <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.js"></script>
+    <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+
+    <script src="js/FTTParser.js"></script>
+
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        
+        #container { display: flex; height: 100vh; }
+        
+        /* Editor Pane */
+        #editor-pane {
+            width: 35%;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #ccc;
+            background: #f8f9fa;
+        }
+        
+        #toolbar {
+            padding: 10px 15px;
+            background: #e9ecef;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #toolbar-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        #editor {
+            flex-grow: 1;
+            width: 100%;
+            border: none;
+            resize: none;
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            box-sizing: border-box;
+            outline: none;
+            color: #212529;
+        }
+
+        button {
+            padding: 8px 16px;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 13px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        
+        /* Render Button */
+        #btn-render { background: #0d6efd; }
+        #btn-render:hover { background: #0b5ed7; }
+        #btn-render:active { transform: scale(0.98); }
+
+        /* Export Button */
+        #btn-export { background: #198754; }
+        #btn-export:hover { background: #157347; }
+        #btn-export:active { transform: scale(0.98); }
+
+        /* Graph Pane */
+        #cy {
+            width: 65%;
+            background: #ffffff;
+            background-image: radial-gradient(#dee2e6 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        /* Error Box */
+        #error-box {
+            color: #842029;
+            background-color: #f8d7da;
+            padding: 10px;
+            font-size: 12px;
+            display: none;
+            border-top: 1px solid #f5c6cb;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <div id="editor-pane">
+        <div id="toolbar">
+            <span style="font-weight:600; color:#495057;">FTT Editor</span>
+            <div id="toolbar-group">
+                <button id="btn-render">Render Graph</button>
+                <button id="btn-export">Export PNG</button>
+            </div>
+        </div>
+        <textarea id="editor" spellcheck="false">
+HEAD_FORMAT: FTT v0.1
+HEAD_TITLE: Topology Test
+
+ID: GRANDPA-01
+NAME: Arthur Smith
+BORN: 1920
+UNION: GRANDMA-01 | MARR | 1945 ||
+
+ID: GRANDMA-01
+NAME: Mary Jones
+BORN: 1922
+
+ID: DAD-01
+NAME: John Smith
+BORN: 1950
+# Note: Dad links to parents, but graph draws from Union Node
+PARENT: GRANDPA-01 | BIO ||
+PARENT: GRANDMA-01 | BIO ||
+UNION: MOM-01 | MARR | 1975 ||
+
+ID: MOM-01
+NAME: Sarah Doe
+BORN: 1952
+
+ID: SON-01
+NAME: Junior Smith
+BORN: 1980
+PARENT: DAD-01 | BIO ||
+PARENT: MOM-01 | BIO ||
+EVENT: OCC | 2005 || Engineer
+</textarea>
+        <div id="error-box"></div>
+    </div>
+    <div id="cy"></div>
+</div>
+
+<script>
+    // 1. Initialize Parser
+    const parser = new FTTParser();
+
+    // 2. Converter Logic: FTT -> Cytoscape Elements
+    function convertToCytoscape(parsedData) {
+        const elements = [];
+        const records = parsedData.records;
+        let unionCounter = 0;
+
+        function addNode(id, label, subLabel, type, hidden = false) {
+            elements.push({
+                data: { id, label, subLabel, type },
+                classes: hidden ? 'hidden-node' : ''
+            });
+        }
+
+        // --- Step A: Create Entity Nodes ---
+        for (const [id, rec] of Object.entries(records)) {
+            let label = id;
+            let subLabel = "";
+
+            if (rec.type === 'INDIVIDUAL') {
+                if (rec.data.NAME) label = rec.data.NAME[0].parsed[0] || id;
+                if (rec.data.BORN && rec.data.BORN[0].parsed[0]) subLabel = `b. ${rec.data.BORN[0].parsed[0]}`;
+            } else if (rec.type === 'EVENT') {
+                label = rec.data.TYPE ? rec.data.TYPE[0].parsed[0] : id;
+            } else if (rec.type === 'SOURCE') {
+                label = rec.data.TITLE ? rec.data.TITLE[0].parsed[0] : id;
+            }
+            addNode(id, label, subLabel, rec.type);
+        }
+
+        // --- Step B: Handle Relationships & Topology ---
+        const parentPairToUnionNode = {}; 
+
+        // 1. Process Unions
+        for (const [id, rec] of Object.entries(records)) {
+            if (rec.data.UNION) {
+                rec.data.UNION.forEach(u => {
+                    const partnerId = u.parsed[0];
+                    if (id < partnerId) {
+                        const unionNodeId = `union_${unionCounter++}`;
+                        const alignNodeId = `align_${unionNodeId}`;
+
+                        parentPairToUnionNode[`${id}+${partnerId}`] = unionNodeId;
+                        parentPairToUnionNode[`${partnerId}+${id}`] = unionNodeId;
+
+                        addNode(unionNodeId, '', '', 'UNION_NODE');
+                        addNode(alignNodeId, '', '', 'ALIGN_NODE', true);
+
+                        // Skeleton Edges
+                        [id, partnerId, unionNodeId].forEach(target => {
+                            elements.push({ data: { source: alignNodeId, target: target }, classes: 'layout-edge' });
+                        });
+
+                        // Visual Edges
+                        elements.push({ data: { source: id, target: unionNodeId }, classes: 'visual-edge' });
+                        elements.push({ data: { source: partnerId, target: unionNodeId }, classes: 'visual-edge' });
+                    }
+                });
+            }
+        }
+
+        // 2. Process Lineage
+        for (const [childId, rec] of Object.entries(records)) {
+            if (rec.data.PARENT) {
+                const parents = rec.data.PARENT.map(p => p.parsed[0]);
+                if (parents.length >= 2) {
+                    const unionKey = `${parents[0]}+${parents[1]}`;
+                    if (parentPairToUnionNode[unionKey]) {
+                        elements.push({ data: { source: parentPairToUnionNode[unionKey], target: childId }, classes: 'lineage-edge' });
+                    } else {
+                        parents.forEach(pid => {
+                            if (records[pid]) elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
+                        });
+                    }
+                } else if (parents.length === 1) {
+                    const pid = parents[0];
+                    if (records[pid] || pid.startsWith('?')) {
+                        elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
+                    }
+                }
+            }
+        }
+        return elements;
+    }
+
+    // 3. UI Logic
+    document.addEventListener('DOMContentLoaded', () => {
+        const editor = document.getElementById('editor');
+        const btnRender = document.getElementById('btn-render');
+        const btnExport = document.getElementById('btn-export');
+        const errorBox = document.getElementById('error-box');
+
+        const cy = cytoscape({
+            container: document.getElementById('cy'),
+            wheelSensitivity: 0.2,
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'label': 'data(label)',
+                        'text-valign': 'center', 'text-halign': 'center',
+                        'color': '#333', 'font-size': '12px', 'font-weight': 'bold',
+                        'width': 'label', 'height': 'label',
+                        'padding': '12px',
+                        'background-color': '#fff',
+                        'border-width': 2, 'border-color': '#555',
+                        'shape': 'round-rectangle'
+                    }
+                },
+                {
+                    selector: 'node[type="INDIVIDUAL"]',
+                    style: {
+                        'background-color': '#e7f5ff', 'border-color': '#1c7ed6',
+                        'text-wrap': 'wrap',
+                        'label': (n) => n.data('label') + (n.data('subLabel') ? '\n' + n.data('subLabel') : '')
+                    }
+                },
+                {
+                    selector: 'node[type="UNION_NODE"]',
+                    style: {
+                        'width': 12, 'height': 12,
+                        'background-color': '#cc5de8', 'border-width': 0,
+                        'shape': 'diamond', 'label': ''
+                    }
+                },
+                {
+                    selector: 'node[type="EVENT"]',
+                    style: { 'background-color': '#fff9db', 'border-color': '#fcc419', 'shape': 'ellipse' }
+                },
+                {
+                    selector: '.hidden-node',
+                    style: { 'visibility': 'hidden', 'width': 1, 'height': 1, 'display': 'none' }
+                },
+                {
+                    selector: 'edge',
+                    style: { 'curve-style': 'taxi', 'taxi-direction': 'vertical' } 
+                },
+                {
+                    selector: '.lineage-edge',
+                    style: {
+                        'width': 2, 'line-color': '#495057',
+                        'target-arrow-color': '#495057', 'target-arrow-shape': 'triangle'
+                    }
+                },
+                {
+                    selector: '.visual-edge',
+                    style: {
+                        'width': 1.5, 'line-color': '#cc5de8',
+                        'line-style': 'dashed',
+                        'target-arrow-shape': 'none'
+                    }
+                },
+                {
+                    selector: '.layout-edge',
+                    style: { 'display': 'none' }
+                }
+            ]
+        });
+
+        function render() {
+            const result = parser.parse(editor.value);
+            if (result.errors.length > 0) {
+                errorBox.style.display = 'block';
+                errorBox.innerHTML = '<strong>Errors:</strong><br>' + result.errors.join('<br>');
+            } else {
+                errorBox.style.display = 'none';
+            }
+            const cyElements = convertToCytoscape(result);
+            cy.elements().remove();
+            cy.add(cyElements);
+            
+            cy.layout({
+                name: 'dagre',
+                rankDir: 'TB',
+                nodeSep: 40,
+                rankSep: 60,
+                edgeSep: 10,
+                padding: 40
+            }).run();
+        }
+
+        // --- EXPORT FUNCTIONALITY ---
+        function exportImage() {
+            // Generates a blob of the FULL graph (even parts not visible on screen)
+            const pngBlob = cy.png({
+                full: true,
+                output: 'blob',
+                bg: 'white',  // Ensure background isn't transparent
+                scale: 2      // Higher resolution
+            });
+
+            // Create temporary download link
+            const url = URL.createObjectURL(pngBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'family_tree.png';
+            document.body.appendChild(a);
+            a.click();
+            
+            // Cleanup
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        btnRender.addEventListener('click', render);
+        btnExport.addEventListener('click', exportImage);
+        
+        if(typeof FTTParser !== 'undefined') render();
+    });
+</script>
+
+</body>
+</html>
