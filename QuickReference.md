@@ -44,10 +44,10 @@ IDs are Case-Sensitive. Do not use spaces in IDs.
 | Key | Syntax / Format |
 | --- | --- |
 | **ID:** | `[Unique_ID]` |
-| **NAME:** | `[Display] | [Sort_Key] | [TYPE] | [STATUS]` |
+| **NAME:** | `[Display] \| [Sort_Key] \| [TYPE] \| [STATUS]` |
 | **SEX:** | `M`, `F`, `U` (Unknown), `O` (Other) |
-| **BORN:** | `[Date] | [Place]` |
-| **DIED:** | `[Date] | [Place]` |
+| **BORN:** | `[Date] \| [Place]` |
+| **DIED:** | `[Date] \| [Place]` |
 | **PRIVACY:** | `OPEN` (Default), `LIVING`, `PRIVATE` |
 
 **Example:**
