@@ -151,16 +151,30 @@ EVENT: OCC | 2005 || Engineer
     function convertToCytoscape(parsedData) {
         const elements = [];
         const records = parsedData.records;
+        const createdNodeIds = new Set(); // Track existence to prevent duplicates
         let unionCounter = 0;
 
         function addNode(id, label, subLabel, type, hidden = false) {
+            // Prevent duplicate nodes
+            if (createdNodeIds.has(id)) return;
+            
             elements.push({
                 data: { id, label, subLabel, type },
                 classes: hidden ? 'hidden-node' : ''
             });
+            createdNodeIds.add(id);
         }
 
-        // --- Step A: Create Entity Nodes ---
+        // Helper: Handle Implicit Placeholders (defined in Spec Section 8.3.4)
+        // If an ID starts with '?', it might not have a record definition.
+        // We must create a node for it on-the-fly if referenced.
+        function ensurePlaceholderNode(id) {
+            if (id && id.startsWith('?') && !createdNodeIds.has(id)) {
+                addNode(id, id, '(Placeholder)', 'PLACEHOLDER');
+            }
+        }
+
+        // --- Step A: Create Entity Nodes (Explicit Records) ---
         for (const [id, rec] of Object.entries(records)) {
             // FILTER: Skip Source and Event nodes to reduce clutter
             if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
@@ -181,15 +195,20 @@ EVENT: OCC | 2005 || Engineer
 
         // 1. Process Unions
         for (const [id, rec] of Object.entries(records)) {
-            // Ensure we are only processing visible individuals
             if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
 
             if (rec.data.UNION) {
                 rec.data.UNION.forEach(u => {
                     const partnerId = u.parsed[0];
-                    // Verify partner exists and is not filtered
+                    
+                    // FIX: Ensure implicit placeholders exist before linking
+                    ensurePlaceholderNode(partnerId);
+
+                    // Verify partner exists (or was just created) and is not filtered
                     const partnerRec = records[partnerId];
-                    if (!partnerRec || partnerRec.type === 'SOURCE' || partnerRec.type === 'EVENT') return;
+                    // If it's a real record, ensure it's not a Source/Event. If it's implicit (undefined), allow it.
+                    if (partnerRec && (partnerRec.type === 'SOURCE' || partnerRec.type === 'EVENT')) return;
+                    if (!partnerRec && !partnerId.startsWith('?')) return; // dangling ref check
 
                     if (id < partnerId) {
                         const unionNodeId = `union_${unionCounter++}`;
@@ -198,8 +217,9 @@ EVENT: OCC | 2005 || Engineer
                         parentPairToUnionNode[`${id}+${partnerId}`] = unionNodeId;
                         parentPairToUnionNode[`${partnerId}+${id}`] = unionNodeId;
 
-                        addNode(unionNodeId, '', '', 'UNION_NODE');
-                        addNode(alignNodeId, '', '', 'ALIGN_NODE', true);
+                        // Union nodes are internal helpers, so we use a unique ID that won't conflict
+                        elements.push({ data: { id: unionNodeId, label: '', type: 'UNION_NODE' } });
+                        elements.push({ data: { id: alignNodeId, label: '', type: 'ALIGN_NODE' }, classes: 'hidden-node' });
 
                         // Skeleton Edges
                         [id, partnerId, unionNodeId].forEach(target => {
@@ -226,11 +246,11 @@ EVENT: OCC | 2005 || Engineer
                     const pId = p.parsed[0];
                     const pType = (p.parsed[1] || 'BIO').toUpperCase();
                     
-                    // Ensure parent is valid and not filtered
-                    if (records[pId] || pId.startsWith('?')) {
-                        const parentRec = records[pId];
-                        if (parentRec && (parentRec.type === 'SOURCE' || parentRec.type === 'EVENT')) return;
+                    // FIX: Ensure implicit placeholders exist before linking
+                    ensurePlaceholderNode(pId);
 
+                    // Ensure parent is valid 
+                    if (createdNodeIds.has(pId)) {
                         if (pType === 'BIO') {
                             bioParents.push(pId);
                         } else {
@@ -248,6 +268,7 @@ EVENT: OCC | 2005 || Engineer
                             classes: 'lineage-edge' 
                         });
                     } else {
+                        // Fallback: Link directly to parents if no union node found (or more than 2 parents)
                         bioParents.forEach(pid => {
                             elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
                         });
@@ -275,11 +296,11 @@ EVENT: OCC | 2005 || Engineer
                     const targetId = assoc.parsed[0];
                     const role = assoc.parsed[1] || 'ASSOC';
                     
-                    if (records[targetId] || targetId.startsWith('?')) {
-                        const targetRec = records[targetId];
-                        if (targetRec && (targetRec.type === 'SOURCE' || targetRec.type === 'EVENT')) return;
+                    // FIX: Ensure implicit placeholders exist before linking
+                    ensurePlaceholderNode(targetId);
 
-                         elements.push({
+                    if (createdNodeIds.has(targetId)) {
+                        elements.push({
                             data: { source: id, target: targetId, label: role },
                             classes: 'assoc-edge'
                         });
@@ -404,6 +425,7 @@ EVENT: OCC | 2005 || Engineer
 
         function render() {
             const result = parser.parse(editor.value);
+            console.log(result);
             if (result.errors.length > 0) {
                 errorBox.style.display = 'block';
                 errorBox.innerHTML = '<strong>Errors:</strong><br>' + result.errors.join('<br>');
