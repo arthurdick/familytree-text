@@ -257,7 +257,6 @@ function convertToCytoscape(parsedData) {
         });
 
         // Create Edges from Parents -> Hub
-        // We flag these as 'spouse-edge' so they can be styled subtly
         elements.push({
             data: {
                 source: p1,
@@ -319,7 +318,6 @@ function convertToCytoscape(parsedData) {
         // A. Handle Biological Lineage (Via Hub)
         if (bioParents.length > 0) {
             bioParents.sort();
-            // If 2 bio parents, use/create their shared hub. If 1, use a solo hub.
             const hubId = (bioParents.length >= 2) ?
                 getHub(bioParents[0], bioParents[1]) :
                 getHub(bioParents[0], null);
@@ -334,17 +332,41 @@ function convertToCytoscape(parsedData) {
         }
 
         // B. Handle Non-Biological Lineage (Direct Edge)
-        // We intentionally bypass the Hub to visually distinguish these as "legal/social" links.
         otherParents.forEach(op => {
             elements.push({
                 data: {
                     source: op.id,
                     target: childId,
-                    edgeType: op.type // Pass type for styling (ADO, STE, FOS)
+                    edgeType: op.type
                 },
                 classes: 'non-bio-edge'
             });
         });
+    }
+
+    // --- Step 4: Associations ---
+    for (const [id, rec] of Object.entries(records)) {
+        if (rec.data.ASSOC) {
+            rec.data.ASSOC.forEach(assoc => {
+                // Parse Structure: ID | ROLE | START | END | DETAILS
+                const targetId = assoc.parsed[0];
+                const role = assoc.parsed[1] || 'ASSOC';
+
+                if (!targetId) return;
+
+                // Ensure the associate exists in the graph (even if just a placeholder)
+                ensurePlaceholderNode(targetId);
+
+                elements.push({
+                    data: {
+                        source: id,
+                        target: targetId,
+                        label: role
+                    },
+                    classes: 'assoc-edge' // Matches existing CSS in index.html
+                });
+            });
+        }
     }
 
     return elements;
