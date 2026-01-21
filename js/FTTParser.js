@@ -130,8 +130,9 @@ class FTTParser {
             if (this.currentRecordId) {
                 this._error(`Line ${lineNum}: Header ${key} found inside a record block.`);
             }
-            // Headers are single strings, usually not repeatable, but we store raw
-            this.headers[key] = inlineValue; 
+            // Headers are single strings, usually not repeatable.
+            // Normalize header values to NFC
+            this.headers[key] = inlineValue.trim().normalize('NFC');
             // We set currentKey to null immediately for headers to prevent multiline buffering 
             // strictly, though the spec allows multiline headers if indented. 
             // Keeping currentKey active allows the buffer flush to handle it.
@@ -140,7 +141,8 @@ class FTTParser {
 
         // Handle Record ID (Start of new record)
         if (key === 'ID') {
-            const id = inlineValue.trim();
+            // Normalize ID to NFC immediately (Section 3.1)
+            const id = inlineValue.trim().normalize('NFC');
             this._validateID(id, lineNum);
             this.currentRecordId = id;
             
@@ -236,7 +238,8 @@ class FTTParser {
         } 
         // Scenario B: flushing a Global Header
         else if (this.currentKey.startsWith('HEAD_')) {
-            this.headers[this.currentKey] = fullText;
+            // Normalize multiline headers
+            this.headers[this.currentKey] = fullText.normalize('NFC');
         }
         // Scenario C: flushing a Record Field
         else if (this.currentRecordId && this.lastFieldRef) {
@@ -252,6 +255,7 @@ class FTTParser {
 
     /**
      * Splits string by pipe `|` but respects escaped `\|`
+     * Normalizes all values to NFC.
      */
     _parsePipes(text) {
         const values = [];
@@ -267,14 +271,15 @@ class FTTParser {
             } else if (char === '\\') {
                 isEscaped = true;
             } else if (char === '|') {
-                // Pipe delimiter
-                values.push(currentVal.trim());
+                // Pipe delimiter - Push normalized value
+                values.push(currentVal.trim().normalize('NFC'));
                 currentVal = '';
             } else {
                 currentVal += char;
             }
         }
-        values.push(currentVal.trim()); // Push last value
+        // Push last value, normalized
+        values.push(currentVal.trim().normalize('NFC'));
         
         return values;
     }
