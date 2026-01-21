@@ -48,7 +48,7 @@ PARENT: DOE-1952-S | BIO
 ### using the Visualizer
 
 This repository is hosted via GitHub Pages. You can access the reference implementation visualizer here:
-**[Launch FTT Visualizer](https://arthurdick.github.io/familytree-text/)**
+**[Launch FTT Visualizer](https://arthurdick.github.io/familytree-text/tools/visualizer.html)**
 
 ### Using the Parser (JavaScript)
 

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FTT Relationship Calculator</title>
+    <script src="../js/FTTParser.js"></script>
+    <style>
+        :root {
+            --primary: #0d6efd;
+            --bg: #f8f9fa;
+            --border: #dee2e6;
+            --text: #212529;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; color: #343a40; }
+        p { margin: 5px 0 0; color: #6c757d; font-size: 0.9rem; }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            min-height: 0; /* Flexbox overflow fix */
+        }
+
+        /* Left Panel: Input */
+        .panel-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label { font-weight: 600; font-size: 0.9rem; }
+
+        textarea {
+            flex: 1;
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            resize: none;
+        }
+
+        /* Right Panel: Controls & Result */
+        .panel-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background: white;
+            padding: 20px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .id-inputs {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .id-field {
+            flex: 1;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover { background-color: #0b5ed7; }
+
+        #result-box {
+            flex: 1;
+            padding: 20px;
+            border: 2px dashed var(--border);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            flex-direction: column;
+            font-size: 1.1rem;
+        }
+
+        .relationship-term {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin: 10px 0;
+            display: block;
+        }
+
+        .path-detail {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #666;
+            text-align: left;
+            width: 100%;
+            background: #f1f3f5;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .error { color: #dc3545; font-weight: bold; }
+        .meta { font-size: 0.85rem; color: #adb5bd; margin-top: auto; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>FTT Relationship Calculator</h1>
+        <p>Enter FamilyTree-Text data and two IDs to calculate their kinship.</p>
+    </header>
+
+    <div class="container">
+        <div class="panel-left">
+            <div class="input-group" style="height: 100%;">
+                <label for="ftt-source">FTT Data Source:</label>
+                <textarea id="ftt-source" spellcheck="false" placeholder="Paste .ftt content here...">HEAD_FORMAT: FTT v0.1
+HEAD_TITLE: Sample Tree
+
+ID: GRANDPA
+NAME: Arthur Smith
+SEX: M
+CHILD: DAD
+
+ID: DAD
+NAME: John Smith
+SEX: M
+PARENT: GRANDPA | BIO
+CHILD: ME
+
+ID: ME
+NAME: Junior Smith
+SEX: M
+PARENT: DAD | BIO</textarea>
+            </div>
+        </div>
+
+        <div class="panel-right">
+            <div class="id-inputs">
+                <div class="id-field">
+                    <label for="id1">Person 1 ID (From)</label>
+                    <input type="text" id="id1" placeholder="e.g. GRANDPA">
+                </div>
+                <div class="id-field">
+                    <label for="id2">Person 2 ID (To)</label>
+                    <input type="text" id="id2" placeholder="e.g. ME">
+                </div>
+                <button id="btn-calc">Calculate</button>
+            </div>
+
+            <div id="result-box">
+                <span style="color:#ccc;">Enter IDs and click Calculate</span>
+            </div>
+            
+            <div class="meta">
+                Powered by FTTParser.js
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnCalc = document.getElementById('btn-calc');
+            const txtSource = document.getElementById('ftt-source');
+            const inpId1 = document.getElementById('id1');
+            const inpId2 = document.getElementById('id2');
+            const resultBox = document.getElementById('result-box');
+
+            btnCalc.addEventListener('click', () => {
+                const source = txtSource.value;
+                const id1 = inpId1.value.trim();
+                const id2 = inpId2.value.trim();
+
+                if (!source || !id1 || !id2) {
+                    resultBox.innerHTML = '<span class="error">Please provide FTT data and both IDs.</span>';
+                    return;
+                }
+
+                try {
+                    // 1. Parse Data using the included library
+                    if (typeof FTTParser === 'undefined') {
+                        throw new Error("FTTParser.js not found. Please ensure it is in the js/ folder.");
+                    }
+                    
+                    const parser = new FTTParser();
+                    const parseResult = parser.parse(source);
+                    
+                    if (parseResult.errors.length > 0) {
+                        resultBox.innerHTML = `<span class="error">Parse Error:<br>${parseResult.errors[0]}</span>`;
+                        return;
+                    }
+
+                    const records = parseResult.records;
+
+                    // 2. Validate IDs
+                    if (!records[id1]) throw new Error(`ID "${id1}" not found in records.`);
+                    if (!records[id2]) throw new Error(`ID "${id2}" not found in records.`);
+
+                    // 3. Calculate Relationship
+                    const rel = calculateRelationship(records, id1, id2);
+                    
+                    // 4. Render
+                    renderResult(rel, records, id1, id2);
+
+                } catch (e) {
+                    resultBox.innerHTML = `<span class="error">${e.message}</span>`;
+                }
+            });
+        });
+
+        // ==========================================
+        // Relationship Logic
+        // ==========================================
+
+        function calculateRelationship(records, idA, idB) {
+            if (idA === idB) return { type: 'IDENTITY' };
+
+            const recA = records[idA];
+            const recB = records[idB];
+
+            // 1. Check Direct Union (Spouse)
+            // Note: FTTParser injects implicit unions, so checking A's unions is sufficient.
+            if (recA.data.UNION) {
+                const union = recA.data.UNION.find(u => u.parsed[0] === idB);
+                if (union) {
+                    const uType = union.parsed[1] || 'MARR';
+                    return { type: 'UNION', subType: uType };
+                }
+            }
+
+            // 2. Check Direct Association
+            if (recA.data.ASSOC) {
+                const assoc = recA.data.ASSOC.find(a => a.parsed[0] === idB);
+                if (assoc) {
+                    return { type: 'ASSOC', role: assoc.parsed[1] || 'ASSOCIATE' };
+                }
+            }
+            // Check Reverse Association
+            if (recB.data.ASSOC) {
+                const assoc = recB.data.ASSOC.find(a => a.parsed[0] === idA);
+                if (assoc) {
+                    return { type: 'ASSOC_REVERSE', role: assoc.parsed[1] || 'ASSOCIATE' };
+                }
+            }
+
+            // 3. Lowest Common Ancestor (LCA) - Blood Relationship
+            const ancestorsA = getAncestors(records, idA);
+            const ancestorsB = getAncestors(records, idB);
+
+            let bestCA = null;
+            let minDistance = Infinity;
+
+            // Find intersection
+            for (const [ancId, distA] of ancestorsA) {
+                if (ancestorsB.has(ancId)) {
+                    const distB = ancestorsB.get(ancId);
+                    const totalDist = distA + distB;
+                    
+                    if (totalDist < minDistance) {
+                        minDistance = totalDist;
+                        bestCA = { id: ancId, distA, distB };
+                    }
+                }
+            }
+
+            if (bestCA) {
+                return { type: 'BLOOD', ...bestCA };
+            }
+
+            return { type: 'NONE' };
+        }
+
+        // BFS to map all ancestors and their generation distance
+        function getAncestors(records, startId) {
+            const ancestors = new Map(); // ID -> Distance (0=Self, 1=Parent...)
+            const queue = [{ id: startId, dist: 0 }];
+            
+            // We include Self as distance 0 to handle direct parent/child cases easily
+            ancestors.set(startId, 0);
+
+            while (queue.length > 0) {
+                const { id, dist } = queue.shift();
+                
+                const record = records[id];
+                if (record && record.data.PARENT) {
+                    record.data.PARENT.forEach(p => {
+                        const pId = p.parsed[0];
+                        // Ignore step/foster for strict blood calc if desired, 
+                        // but usually "Relation" includes them. We'll include all.
+                        if (pId && !ancestors.has(pId)) {
+                            ancestors.set(pId, dist + 1);
+                            queue.push({ id: pId, dist: dist + 1 });
+                        }
+                    });
+                }
+            }
+            return ancestors;
+        }
+
+        function renderResult(rel, records, idA, idB) {
+            const nameA = getDisplayName(records[idA]);
+            const nameB = getDisplayName(records[idB]);
+            const genderA = getGender(records[idA]);
+
+            let html = `<div><strong>${nameA}</strong> is the</div>`;
+            let term = "Unknown Relation";
+            let detail = "";
+
+            if (rel.type === 'IDENTITY') {
+                term = "Same Person";
+            } 
+            else if (rel.type === 'UNION') {
+                term = (rel.subType === 'MARR') ? (genderA === 'M' ? "Husband" : genderA === 'F' ? "Wife" : "Spouse") : "Partner";
+                detail = "Direct Union record found.";
+            }
+            else if (rel.type === 'ASSOC') {
+                term = rel.role;
+                detail = `Defined as an associate of ${nameB}.`;
+            }
+            else if (rel.type === 'ASSOC_REVERSE') {
+                term = "Associate";
+                detail = `${nameB} is defined as ${rel.role} of ${nameA}.`;
+            }
+            else if (rel.type === 'BLOOD') {
+                // Determine Term based on distances
+                // distA = distance from Common Ancestor to A
+                // distB = distance from Common Ancestor to B
+                
+                const dA = rel.distA;
+                const dB = rel.distB;
+
+                if (dA === 0) {
+                    // A is the Ancestor
+                    term = getAncestorTerm(dB, genderA);
+                } else if (dB === 0) {
+                    // B is the Ancestor (A is Descendant)
+                    term = getDescendantTerm(dA, genderA);
+                } else if (dA === 1 && dB === 1) {
+                    term = (genderA === 'M') ? "Brother" : (genderA === 'F') ? "Sister" : "Sibling";
+                } else if (dA === 1 && dB > 1) {
+                    // A is Sibling of B's Ancestor -> Great-Uncle/Aunt
+                    // Generation difference = dB - 1
+                    term = getNiblingTerm(dB - 1, genderA, true); 
+                } else if (dB === 1 && dA > 1) {
+                    // B is Sibling of A's Ancestor -> A is Niece/Nephew
+                    term = getNiblingTerm(dA - 1, genderA, false);
+                } else {
+                    // Cousins
+                    // Degree = min(dA, dB) - 1
+                    // Removed = abs(dA - dB)
+                    const degree = Math.min(dA, dB) - 1;
+                    const removed = Math.abs(dA - dB);
+                    term = getCousinTerm(degree, removed);
+                }
+
+                const commonName = getDisplayName(records[rel.id]);
+                detail = `Common Ancestor: <strong>${commonName}</strong> (${rel.id})<br>
+                          Distance: ${nameA} (${dA}) ↔ Ancestor ↔ (${dB}) ${nameB}`;
+            } 
+            else {
+                term = "No Relation Found";
+                detail = "Could not find a path through Parents or Unions.";
+            }
+
+            html += `<span class="relationship-term">${term}</span>`;
+            html += `<div>of <strong>${nameB}</strong></div>`;
+            if (detail) html += `<div class="path-detail">${detail}</div>`;
+
+            document.getElementById('result-box').innerHTML = html;
+        }
+
+        // ==========================================
+        // Terminology Helpers
+        // ==========================================
+
+        function getDisplayName(rec) {
+            if (!rec) return "Unknown";
+            if (rec.data.NAME) {
+                // Look for PREF, else first
+                const pref = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
+                if (pref) return pref.parsed[0];
+                if (rec.data.NAME[0]) return rec.data.NAME[0].parsed[0];
+            }
+            return rec.id;
+        }
+
+        function getGender(rec) {
+            if (rec.data.SEX && rec.data.SEX[0]) {
+                return rec.data.SEX[0].parsed[0].trim().toUpperCase();
+            }
+            return 'U';
+        }
+
+        function getAncestorTerm(dist, sex) {
+            if (dist === 1) return sex === 'M' ? "Father" : sex === 'F' ? "Mother" : "Parent";
+            if (dist === 2) return sex === 'M' ? "Grandfather" : sex === 'F' ? "Grandmother" : "Grandparent";
+            if (dist === 3) return sex === 'M' ? "Great-Grandfather" : sex === 'F' ? "Great-Grandmother" : "Great-Grandparent";
+            return `${dist-2}x Great-Grandparent`;
+        }
+
+        function getDescendantTerm(dist, sex) {
+            if (dist === 1) return sex === 'M' ? "Son" : sex === 'F' ? "Daughter" : "Child";
+            if (dist === 2) return sex === 'M' ? "Grandson" : sex === 'F' ? "Granddaughter" : "Grandchild";
+            if (dist === 3) return sex === 'M' ? "Great-Grandson" : sex === 'F' ? "Great-Granddaughter" : "Great-Grandchild";
+            return `${dist-2}x Great-Grandchild`;
+        }
+
+        // isUncleAunt: true if A is the Uncle/Great-Uncle, false if A is Niece/Nephew
+        function getNiblingTerm(genDiff, sex, isUncleAunt) {
+            if (isUncleAunt) {
+                // A is sibling of parent (1), grandparent (2)...
+                if (genDiff === 1) return sex === 'M' ? "Uncle" : sex === 'F' ? "Aunt" : "Parent's Sibling";
+                if (genDiff === 2) return sex === 'M' ? "Great-Uncle" : sex === 'F' ? "Great-Aunt" : "Grand-Uncle/Aunt";
+                return `${genDiff-2}x Great-Uncle/Aunt`;
+            } else {
+                // A is child (1) of sibling, grandchild (2)...
+                if (genDiff === 1) return sex === 'M' ? "Nephew" : sex === 'F' ? "Niece" : "Sibling's Child";
+                if (genDiff === 2) return sex === 'M' ? "Great-Nephew" : sex === 'F' ? "Great-Niece" : "Grand-Nibling";
+                return `${genDiff-2}x Great-Niece/Nephew`;
+            }
+        }
+
+        function getCousinTerm(degree, removed) {
+            let ord = "Cousin";
+            if (degree === 1) ord = "1st Cousin";
+            else if (degree === 2) ord = "2nd Cousin";
+            else if (degree === 3) ord = "3rd Cousin";
+            else ord = `${degree}th Cousin`;
+
+            if (removed === 0) return ord;
+            if (removed === 1) return `${ord} 1x Removed`;
+            return `${ord} ${removed}x Removed`;
+        }
+
+    </script>
+</body>
+</html>

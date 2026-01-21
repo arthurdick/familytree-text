@@ -1,638 +1,192 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>FTT Visualizer</title>
-  <script src= "https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
-  <script src= "https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
-  <script src= "https://cdn.jsdelivr.net/npm/cytoscape-elk@2.2.0/dist/cytoscape-elk.min.js"></script>
-  <script src="js/FTTParser.js"></script>
-  <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
-        
-        #container { display: flex; height: 100vh; }
-        
-        /* Editor Pane */
-        #editor-pane {
-            width: 35%;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid #ccc;
-            background: #f8f9fa;
-        }
-        
-        #toolbar {
-            padding: 10px 15px;
-            background: #e9ecef;
-            border-bottom: 1px solid #dee2e6;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FamilyTree-Text (FTT) Project</title>
+    <style>
+        :root {
+            --primary: #0d6efd;
+            --primary-hover: #0b5ed7;
+            --secondary: #6c757d;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --border: #dee2e6;
         }
 
-        #toolbar-group { display: flex; gap: 10px; }
-
-        #editor {
-            flex-grow: 1;
-            width: 100%;
-            border: none;
-            resize: none;
-            padding: 20px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            box-sizing: border-box;
-            outline: none;
-            color: #212529;
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            margin: 0;
+            padding: 0;
+            background-color: #fff;
         }
 
-        button {
-            padding: 8px 16px;
+        /* Hero Section */
+        .hero {
+            background-color: var(--light);
+            padding: 4rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        .hero p.tagline {
+            font-size: 1.25rem;
+            color: var(--secondary);
+            max-width: 600px;
+            margin: 0 auto 2rem auto;
+        }
+
+        /* Tools Navigation */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 900px;
+            margin: -3rem auto 3rem auto; /* Overlap hero */
+            padding: 0 1rem;
+        }
+
+        .tool-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid var(--border);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .tool-card h2 {
+            margin-top: 0;
+            color: var(--primary);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 15px;
+            background-color: var(--primary);
             color: white;
-            border: none;
-            cursor: pointer;
+            text-decoration: none;
             border-radius: 4px;
             font-weight: 600;
-            font-size: 13px;
-            transition: background 0.2s, transform 0.1s;
+            transition: background-color 0.2s;
         }
-        
-        #btn-render { background: #0d6efd; }
-        #btn-render:hover { background: #0b5ed7; }
-        #btn-render:active { transform: scale(0.98); }
 
-        #btn-export { background: #198754; }
-        #btn-export:hover { background: #157347; }
-        #btn-export:active { transform: scale(0.98); }
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
 
-        /* Graph Pane */
-        #cy {
-            width: 65%;
-            background: #ffffff;
-            background-image: radial-gradient(#dee2e6 1px, transparent 1px);
-            background-size: 20px 20px;
+        .btn-outline {
+            background-color: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
         }
-        
-        /* Error Box */
-        #error-box {
-            color: #842029;
-            background-color: #f8d7da;
-            padding: 10px;
-            font-size: 12px;
-            display: none;
-            border-top: 1px solid #f5c6cb;
-            max-height: 120px;
-            overflow-y: auto;
+
+        .btn-outline:hover {
+            background-color: var(--primary);
+            color: white;
         }
-  </style>
+
+        /* Features / Info Section */
+        .info-section {
+            max-width: 800px;
+            margin: 0 auto 4rem auto;
+            padding: 0 2rem;
+        }
+
+        .info-section h3 {
+            border-bottom: 2px solid var(--light);
+            padding-bottom: 0.5rem;
+            margin-top: 2rem;
+        }
+
+        code {
+            background: var(--light);
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #d63384;
+        }
+
+        footer {
+            background: var(--light);
+            text-align: center;
+            padding: 2rem;
+            margin-top: auto;
+            border-top: 1px solid var(--border);
+            font-size: 0.9rem;
+            color: var(--secondary);
+        }
+    </style>
 </head>
 <body>
-  <div id="container">
-    <div id="editor-pane">
-      <div id="toolbar">
-        <span style="font-weight:600; color:#495057;">FTT Editor</span>
-        <div id="toolbar-group">
-          <button id="btn-render">Render Graph</button> <button id= "btn-export">Export PNG</button>
+
+    <section class="hero">
+        <h1>FamilyTree-Text (FTT)</h1>
+        <p class="tagline">Data durability through human-readable, machine-parseable UTF-8 plain text.</p>
+        
+        <div style="margin-top: 1rem;">
+            <a href="spec/ftt_spec_v0.1.md" class="btn btn-outline">Read Specification (v0.1)</a>
+            <a href="https://github.com/arthurdick/familytree-text" class="btn btn-outline" target="_blank">View on GitHub</a>
         </div>
-      </div>
-      <textarea id="editor" spellcheck= "false">HEAD_FORMAT: FTT v0.1
-HEAD_TITLE: Topology Test
+    </section>
 
-ID: GRANDPA-01
-NAME: Arthur Smith
-BORN: 1920
-UNION: GRANDMA-01 | MARR | 1945 ||
+    <div class="tools-grid">
+        <div class="tool-card">
+            <h2>Graph Visualizer</h2>
+            <p>Write FTT code in the browser and instantly render an interactive genealogy graph.</p>
+            <a href="tools/visualizer.html" class="btn">Launch Visualizer</a>
+        </div>
 
-ID: GRANDMA-01
-NAME: Mary Jones
-BORN: 1922
-
-ID: DAD-01
-NAME: John Smith
-BORN: 1950
-# Note: Dad links to parents, but graph draws from Union Node
-PARENT: GRANDPA-01 | BIO ||
-PARENT: GRANDMA-01 | BIO ||
-UNION: MOM-01 | MARR | 1975 ||
-
-ID: MOM-01
-NAME: Sarah Doe
-BORN: 1952
-
-ID: SON-01
-NAME: Junior Smith
-BORN: 1980
-PARENT: DAD-01 | BIO ||
-PARENT: MOM-01 | BIO ||
-EVENT: OCC | 2005 || Engineer</textarea>
-      <div id="error-box"></div>
+        <div class="tool-card">
+            <h2>Relationship Calculator</h2>
+            <p>Input your FTT data and two IDs to calculate the exact kinship between individuals.</p>
+            <a href="tools/relationship.html" class="btn">Launch Calculator</a>
+        </div>
     </div>
-    <div id="cy"></div>
-  </div>
-  <script>
-// Initialize Parser
-const parser = new FTTParser();
 
-/**
- * Helper: Calculate generations to enforce cleaner layering.
- * Uses a simple top-down traversal from root candidates.
- */
-function calculateGenerations(elements, records) {
-    const idToGen = {};
-    const queue = [];
-    const visited = new Set();
+    <section class="info-section">
+        <h3>What is FTT?</h3>
+        <p>
+            <strong>FamilyTree-Text (FTT)</strong> is a proposed standard for storing genealogical data. 
+            Unlike GEDCOM (which can be verbose) or database blobs (which are opaque), FTT is designed 
+            to be written and read like a simple text document.
+        </p>
 
-    // 1. Identify Roots (Nodes with no PARENTs)
-    Object.values(records).forEach(rec => {
-        if (rec.type === 'INDIVIDUAL' && (!rec.data.PARENT || rec.data.PARENT.length === 0)) {
-            idToGen[rec.id] = 0;
-            queue.push({
-                id: rec.id,
-                gen: 0
-            });
-            visited.add(rec.id);
-        }
-    });
+        <h3>Core Principles</h3>
+        <ul>
+            <li><strong>Human Readability:</strong> You can open an <code>.ftt</code> file in Notepad and understand it without software.</li>
+            <li><strong>Git Friendliness:</strong> The line-based structure allows for clean "diffs," making it perfect for version-controlling family history.</li>
+            <li><strong>Data Durability:</strong> No binary encoding or complex XML schemas. Just UTF-8 text.</li>
+        </ul>
 
-    // 2. BFS to assign generations
-    while (queue.length > 0) {
-        const current = queue.shift();
+        <h3>Quick Syntax Example</h3>
+        <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto;">
+ID: SMITH-01
+NAME: Arthur Smith | Smith, Arthur | BIRTH | PREF
+SEX:  M
+BORN: 1950-01-01 | Calgary; AB
+UNION: DOE-01 | MARR | 1975-06-01
+CHILD: SMITH-02</pre>
+    </section>
 
-        // Check unions (Same generation)
-        const record = records[current.id];
-        if (record && record.data.UNION) {
-            record.data.UNION.forEach(u => {
-                const spouseId = u.parsed[0];
-                if (spouseId && !visited.has(spouseId)) {
-                    idToGen[spouseId] = current.gen;
-                    visited.add(spouseId);
-                    queue.push({
-                        id: spouseId,
-                        gen: current.gen
-                    });
-                }
-            });
-        }
+    <footer>
+        <p>FTT Reference Implementation v0.1 &copy; 2026 Arthur Dick.</p>
+        <p>Released under the MIT License.</p>
+    </footer>
 
-        // Check children (Next generation)
-        // Note: In FTT, children point to parents. We have to reverse lookup or check explicit CHILD lists if available.
-        // Since we built 'elements', we can scan edges efficiently.
-    }
-
-    // Refinement: Scan Cytoscape edges to propagate generations down from Parents to Union Hubs to Children
-    // This is a simplified pass; ELK handles topological sorting well, but explicit tiers help.
-    // We will return a map to be used in 'layoutOptions'.
-    return idToGen;
-}
-
-function convertToCytoscape(parsedData) {
-    const elements = [];
-    const records = parsedData.records;
-    const createdNodeIds = new Set();
-    let unionCounter = 0;
-
-    // Tracking Hubs
-    const pairToHubId = {};
-    const soloToHubId = {};
-
-    // --- Helper: Node Creation ---
-    function addNode(id, label, subLabel, type) {
-        if (createdNodeIds.has(id)) return;
-        elements.push({
-            data: {
-                id,
-                label,
-                subLabel,
-                type
-            }
-        });
-        createdNodeIds.add(id);
-    }
-
-    function ensurePlaceholderNode(id) {
-        if (id && id.startsWith('?') && !createdNodeIds.has(id)) {
-            addNode(id, id, '(Placeholder)', 'PLACEHOLDER');
-        }
-    }
-
-    // --- Step 1: Create Nodes ---
-    for (const [id, rec] of Object.entries(records)) {
-        if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
-
-        let label = id;
-        let subLabel = "";
-
-        if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
-            if (rec.data.NAME && rec.data.NAME.length > 0) {
-                label = rec.data.NAME[0].parsed[0] || id; // Display Name
-                const prefName = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
-                if (prefName) label = prefName.parsed[0];
-            }
-            if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
-                subLabel = rec.data.BORN[0].parsed[0]; // Birth Date
-            }
-        }
-        addNode(id, label, subLabel, rec.type);
-    }
-
-    // --- Helper: Get/Create Hub ---
-    function getHub(p1, p2) {
-        const isPair = !!p2;
-        const key = isPair ? `${p1}+${p2}` : `${p1}+BIO`;
-
-        if (isPair && pairToHubId[key]) return pairToHubId[key];
-        if (!isPair && soloToHubId[key]) return soloToHubId[key];
-
-        const hubId = isPair ? `union_${unionCounter++}` : `solo_${unionCounter++}`;
-        const type = isPair ? (records[p1]?.data.UNION ? 'UNION_NODE' : 'IMPLICIT_NODE') : 'SOLO_NODE';
-
-        if (isPair) pairToHubId[key] = hubId;
-        else soloToHubId[key] = hubId;
-
-        elements.push({
-            data: {
-                id: hubId,
-                type: type
-            }
-        });
-
-        // Create Edges from Parents -> Hub
-        elements.push({
-            data: {
-                source: p1,
-                target: hubId
-            },
-            classes: 'spouse-edge'
-        });
-        if (isPair) {
-            elements.push({
-                data: {
-                    source: p2,
-                    target: hubId
-                },
-                classes: 'spouse-edge'
-            });
-        }
-
-        return hubId;
-    }
-
-    // --- Step 2: Explicit Unions (Hubs without Children yet) ---
-    for (const [id, rec] of Object.entries(records)) {
-        if (rec.data.UNION) {
-            rec.data.UNION.forEach(u => {
-                const partnerId = u.parsed[0];
-                if (!partnerId) return;
-                ensurePlaceholderNode(partnerId);
-
-                const [p1, p2] = [id, partnerId].sort();
-                getHub(p1, p2);
-            });
-        }
-    }
-
-    // --- Step 3: Child Lineage (Bio vs Non-Bio) ---
-    for (const [childId, rec] of Object.entries(records)) {
-        if (!rec.data.PARENT) continue;
-
-        const bioParents = [];
-        const otherParents = [];
-
-        // Sort parents into Bio vs Others
-        rec.data.PARENT.forEach(p => {
-            const pId = p.parsed[0];
-            const pType = (p.parsed[1] || 'BIO').toUpperCase();
-
-            ensurePlaceholderNode(pId);
-
-            if (pType === 'BIO') {
-                bioParents.push(pId);
-            } else {
-                otherParents.push({
-                    id: pId,
-                    type: pType
-                });
-            }
-        });
-
-        // A. Handle Biological Lineage (Via Hub)
-        if (bioParents.length > 0) {
-            bioParents.sort();
-            const hubId = (bioParents.length >= 2) ?
-                getHub(bioParents[0], bioParents[1]) :
-                getHub(bioParents[0], null);
-
-            elements.push({
-                data: {
-                    source: hubId,
-                    target: childId
-                },
-                classes: 'lineage-edge'
-            });
-        }
-
-        // B. Handle Non-Biological Lineage (Direct Edge)
-        otherParents.forEach(op => {
-            elements.push({
-                data: {
-                    source: op.id,
-                    target: childId,
-                    edgeType: op.type
-                },
-                classes: 'non-bio-edge'
-            });
-        });
-    }
-
-    // --- Step 4: Associations ---
-    for (const [id, rec] of Object.entries(records)) {
-        if (rec.data.ASSOC) {
-            rec.data.ASSOC.forEach(assoc => {
-                // Parse Structure: ID | ROLE | START | END | DETAILS
-                const targetId = assoc.parsed[0];
-                const role = assoc.parsed[1] || 'ASSOC';
-
-                if (!targetId) return;
-
-                // Ensure the associate exists in the graph (even if just a placeholder)
-                ensurePlaceholderNode(targetId);
-
-                elements.push({
-                    data: {
-                        source: id,
-                        target: targetId,
-                        label: role
-                    },
-                    classes: 'assoc-edge' // Matches existing CSS in index.html
-                });
-            });
-        }
-    }
-
-    return elements;
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    const editor = document.getElementById('editor');
-    const btnRender = document.getElementById('btn-render');
-    const btnExport = document.getElementById('btn-export');
-    const errorBox = document.getElementById('error-box');
-
-    const cy = cytoscape({
-        container: document.getElementById('cy'),
-        wheelSensitivity: 0.2,
-        style: [
-            // -------------------------------------------------------------------------
-            // 1. Base Node Styles
-            // -------------------------------------------------------------------------
-            {
-                selector: 'node',
-                style: {
-                    'label': 'data(label)',
-                    'text-valign': 'center',
-                    'text-halign': 'center',
-                    'color': '#333',
-                    'font-size': '12px',
-                    'font-weight': 'bold',
-                    'width': 'label',
-                    'height': 'label',
-                    'padding': '12px',
-                    'background-color': '#fff',
-                    'border-width': 2,
-                    'border-color': '#555',
-                    'shape': 'round-rectangle'
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 2. Entity Types
-            // -------------------------------------------------------------------------
-            {
-                selector: 'node[type="INDIVIDUAL"]',
-                style: {
-                    'background-color': '#e7f5ff',
-                    'border-color': '#1c7ed6',
-                    'text-wrap': 'wrap',
-                    'label': (n) => n.data('label') + (n.data('subLabel') ? '\n' + n.data('subLabel') : '')
-                }
-            },
-            {
-                selector: 'node[type="PLACEHOLDER"]',
-                style: {
-                    'background-color': '#f8f9fa',
-                    'border-color': '#adb5bd',
-                    'border-style': 'dashed',
-                    'text-wrap': 'wrap',
-                    'label': (n) => n.data('label')
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 3. Topology Hubs (Internal Nodes)
-            // -------------------------------------------------------------------------
-            {
-                // Shared Union Hub (Purple Diamond)
-                selector: 'node[type="UNION_NODE"]',
-                style: {
-                    'width': 10,
-                    'height': 10,
-                    'background-color': '#cc5de8',
-                    'border-width': 0,
-                    'shape': 'diamond',
-                    'label': ''
-                }
-            },
-            {
-                // Implicit/Solo Hub (Small Grey Dot)
-                selector: 'node[type="IMPLICIT_NODE"]',
-                style: {
-                    'width': 6,
-                    'height': 6,
-                    'background-color': '#868e96',
-                    'border-width': 0,
-                    'shape': 'ellipse',
-                    'label': ''
-                }
-            },
-            {
-                // Solo Parent Hub (White Dot with Green Border)
-                selector: 'node[type="SOLO_NODE"]',
-                style: {
-                    'width': 16,
-                    'height': 16,
-                    'background-color': '#fff',
-                    'border-width': 1,
-                    'border-color': '#20c997',
-                    'shape': 'ellipse',
-                    'label': 'data(label)',
-                    'font-size': '6px',
-                    'color': '#20c997'
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 4. Base Edge Styles
-            // -------------------------------------------------------------------------
-            {
-                selector: 'edge',
-                style: {
-                    'curve-style': 'bezier',
-                    'arrow-scale': 0.8,
-                    'width': 1
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 5. Lineage & Relationship Edges
-            // -------------------------------------------------------------------------
-
-            // A. Spouse / Union Input (Parents -> Hub)
-            {
-                selector: '.spouse-edge',
-                style: {
-                    'width': 1,
-                    'line-color': '#adb5bd',
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'none'
-                }
-            },
-
-            // B. Biological Lineage (Hub -> Child)
-            {
-                selector: '.lineage-edge',
-                style: {
-                    'width': 2,
-                    'line-color': '#495057',
-                    'curve-style': 'taxi',
-                    'taxi-direction': 'vertical',
-                    'target-arrow-shape': 'triangle',
-                    'target-arrow-color': '#495057'
-                }
-            },
-
-            // C. Non-Biological Lineage (Parent -> Child Direct)
-            {
-                selector: '.non-bio-edge',
-                style: {
-                    'width': 2,
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'triangle',
-                    'label': 'data(edgeType)', // Displays "ADO", "STE", etc.
-                    'font-size': '9px',
-                    'text-background-opacity': 1,
-                    'text-background-color': '#fff',
-                    'text-background-padding': '2px'
-                }
-            },
-
-            // D. Specific Non-Bio Styles
-            {
-                selector: 'edge[edgeType="ADO"]',
-                style: {
-                    'line-color': '#20c997',
-                    'target-arrow-color': '#20c997',
-                    'line-style': 'dashed'
-                }
-            },
-            {
-                selector: 'edge[edgeType="STE"]',
-                style: {
-                    'line-color': '#fd7e14',
-                    'target-arrow-color': '#fd7e14',
-                    'line-style': 'dotted'
-                }
-            },
-            {
-                selector: 'edge[edgeType="FOS"]',
-                style: {
-                    'line-color': '#be4bdb',
-                    'target-arrow-color': '#be4bdb',
-                    'line-style': 'dashed',
-                    'line-dash-pattern': [6, 3]
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 6. Associates (Optional)
-            // -------------------------------------------------------------------------
-            {
-                selector: '.assoc-edge',
-                style: {
-                    'width': 1.5,
-                    'line-color': '#fab005',
-                    'line-style': 'dotted',
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'none',
-                    'label': 'data(label)',
-                    'font-size': '10px',
-                    'color': '#d08800',
-                    'text-background-opacity': 1,
-                    'text-background-color': '#fff'
-                }
-            }
-        ]
-    });
-
-    function render() {
-        const result = parser.parse(editor.value);
-
-        // Error Display
-        if (result.errors.length > 0) {
-            errorBox.style.display = 'block';
-            errorBox.innerHTML = '<strong>Errors:</strong><br>' + result.errors.join('<br>');
-        } else {
-            errorBox.style.display = 'none';
-            errorBox.innerHTML = '';
-        }
-
-        const cyElements = convertToCytoscape(result);
-        cy.elements().remove();
-        cy.add(cyElements);
-
-        // --- ELK Layout Configuration ---
-        cy.layout({
-            name: 'elk',
-            elk: {
-                // Core Algorithm: 'layered' is best for hierarchies/genealogies
-                algorithm: 'layered',
-
-                // Direction: Top-to-Bottom
-                'elk.direction': 'DOWN',
-
-                // Separation settings to prevent clutter
-                'elk.spacing.nodeNode': 50, // Horizontal space between siblings
-                'elk.layered.spacing.nodeNodeBetweenLayers': 80, // Vertical space between generations
-
-                // Strategy: LONG_PATH or BRANDES_KOEPF often works well for trees
-                'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-
-                // Edges: Orthogonal routing for clean "circuit board" look
-                'elk.edgeRouting': 'ORTHOGONAL',
-            }
-        }).run();
-    }
-
-    function exportImage() {
-        const pngBlob = cy.png({
-            full: true,
-            output: 'blob',
-            bg: 'white',
-            scale: 2
-        });
-        const url = URL.createObjectURL(pngBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'family_tree.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    }
-
-    btnRender.addEventListener('click', render);
-    btnExport.addEventListener('click', exportImage);
-
-    if (typeof FTTParser !== 'undefined') render();
-});
-  </script>
 </body>
 </html>
