@@ -43,6 +43,9 @@ class FTTParser {
         // Flush final buffer
         this._flushBuffer();
 
+        // Post-Processing
+        this._postProcess();
+
         // Post-Parse Validation (Section 8.3)
         this._validateGraph();
 
@@ -272,16 +275,123 @@ class FTTParser {
         }
         values.push(currentVal.trim()); // Push last value
         
-        // Handle trailing omission: "A|B|" -> ["A", "B", ""]
-        // The spec says trailing separators may be omitted if subsequent fields are empty.
-        // But if explicitly present "||", it implies empty field. 
-        // Our logic naturally handles "||" as empty string.
-        
         return values;
     }
 
     // =========================================================================
-    // 4. Validation & Types (Section 3 & 8.3)
+    // 4. Post-Processing
+    // =========================================================================
+
+    _postProcess() {
+        this._injectImplicitUnions();
+        this._processPlaceHierarchies();
+    }
+
+    /**
+     * Section 8.3.2: Symmetric Relationship Injection
+     * If Record A defines UNION: Record B, we must ensure Record B defines UNION: Record A.
+     */
+    _injectImplicitUnions() {
+        // Iterate over all records to find defined unions
+        for (const [id, record] of this.records) {
+            if (!record.data['UNION']) continue;
+
+            for (const unionField of record.data['UNION']) {
+                const partnerId = unionField.parsed[0];
+                if (!partnerId) continue;
+
+                const partnerRecord = this.records.get(partnerId);
+                
+                // If partner doesn't exist, _validateGraph will catch it as a dangling ref later.
+                if (!partnerRecord) continue; 
+
+                // Check if partner already links back to `id`
+                let hasReciprocal = false;
+                if (partnerRecord.data['UNION']) {
+                    hasReciprocal = partnerRecord.data['UNION'].some(u => u.parsed[0] === id);
+                }
+
+                if (!hasReciprocal) {
+                    // Inject implicit union
+                    if (!partnerRecord.data['UNION']) {
+                        partnerRecord.data['UNION'] = [];
+                    }
+
+                    // Clone the definition but swap the ID to point back to the original record
+                    const implicitParsed = [...unionField.parsed];
+                    implicitParsed[0] = id; // Set target to current ID
+
+                    partnerRecord.data['UNION'].push({
+                        raw: `(Implicit Reciprocal of ${id})`,
+                        parsed: implicitParsed,
+                        modifiers: {} // We do not copy modifiers (notes/citations) as they may be person-specific
+                    });
+                }
+            }
+        }
+    }
+
+    /**
+     * Section 4.1.1: Place Hierarchy & Geocoding
+     * Parses `{=GeocodeTarget}` syntax in place fields.
+     */
+    _processPlaceHierarchies() {
+        // Map of Keys to the Index where the Place string is located
+        const PLACE_INDICES = {
+            'BORN': 1,
+            'DIED': 1,
+            'EVENT': 3, // TYPE | START | END | PLACE
+            'PLACE': 0
+        };
+
+        for (const record of this.records.values()) {
+            for (const [key, fields] of Object.entries(record.data)) {
+                const placeIdx = PLACE_INDICES[key];
+                
+                // If this key isn't a known place-holder, skip
+                if (placeIdx === undefined) continue;
+
+                for (const field of fields) {
+                    // Ensure the field has enough values to contain the place
+                    if (field.parsed.length > placeIdx) {
+                        const rawPlace = field.parsed[placeIdx];
+                        
+                        // Check if it contains the special syntax
+                        if (rawPlace && rawPlace.includes('{=')) {
+                            const { display, geo } = this._parsePlaceString(rawPlace);
+                            
+                            // 1. Update parsed value to satisfy "Display Value" requirement
+                            field.parsed[placeIdx] = display;
+                            
+                            // 2. Attach metadata for Geocoding (Runtime Memory Model)
+                            if (!field.metadata) field.metadata = {};
+                            field.metadata.geo = geo;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    _parsePlaceString(str) {
+        // Spec 4.1.1: "Parsers must treat text outside the braces as the display value"
+        // Regex: Remove space+brace content. 
+        // Example: "Berlin {=Kitchener}" -> "Berlin"
+        const display = str.replace(/\s*\{=.*?\}/g, '');
+
+        // Spec 4.1.1: "text inside the braces as the target for map lookups"
+        // This applies to the specific hierarchy unit.
+        // Example: "Lwów {=Lviv}; Poland {=Ukraine}" -> "Lviv; Ukraine"
+        // Logic: Replace "Unit {=Override}" with "Override". Leave "Unit" (without braces) alone.
+        // Regex: Capture Group 1 (Content before brace), Group 2 (Inside brace).
+        // Replace with Group 2.
+        const geo = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
+
+        return { display, geo };
+    }
+
+    // =========================================================================
+    // 5. Validation & Types (Section 3 & 8.3)
     // =========================================================================
 
     _determineRecordType(id) {
