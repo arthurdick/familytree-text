@@ -1,0 +1,105 @@
+HEAD_FORMAT:    FTT v0.1
+HEAD_TITLE:     The Macdonald Family & Associates
+HEAD_ROOT:      MACDONALD-1815-JA
+HEAD_AUTHOR:    Gemini
+HEAD_DATE:      2026-01-20
+---
+
+# ==========================================
+# SOURCES
+# ==========================================
+
+ID: ^SRC-DBC
+TITLE: Dictionary of Canadian Biography - Macdonald, Sir John Alexander
+URL: http://www.biographi.ca/en/bio/macdonald_john_alexander_12E.html
+
+ID: ^SRC-LAC-1891
+TITLE: 1891 Census of Canada
+
+---
+
+# ==========================================
+# RECORDS
+# ==========================================
+
+ID: MACDONALD-1815-JA
+NAME: Sir John A. Macdonald | Macdonald, John Alexander | BIRTH | PREF
+SEX:  M
+BORN: 1815-01-11 | Glasgow; Scotland
+DIED: 1891-06-06 | Ottawa; Ontario; Canada
+DIED_SRC: ^SRC-DBC
+PARENT: MACDONALD-1782-H | BIO
+PARENT: SHAW-1777-H | BIO
+UNION: CLARK-1813-I | MARR | 1843-09-01 | 1857-12-28 | WID
+UNION: BERNARD-1836-S | MARR | 1867-02-25 | 1891-06-06 | WID
+CHILD: MACDONALD-1850-H
+
+# Demonstrating Social & Professional Associates
+ASSOC: CARTIER-1814-GE | PART | 1867 | 1873 | Father of Confederation; political ally
+ASSOC: CAMPBELL-1822-A | APPR | 1839 | 1843 | Law partner and former apprentice
+ASSOC: POPE-1854-J | EXEC | 1891 || Executor of Macdonald's will and private secretary
+ASSOC: POPE-1854-J | WITN | 1891-06-06 || Witness to final illness and death
+
+ID: MACDONALD-1782-H
+NAME: Hugh Macdonald | Macdonald, Hugh | BIRTH
+SEX:  M
+BORN: 1782-12-12 | Dornoch; Sutherland; Scotland
+DIED: 1841-09-29 | Kingston; Ontario; Canada
+CHILD: MACDONALD-1815-JA
+
+ID: SHAW-1777-H
+NAME: Helen Shaw | Shaw, Helen | BIRTH
+SEX:  F
+BORN: 1777~ | Scotland
+DIED: 1862 | Kingston; Ontario; Canada
+CHILD: MACDONALD-1815-JA
+
+ID: CLARK-1813-I
+NAME: Isabella Clark | Clark, Isabella | BIRTH
+SEX:  F
+BORN: 1813 | Dalnavert; Scotland
+DIED: 1857-12-28 | Kingston; Ontario; Canada
+UNION: MACDONALD-1815-JA | MARR | 1843-09-01 | 1857-12-28 | WID
+CHILD: MACDONALD-1850-H
+
+ID: BERNARD-1836-S
+NAME: Susan Agnes Bernard | Bernard, Susan Agnes | BIRTH
+NAME: Baroness Macdonald of Earnscliffe | Macdonald, Susan Agnes | PROF
+SEX:  F
+BORN: 1836-08-24 | Jamaica
+DIED: 1920-09-05 | Eastbourne; England
+UNION: MACDONALD-1815-JA | MARR | 1867-02-25 | 1891-06-06 | WID
+
+ID: MACDONALD-1850-H
+NAME: Hugh John Macdonald | Macdonald, Hugh John | BIRTH
+SEX:  M
+BORN: 1850-03-13 | Kingston; Ontario; Canada
+BORN_SRC: ^SRC-DBC
+DIED: 1929-03-29 | Winnipeg; Manitoba; Canada
+PARENT: MACDONALD-1815-JA | BIO
+PARENT: CLARK-1813-I | BIO
+EVENT: OCC | 1900-01-08 | 1900-10-29 | Manitoba; Canada | Premier of Manitoba
+
+# ==========================================
+# ASSOCIATE DEFINITIONS
+# ==========================================
+
+ID: CARTIER-1814-GE
+NAME: Sir George-Étienne Cartier | Cartier, George-Étienne | BIRTH
+SEX:  M
+BORN: 1814-09-06 | Saint-Antoine-sur-Richelieu; Lower Canada {=Quebec}
+DIED: 1873-05-20 | London; England
+ASSOC: MACDONALD-1815-JA | PART | 1867 | 1873 | Political partner
+
+ID: CAMPBELL-1822-A
+NAME: Sir Alexander Campbell | Campbell, Alexander | BIRTH
+SEX:  M
+BORN: 1822-03-09 | Yorkshire; England
+DIED: 1892-05-24 | Toronto; Ontario; Canada
+
+ID: POPE-1854-J
+NAME: Sir Joseph Pope | Pope, Joseph | BIRTH
+SEX:  M
+BORN: 1854-08-16 | Charlottetown; PEI; Canada
+DIED: 1926-12-02 | Ottawa; Ontario; Canada
+NOTES: Private Secretary to Sir John A. Macdonald and under-secretary of state.
