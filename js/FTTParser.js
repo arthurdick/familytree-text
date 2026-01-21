@@ -288,8 +288,9 @@ class FTTParser {
     }
 
     /**
-     * Section 8.3.2: Symmetric Relationship Injection
+     * Section 8.3.2: Symmetric Relationship Injection & Consistency Check
      * If Record A defines UNION: Record B, we must ensure Record B defines UNION: Record A.
+     * If both define it, we must ensure the metadata matches.
      */
     _injectImplicitUnions() {
         // Iterate over all records to find defined unions
@@ -306,12 +307,24 @@ class FTTParser {
                 if (!partnerRecord) continue; 
 
                 // Check if partner already links back to `id`
-                let hasReciprocal = false;
+                let reciprocalField = null;
                 if (partnerRecord.data['UNION']) {
-                    hasReciprocal = partnerRecord.data['UNION'].some(u => u.parsed[0] === id);
+                    reciprocalField = partnerRecord.data['UNION'].find(u => u.parsed[0] === id);
                 }
 
-                if (!hasReciprocal) {
+                if (reciprocalField) {
+                    // RESOLUTION: Consistency Check
+                    // Compare TYPE (1), START (2), END (3), REASON (4)
+                    // We skip ID (0) because they are obviously different (pointing to each other)
+                    for (let i = 1; i <= 4; i++) {
+                        const valA = (unionField.parsed[i] || '').trim();
+                        const valB = (reciprocalField.parsed[i] || '').trim();
+                        
+                        if (valA !== valB) {
+                            this._error(`Consistency Warning: Union between ${id} and ${partnerId} has conflicting data at field index ${i} ("${valA}" vs "${valB}").`);
+                        }
+                    }
+                } else {
                     // Inject implicit union
                     if (!partnerRecord.data['UNION']) {
                         partnerRecord.data['UNION'] = [];
@@ -332,8 +345,8 @@ class FTTParser {
     }
 
     /**
-     * Section 4.1.1: Place Hierarchy & Geocoding
-     * Parses `{=GeocodeTarget}` syntax in place fields.
+     * Section 4.1: Place Hierarchy & Geocoding
+     * Parses `{=GeocodeTarget}` syntax and `<Lat, Long>` coordinates.
      */
     _processPlaceHierarchies() {
         // Map of Keys to the Index where the Place string is located
@@ -356,16 +369,17 @@ class FTTParser {
                     if (field.parsed.length > placeIdx) {
                         const rawPlace = field.parsed[placeIdx];
                         
-                        // Check if it contains the special syntax
-                        if (rawPlace && rawPlace.includes('{=')) {
-                            const { display, geo } = this._parsePlaceString(rawPlace);
+                        // Check if it contains special syntax (Braces OR Angle Brackets)
+                        if (rawPlace && (rawPlace.includes('{=') || rawPlace.includes('<'))) {
+                            const { display, geo, coords } = this._parsePlaceString(rawPlace);
                             
                             // 1. Update parsed value to satisfy "Display Value" requirement
                             field.parsed[placeIdx] = display;
                             
                             // 2. Attach metadata for Geocoding (Runtime Memory Model)
                             if (!field.metadata) field.metadata = {};
-                            field.metadata.geo = geo;
+                            if (geo) field.metadata.geo = geo;
+                            if (coords) field.metadata.coords = coords;
                         }
                     }
                 }
@@ -374,20 +388,25 @@ class FTTParser {
     }
 
     _parsePlaceString(str) {
+        // Spec 4.1.2: Coordinates in angle brackets <Lat, Long>
+        const coordsMatch = str.match(/<([^>]+)>/);
+        const coords = coordsMatch ? coordsMatch[1].trim() : null;
+
         // Spec 4.1.1: "Parsers must treat text outside the braces as the display value"
-        // Regex: Remove space+brace content. 
-        // Example: "Berlin {=Kitchener}" -> "Berlin"
-        const display = str.replace(/\s*\{=.*?\}/g, '');
+        // Also strip coordinates from the display value
+        let display = str
+            .replace(/\s*\{=.*?\}/g, '') // Remove geocoding overrides
+            .replace(/\s*<.*?>/g, '');   // Remove coordinates
+        
+        display = display.trim();
 
         // Spec 4.1.1: "text inside the braces as the target for map lookups"
-        // This applies to the specific hierarchy unit.
-        // Example: "Lwów {=Lviv}; Poland {=Ukraine}" -> "Lviv; Ukraine"
         // Logic: Replace "Unit {=Override}" with "Override". Leave "Unit" (without braces) alone.
-        // Regex: Capture Group 1 (Content before brace), Group 2 (Inside brace).
-        // Replace with Group 2.
-        const geo = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
+        // We also strip coordinates from the geo string if they were included there.
+        const geoRaw = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
+        const geo = geoRaw.replace(/\s*<.*?>/g, '').trim();
 
-        return { display, geo };
+        return { display, geo, coords };
     }
 
     // =========================================================================
