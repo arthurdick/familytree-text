@@ -4,7 +4,7 @@
 
 **Core Principle:** Data durability through human-readable, machine-parseable UTF-8 plain text.
 
-[**🌐 Live Visualizer / Editor**](https://arthurdick.github.io/familytree-text/)
+[**🌐 Live Visualizer / Editor**](https://arthurdick.github.io/familytree-text/tools/visualizer.html)
 
 ---
 
