@@ -16,7 +16,8 @@ class FTTParser {
         this.headers = {};
         this.records = new Map(); // Map<ID, RecordObject>
         this.ids = new Set();     // Fast lookup for existence
-        this.errors = [];         // Validation errors
+        this.errors = [];         // Critical Validation Errors
+        this.warnings = [];       // Consistency Warnings & Notices
         
         // Internal Parsing State
         this.currentRecordId = null;
@@ -28,7 +29,7 @@ class FTTParser {
     /**
      * Main Entry Point
      * @param {string} rawText - The UTF-8 file content.
-     * @returns {object} - { headers, records, errors }
+     * @returns {object} - { headers, records, errors, warnings }
      */
     parse(rawText) {
         this.reset();
@@ -53,7 +54,8 @@ class FTTParser {
         return {
             headers: this.headers,
             records: Object.fromEntries(this.records),
-            errors: this.errors
+            errors: this.errors,
+            warnings: this.warnings
         };
     }
 
@@ -133,9 +135,6 @@ class FTTParser {
             // Headers are single strings, usually not repeatable.
             // Normalize header values to NFC
             this.headers[key] = inlineValue.trim().normalize('NFC');
-            // We set currentKey to null immediately for headers to prevent multiline buffering 
-            // strictly, though the spec allows multiline headers if indented. 
-            // Keeping currentKey active allows the buffer flush to handle it.
             return;
         }
 
@@ -213,12 +212,10 @@ class FTTParser {
         }
         
         // We create a container for the modifier value
-        // Modifiers themselves are just strings, but we buffer them to handle multiline
         const modObj = { raw: '' }; 
         this.lastFieldRef.obj.modifiers[modKey].push(modObj);
         
         // Hijack the flush logic to update this specific modifier object
-        // We use a temporary property on the parser to know where to flush the buffer
         this.currentModifierTarget = modObj;
     }
 
@@ -302,8 +299,6 @@ class FTTParser {
 
     /**
      * Section 8.3.2: Symmetric Relationship Injection & Consistency Check
-     * If Record A defines UNION: Record B, we must ensure Record B defines UNION: Record A.
-     * If both define it, we must ensure the metadata matches.
      */
     _injectImplicitUnions() {
         // Iterate over all records to find defined unions
@@ -328,13 +323,12 @@ class FTTParser {
                 if (reciprocalField) {
                     // RESOLUTION: Consistency Check
                     // Compare TYPE (1), START (2), END (3), REASON (4)
-                    // We skip ID (0) because they are obviously different (pointing to each other)
                     for (let i = 1; i <= 4; i++) {
                         const valA = (unionField.parsed[i] || '').trim();
                         const valB = (reciprocalField.parsed[i] || '').trim();
                         
                         if (valA !== valB) {
-                            this._error(`Consistency Warning: Union between ${id} and ${partnerId} has conflicting data at field index ${i} ("${valA}" vs "${valB}").`);
+                            this._warning(`Consistency Warning: Union between ${id} and ${partnerId} has conflicting data at field index ${i} ("${valA}" vs "${valB}").`);
                         }
                     }
                 } else {
@@ -357,10 +351,6 @@ class FTTParser {
         }
     }
 
-    /**
-     * Section 4.1: Place Hierarchy & Geocoding
-     * Parses `{=GeocodeTarget}` syntax and `<Lat, Long>` coordinates.
-     */
     _processPlaceHierarchies() {
         // Map of Keys to the Index where the Place string is located
         const PLACE_INDICES = {
@@ -373,16 +363,11 @@ class FTTParser {
         for (const record of this.records.values()) {
             for (const [key, fields] of Object.entries(record.data)) {
                 const placeIdx = PLACE_INDICES[key];
-                
-                // If this key isn't a known place-holder, skip
                 if (placeIdx === undefined) continue;
 
                 for (const field of fields) {
-                    // Ensure the field has enough values to contain the place
                     if (field.parsed.length > placeIdx) {
                         const rawPlace = field.parsed[placeIdx];
-                        
-                        // Check if it contains special syntax (Braces OR Angle Brackets)
                         if (rawPlace && (rawPlace.includes('{=') || rawPlace.includes('<'))) {
                             const { display, geo, coords } = this._parsePlaceString(rawPlace);
                             
@@ -401,21 +386,15 @@ class FTTParser {
     }
 
     _parsePlaceString(str) {
-        // Spec 4.1.2: Coordinates in angle brackets <Lat, Long>
         const coordsMatch = str.match(/<([^>]+)>/);
         const coords = coordsMatch ? coordsMatch[1].trim() : null;
 
-        // Spec 4.1.1: "Parsers must treat text outside the braces as the display value"
-        // Also strip coordinates from the display value
         let display = str
             .replace(/\s*\{=.*?\}/g, '') // Remove geocoding overrides
             .replace(/\s*<.*?>/g, '');   // Remove coordinates
         
         display = display.trim();
 
-        // Spec 4.1.1: "text inside the braces as the target for map lookups"
-        // Logic: Replace "Unit {=Override}" with "Override". Leave "Unit" (without braces) alone.
-        // We also strip coordinates from the geo string if they were included there.
         const geoRaw = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
         const geo = geoRaw.replace(/\s*<.*?>/g, '').trim();
 
@@ -434,37 +413,26 @@ class FTTParser {
     }
 
     _validateID(id, lineNum) {
-        // 1. Global Forbidden Characters (Section 3.1)
-        // IDs must not contain Whitespace, Pipe, Semicolons, or Control characters.
         if (/[\s|;\p{C}]/u.test(id)) {
             this._error(`Line ${lineNum}: ID "${id}" contains forbidden characters (Whitespace, Pipe, Semicolon, or Control).`);
             return; 
         }
 
         const firstChar = id.charAt(0);
-        
-        // 2. Standard ID Validation (Section 3.2.1)
-        // If it DOES NOT start with a sigil (^, &, ?), it is a Standard ID.
         if (!['^', '&', '?'].includes(firstChar)) {
-            // Rule: Must start with Alphanumeric (\p{L} or \p{N})
-            // Rule: Allowed characters are \p{L}, \p{N}, and Hyphen (-)
             const standardIdPattern = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
-            
             if (!standardIdPattern.test(id)) {
                 this._error(`Line ${lineNum}: Invalid Standard ID "${id}". Must start with alphanumeric and contain only alphanumeric or hyphens.`);
             }
         }
-        // Note: Sigil IDs are implicitly validated by the exclusion of "Standard" chars and the global forbidden list.
     }
 
     _validateGraph() {
-        // Check for Required Headers & Version Compatibility ---
+        // Check for Required Headers & Version Compatibility
         const formatHeader = this.headers['HEAD_FORMAT'];
-        
         if (!formatHeader) {
             this._error('Missing Required Header: File must declare "HEAD_FORMAT" (e.g., "HEAD_FORMAT: FTT v0.1").');
         } else {
-            // Extract numeric version (e.g., "FTT v0.1" -> 0.1)
             const match = formatHeader.match(/v(\d+(\.\d+)?)/);
             if (match) {
                 const fileVersion = parseFloat(match[1]);
@@ -476,29 +444,22 @@ class FTTParser {
             }
         }
         
-        // 1. Dangling Reference Check (Section 8.3.4)
-        // We scan every parsed field for references to IDs
+        // 1. Dangling Reference Check
         this.records.forEach((record, id) => {
             this._checkReferences(record);
         });
 
-        // 2. Ghost Child Check (Section 8.3.1)
+        // 2. Ghost Child Check
         this.records.forEach((record, parentId) => {
             if (record.data['CHILD']) {
                 record.data['CHILD'].forEach(childField => {
-                    const childId = childField.parsed[0]; // Child ID is index 0
+                    const childId = childField.parsed[0];
                     if (!childId) return;
-
-                    // If placeholder, skip check
                     if (childId.startsWith('?')) return;
 
                     const childRecord = this.records.get(childId);
-                    if (!childRecord) {
-                        // Handled by dangling ref check, but strictly for Ghost Child logic:
-                        return; 
-                    }
+                    if (!childRecord) return; 
 
-                    // Does child point back to parent?
                     let pointsBack = false;
                     if (childRecord.data['PARENT']) {
                         pointsBack = childRecord.data['PARENT'].some(p => p.parsed[0] === parentId);
@@ -511,13 +472,12 @@ class FTTParser {
             }
         });
 
-        // 3. Cycle Detection (Section 8.3.3)
-        // Run DFS on every node to detect back-edges
+        // 3. Cycle Detection
         const visited = new Set();
         const recursionStack = new Set();
 
         const detectCycle = (currId) => {
-            if (recursionStack.has(currId)) return true; // Cycle found
+            if (recursionStack.has(currId)) return true;
             if (visited.has(currId)) return false;
 
             visited.add(currId);
@@ -527,7 +487,6 @@ class FTTParser {
             if (record && record.data['PARENT']) {
                 for (const pField of record.data['PARENT']) {
                     const parentId = pField.parsed[0];
-                    // Skip placeholders in cycle check
                     if (parentId && !parentId.startsWith('?') && this.records.has(parentId)) {
                         if (detectCycle(parentId)) {
                             this._error(`Circular Lineage detected involving ${currId} and ${parentId}.`);
@@ -547,19 +506,88 @@ class FTTParser {
             }
         }
         
-        // 4. Date Format Validation (ISO 8601-2 / EDTF)
+        // 4. Vocabulary Validation
+        this._validateVocabulary();
+
+        // 5. Date Format Validation
         this._validateDates();
+    }
+
+    _validateVocabulary() {
+        // Appendix A.1: Parent/Child Types
+        const VALID_PARENT_TYPES = new Set(['BIO', 'ADO', 'STE', 'FOS', 'UNK']);
+        
+        // Appendix A.2: Union Types
+        const VALID_UNION_TYPES = new Set(['MARR', 'PART', 'UNK']);
+        
+        // Appendix A.3: Relationship Termination Codes
+        const VALID_UNION_REASONS = new Set(['DIV', 'SEP', 'WID', 'ANN']);
+
+        // Appendix B.1 & B.2: Name Types & Status
+        const VALID_NAME_TYPES = new Set(['BIRTH', 'MARR', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']);
+        const VALID_NAME_STATUS = new Set(['PREF']);
+
+        // Appendix E: Associate Roles
+        const VALID_ASSOC_ROLES = new Set([
+            'GODP', 'GODC', 'SPON', 'OFFI', // Religious
+            'WITN', 'EXEC', 'GUAR', 'WARD', 'INFO', // Legal
+            'MAST', 'APPR', 'SERV', 'NEIG', 'ENSL', 'OWNR' // Social
+        ]);
+
+        for (const record of this.records.values()) {
+            // 1. Validate PARENT Types (Strict)
+            if (record.data['PARENT']) {
+                record.data['PARENT'].forEach(f => {
+                    const type = (f.parsed[1] || '').trim();
+                    if (type && !VALID_PARENT_TYPES.has(type)) {
+                        this._error(`Vocabulary Error: Invalid PARENT Type "${type}" in record ${record.id}. Expected one of: ${[...VALID_PARENT_TYPES].join(', ')}.`);
+                    }
+                });
+            }
+
+            // 2. Validate UNION Types & Reasons (Strict)
+            if (record.data['UNION']) {
+                record.data['UNION'].forEach(f => {
+                    const type = (f.parsed[1] || '').trim();
+                    const reason = (f.parsed[4] || '').trim();
+
+                    if (type && !VALID_UNION_TYPES.has(type)) {
+                        this._error(`Vocabulary Error: Invalid UNION Type "${type}" in record ${record.id}. Expected one of: ${[...VALID_UNION_TYPES].join(', ')}.`);
+                    }
+                    if (reason && !VALID_UNION_REASONS.has(reason)) {
+                        this._error(`Vocabulary Error: Invalid UNION End Reason "${reason}" in record ${record.id}. Expected one of: ${[...VALID_UNION_REASONS].join(', ')}.`);
+                    }
+                });
+            }
+
+            // 3. Validate NAME Types (Advisory Warning)
+            if (record.data['NAME']) {
+                record.data['NAME'].forEach(f => {
+                    const type = (f.parsed[2] || '').trim();
+                    const status = (f.parsed[3] || '').trim();
+
+                    if (type && !VALID_NAME_TYPES.has(type)) {
+                        this._warning(`Vocabulary Notice: Non-standard NAME Type "${type}" in record ${record.id}.`);
+                    }
+                    if (status && !VALID_NAME_STATUS.has(status)) {
+                        this._error(`Vocabulary Error: Invalid NAME Status "${status}" in record ${record.id}. Expected "PREF" or empty.`);
+                    }
+                });
+            }
+
+            // 4. Validate ASSOC Roles (Advisory Warning)
+            if (record.data['ASSOC']) {
+                record.data['ASSOC'].forEach(f => {
+                    const role = (f.parsed[1] || '').trim();
+                    if (role && !VALID_ASSOC_ROLES.has(role)) {
+                        this._warning(`Vocabulary Notice: Non-standard ASSOC Role "${role}" in record ${record.id}.`);
+                    }
+                });
+            }
+        }
     }
     
     _validateDates() {
-        // Regex for EDTF Level 2 Features
-        // 1. Unknown: "?"
-        // 2. Open Interval (Ongoing): ".."
-        // 3. Bounding Window: "[..]" (Supports [Start..End], [..End], [Start..])
-        // 4. Standard/Uncertain/Unspecified:
-        //    - Support for Ancient/Far-Future years (more than 4 digits, negative years)
-        //    - Support for "Unspecified" digits 'X' in any position (e.g., 19X5, 1XXX)
-        
         const datePattern = /^(\?|\.\.|\[.*\.\..*\]|-?[\dX]+(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
 
         const DATE_KEYS = {
@@ -600,8 +628,6 @@ class FTTParser {
     }
 
     _checkReferences(record) {
-        // Iterate all fields to find standard reference keys
-        // PARENT, CHILD, UNION, ASSOC, SRC, EVENT_REF keys contain IDs at index 0
         const refKeys = ['PARENT', 'CHILD', 'UNION', 'ASSOC', 'SRC', 'EVENT_REF'];
         
         refKeys.forEach(key => {
@@ -615,10 +641,8 @@ class FTTParser {
             }
         });
 
-        // Check Modifiers for Sources
         Object.values(record.data).forEach(fieldList => {
             fieldList.forEach(field => {
-                // Check *_SRC modifiers
                 for (const modKey in field.modifiers) {
                     if (modKey.endsWith('_SRC')) {
                         field.modifiers[modKey].forEach(mod => {
@@ -634,13 +658,16 @@ class FTTParser {
     }
 
     _idExists(id) {
-        // Always return true for Placeholders (?)
         if (id.startsWith('?')) return true;
         return this.ids.has(id);
     }
 
     _error(msg) {
         this.errors.push(msg);
+    }
+
+    _warning(msg) {
+        this.warnings.push(msg);
     }
 }
 
