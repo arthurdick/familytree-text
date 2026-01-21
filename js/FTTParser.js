@@ -8,6 +8,7 @@
 
 class FTTParser {
     constructor() {
+        this.SUPPORTED_VERSION = 0.1;
         this.reset();
     }
 
@@ -445,6 +446,24 @@ class FTTParser {
     }
 
     _validateGraph() {
+        // Check for Required Headers & Version Compatibility ---
+        const formatHeader = this.headers['HEAD_FORMAT'];
+        
+        if (!formatHeader) {
+            this._error('Missing Required Header: File must declare "HEAD_FORMAT" (e.g., "HEAD_FORMAT: FTT v0.1").');
+        } else {
+            // Extract numeric version (e.g., "FTT v0.1" -> 0.1)
+            const match = formatHeader.match(/v(\d+(\.\d+)?)/);
+            if (match) {
+                const fileVersion = parseFloat(match[1]);
+                if (fileVersion > this.SUPPORTED_VERSION) {
+                    this._error(`Version Error: File version (v${fileVersion}) is higher than supported version (v${this.SUPPORTED_VERSION}).`);
+                }
+            } else {
+                 this._error(`Header Format Error: Could not parse version number from "${formatHeader}". Expected format "FTT vX.X".`);
+            }
+        }
+        
         // 1. Dangling Reference Check (Section 8.3.4)
         // We scan every parsed field for references to IDs
         this.records.forEach((record, id) => {
