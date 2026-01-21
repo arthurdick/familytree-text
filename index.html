@@ -457,12 +457,25 @@ EVENT: OCC | 2005 || Engineer
         function render() {
             const result = parser.parse(editor.value);
             console.log(result);
+
             if (result.errors.length > 0) {
                 errorBox.style.display = 'block';
-                errorBox.innerHTML = '<strong>Errors:</strong><br>' + result.errors.join('<br>');
+                errorBox.innerHTML = '';
+
+                const header = document.createElement('strong');
+                header.textContent = 'Errors:';
+                errorBox.appendChild(header);
+                errorBox.appendChild(document.createElement('br'));
+
+                result.errors.forEach(err => {
+                    errorBox.appendChild(document.createTextNode(err));
+                    errorBox.appendChild(document.createElement('br'));
+                });
             } else {
                 errorBox.style.display = 'none';
+                errorBox.innerHTML = '';
             }
+
             const cyElements = convertToCytoscape(result);
             cy.elements().remove();
             cy.add(cyElements);
