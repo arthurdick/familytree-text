@@ -292,10 +292,27 @@ class FTTParser {
     }
 
     _validateID(id, lineNum) {
-        // Section 3.1: No whitespace, pipe, semicolon
-        if (/[\s|;]/.test(id)) {
-            this._error(`Line ${lineNum}: Invalid characters in ID "${id}".`);
+        // 1. Global Forbidden Characters (Section 3.1)
+        // IDs must not contain Whitespace, Pipe, Semicolons, or Control characters.
+        if (/[\s|;\p{C}]/u.test(id)) {
+            this._error(`Line ${lineNum}: ID "${id}" contains forbidden characters (Whitespace, Pipe, Semicolon, or Control).`);
+            return; 
         }
+
+        const firstChar = id.charAt(0);
+        
+        // 2. Standard ID Validation (Section 3.2.1)
+        // If it DOES NOT start with a sigil (^, &, ?), it is a Standard ID.
+        if (!['^', '&', '?'].includes(firstChar)) {
+            // Rule: Must start with Alphanumeric (\p{L} or \p{N})
+            // Rule: Allowed characters are \p{L}, \p{N}, and Hyphen (-)
+            const standardIdPattern = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
+            
+            if (!standardIdPattern.test(id)) {
+                this._error(`Line ${lineNum}: Invalid Standard ID "${id}". Must start with alphanumeric and contain only alphanumeric or hyphens.`);
+            }
+        }
+        // Note: Sigil IDs are implicitly validated by the exclusion of "Standard" chars and the global forbidden list.
     }
 
     _validateGraph() {
@@ -418,44 +435,3 @@ class FTTParser {
 
 // Export for Node.js or Browser
 if (typeof module !== 'undefined') module.exports = FTTParser;
-
-// =========================================================================
-// Example Usage / Test
-// =========================================================================
-
-/*
-const sampleFTT = `
-HEAD_FORMAT: FTT v0.1
-HEAD_TITLE: Parser Test
-
-ID: SMITH-01
-NAME: John Smith | Smith, John
-BORN: 1980-01-01 | Calgary; AB
-BORN_SRC: ^SRC-1 | Certificate
-BORN_NOTE: Likely born in the morning.
-PARENT: SMITH-DAD | BIO ||
-CHILD: SMITH-SON
-UNION: DOE-01 | MARR | 2000 | .. |
-
-ID: SMITH-DAD
-NAME: Mr. Smith
-CHILD: SMITH-01
-
-ID: DOE-01
-NAME: Jane Doe
-UNION: SMITH-01 | MARR | 2000 | .. |
-
-ID: SMITH-SON
-NAME: Baby Smith
-PARENT: SMITH-01 | BIO ||
-
-ID: ^SRC-1
-TITLE: Birth Certificate
-`;
-
-const parser = new FTTParser();
-const result = parser.parse(sampleFTT);
-
-console.log("Errors:", result.errors);
-console.log("Records:", JSON.stringify(result.records, null, 2));
-*/
