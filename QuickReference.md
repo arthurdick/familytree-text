@@ -26,14 +26,18 @@ HEAD_DATE:      2026-01-20
 
 ## **2. ID System & Sigils**
 
-IDs are Case-Sensitive. Do not use spaces in IDs.
+IDs are **Case-Sensitive**.
+
+* **Forbidden:** Spaces, tabs, pipes (`|`), semicolons (`;`), and control characters.
+* **Standard IDs:** Must start with alphanumeric; only letters, numbers, and hyphens (`-`) allowed.
+* **Recommendation:** Use `[SURNAME]-[YYYY]-[INITIALS]` (e.g., `SMITH-1980-JS`).
 
 | Type | Sigil | Prefix Example | Usage |
 | --- | --- | --- | --- |
 | **Person** | *(None)* | `SMITH-1980` | Standard individual record. |
 | **Source** | `^` | `^SRC-CENSUS` | Bibliographic citation. |
-| **Event** | `&` | `&EVT-WWII` | Shared event (e.g., War, Earthquake). |
-| **Unknown** | `?` | `?UNK-FATHER` | Placeholder for missing people/data. |
+| **Event** | `&` | `&EVT-WWII` | Shared historical event. |
+| **Unknown** | `?` | `?UNK-FATHER` | Placeholder (Exempt from reciprocity checks). |
 
 ---
 
