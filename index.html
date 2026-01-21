@@ -194,6 +194,8 @@ EVENT: OCC | 2005 || Engineer
         const parentPairToUnionNode = {}; 
 
         // 1. Process Unions
+        const processedUnions = new Set(); // Track processed pairs to prevent duplicates
+
         for (const [id, rec] of Object.entries(records)) {
             if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
 
@@ -210,26 +212,31 @@ EVENT: OCC | 2005 || Engineer
                     if (partnerRec && (partnerRec.type === 'SOURCE' || partnerRec.type === 'EVENT')) return;
                     if (!partnerRec && !partnerId.startsWith('?')) return; // dangling ref check
 
-                    if (id < partnerId) {
-                        const unionNodeId = `union_${unionCounter++}`;
-                        const alignNodeId = `align_${unionNodeId}`;
+                    // Sort IDs to ensure consistent key regardless of order or which record defined it
+                    const [p1, p2] = [id, partnerId].sort();
+                    const unionKey = `${p1}+${p2}`;
 
-                        parentPairToUnionNode[`${id}+${partnerId}`] = unionNodeId;
-                        parentPairToUnionNode[`${partnerId}+${id}`] = unionNodeId;
+                    if (processedUnions.has(unionKey)) return; // Already handled
+                    processedUnions.add(unionKey);
 
-                        // Union nodes are internal helpers, so we use a unique ID that won't conflict
-                        elements.push({ data: { id: unionNodeId, label: '', type: 'UNION_NODE' } });
-                        elements.push({ data: { id: alignNodeId, label: '', type: 'ALIGN_NODE' }, classes: 'hidden-node' });
+                    const unionNodeId = `union_${unionCounter++}`;
+                    const alignNodeId = `align_${unionNodeId}`;
 
-                        // Skeleton Edges
-                        [id, partnerId, unionNodeId].forEach(target => {
-                            elements.push({ data: { source: alignNodeId, target: target }, classes: 'layout-edge' });
-                        });
+                    parentPairToUnionNode[`${id}+${partnerId}`] = unionNodeId;
+                    parentPairToUnionNode[`${partnerId}+${id}`] = unionNodeId;
 
-                        // Visual Edges
-                        elements.push({ data: { source: id, target: unionNodeId }, classes: 'visual-edge' });
-                        elements.push({ data: { source: partnerId, target: unionNodeId }, classes: 'visual-edge' });
-                    }
+                    // Union nodes are internal helpers, so we use a unique ID that won't conflict
+                    elements.push({ data: { id: unionNodeId, label: '', type: 'UNION_NODE' } });
+                    elements.push({ data: { id: alignNodeId, label: '', type: 'ALIGN_NODE' }, classes: 'hidden-node' });
+
+                    // Skeleton Edges
+                    [id, partnerId, unionNodeId].forEach(target => {
+                        elements.push({ data: { source: alignNodeId, target: target }, classes: 'layout-edge' });
+                    });
+
+                    // Visual Edges
+                    elements.push({ data: { source: id, target: unionNodeId }, classes: 'visual-edge' });
+                    elements.push({ data: { source: partnerId, target: unionNodeId }, classes: 'visual-edge' });
                 });
             }
         }
