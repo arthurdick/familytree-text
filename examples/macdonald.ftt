@@ -35,7 +35,7 @@ UNION: BERNARD-1836-S | MARR | 1867-02-25 | 1891-06-06 | WID
 CHILD: MACDONALD-1850-H
 
 # Demonstrating Social & Professional Associates
-ASSOC: CARTIER-1814-GE | PART | 1867 | 1873 | Father of Confederation; political ally
+ASSOC: CARTIER-1814-GE | POLIT_PARTNER | 1867 | 1873 | Father of Confederation; political ally
 ASSOC: CAMPBELL-1822-A | APPR | 1839 | 1843 | Law partner and former apprentice
 ASSOC: POPE-1854-J | EXEC | 1891 || Executor of Macdonald's will and private secretary
 ASSOC: POPE-1854-J | WITN | 1891-06-06 || Witness to final illness and death
@@ -89,7 +89,7 @@ NAME: Sir George-Étienne Cartier | Cartier, George-Étienne | BIRTH
 SEX:  M
 BORN: 1814-09-06 | Saint-Antoine-sur-Richelieu; Lower Canada {=Quebec}
 DIED: 1873-05-20 | London; England
-ASSOC: MACDONALD-1815-JA | PART | 1867 | 1873 | Political partner
+ASSOC: MACDONALD-1815-JA | POLIT_PARTNER | 1867 | 1873 | Political partner
 
 ID: CAMPBELL-1822-A
 NAME: Sir Alexander Campbell | Campbell, Alexander | BIRTH
