@@ -168,11 +168,23 @@ NAME: John Smith
 SEX: M
 PARENT: GRANDPA | BIO
 CHILD: ME
+UNION: MOM | MARR
+
+ID: MOM
+NAME: Jane Doe
+SEX: F
+CHILD: ME
 
 ID: ME
 NAME: Junior Smith
 SEX: M
-PARENT: DAD | BIO</textarea>
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+UNION: WIFE | MARR
+
+ID: WIFE
+NAME: Mary Stuart
+SEX: F</textarea>
             </div>
         </div>
 
@@ -260,7 +272,6 @@ PARENT: DAD | BIO</textarea>
             const recB = records[idB];
 
             // 1. Check Direct Union (Spouse)
-            // Note: FTTParser injects implicit unions, so checking A's unions is sufficient.
             if (recA.data.UNION) {
                 const union = recA.data.UNION.find(u => u.parsed[0] === idB);
                 if (union) {
@@ -276,7 +287,6 @@ PARENT: DAD | BIO</textarea>
                     return { type: 'ASSOC', role: assoc.parsed[1] || 'ASSOCIATE' };
                 }
             }
-            // Check Reverse Association
             if (recB.data.ASSOC) {
                 const assoc = recB.data.ASSOC.find(a => a.parsed[0] === idA);
                 if (assoc) {
@@ -284,14 +294,24 @@ PARENT: DAD | BIO</textarea>
                 }
             }
 
-            // 3. Lowest Common Ancestor (LCA) - Blood Relationship
+            // 3. Blood Relationship (Lowest Common Ancestor)
+            const bloodRel = calculateBloodRelationship(records, idA, idB);
+            if (bloodRel) return bloodRel;
+
+            // 4. Affinal (In-Laws / Step) Relationship
+            const affinalRel = calculateAffinalRelationship(records, idA, idB);
+            if (affinalRel) return affinalRel;
+
+            return { type: 'NONE' };
+        }
+
+        function calculateBloodRelationship(records, idA, idB) {
             const ancestorsA = getAncestors(records, idA);
             const ancestorsB = getAncestors(records, idB);
 
             let bestCA = null;
             let minDistance = Infinity;
 
-            // Find intersection
             for (const [ancId, distA] of ancestorsA) {
                 if (ancestorsB.has(ancId)) {
                     const distB = ancestorsB.get(ancId);
@@ -307,8 +327,55 @@ PARENT: DAD | BIO</textarea>
             if (bestCA) {
                 return { type: 'BLOOD', ...bestCA };
             }
+            return null;
+        }
 
-            return { type: 'NONE' };
+        function calculateAffinalRelationship(records, idA, idB) {
+            // Strategy: 
+            // 1. Is A related to B's Spouse? (A -> Spouse(B) -> B)
+            //    Term depends on A's relation to Spouse.
+            // 2. Is A's Spouse related to B? (A -> Spouse(A) -> B)
+            //    Term depends on Spouse's relation to B.
+
+            // Helper to get spouses
+            const getSpouses = (id) => {
+                const rec = records[id];
+                if (!rec || !rec.data.UNION) return [];
+                return rec.data.UNION.map(u => u.parsed[0]).filter(pid => records[pid]);
+            };
+
+            const spousesA = getSpouses(idA);
+            const spousesB = getSpouses(idB);
+
+            // Path 1: B's Spouse is the link (A is blood relative of B's spouse)
+            // e.g. A is Father of Spouse(B) -> A is Father-in-law of B.
+            for (const sB of spousesB) {
+                const rel = calculateBloodRelationship(records, idA, sB);
+                if (rel) {
+                    return { 
+                        type: 'AFFINAL', 
+                        subtype: 'VIA_TARGET_SPOUSE', 
+                        spouseId: sB, 
+                        bloodRel: rel 
+                    };
+                }
+            }
+
+            // Path 2: A's Spouse is the link (Spouse(A) is blood relative of B)
+            // e.g. Spouse(A) is Parent of B -> A is Stepparent of B.
+            for (const sA of spousesA) {
+                const rel = calculateBloodRelationship(records, sA, idB);
+                if (rel) {
+                    return { 
+                        type: 'AFFINAL', 
+                        subtype: 'VIA_SUBJECT_SPOUSE', 
+                        spouseId: sA, 
+                        bloodRel: rel 
+                    };
+                }
+            }
+            
+            return null;
         }
 
         // BFS to map all ancestors and their generation distance
@@ -316,18 +383,14 @@ PARENT: DAD | BIO</textarea>
             const ancestors = new Map(); // ID -> Distance (0=Self, 1=Parent...)
             const queue = [{ id: startId, dist: 0 }];
             
-            // We include Self as distance 0 to handle direct parent/child cases easily
             ancestors.set(startId, 0);
 
             while (queue.length > 0) {
                 const { id, dist } = queue.shift();
-                
                 const record = records[id];
                 if (record && record.data.PARENT) {
                     record.data.PARENT.forEach(p => {
                         const pId = p.parsed[0];
-                        // Ignore step/foster for strict blood calc if desired, 
-                        // but usually "Relation" includes them. We'll include all.
                         if (pId && !ancestors.has(pId)) {
                             ancestors.set(pId, dist + 1);
                             queue.push({ id: pId, dist: dist + 1 });
@@ -337,6 +400,10 @@ PARENT: DAD | BIO</textarea>
             }
             return ancestors;
         }
+
+        // ==========================================
+        // Rendering & Terminology
+        // ==========================================
 
         function renderResult(rel, records, idA, idB) {
             const nameA = getDisplayName(records[idA]);
@@ -363,41 +430,39 @@ PARENT: DAD | BIO</textarea>
                 detail = `${nameB} is defined as ${rel.role} of ${nameA}.`;
             }
             else if (rel.type === 'BLOOD') {
-                // Determine Term based on distances
-                // distA = distance from Common Ancestor to A
-                // distB = distance from Common Ancestor to B
-                
-                const dA = rel.distA;
-                const dB = rel.distB;
-
-                if (dA === 0) {
-                    // A is the Ancestor
-                    term = getAncestorTerm(dB, genderA);
-                } else if (dB === 0) {
-                    // B is the Ancestor (A is Descendant)
-                    term = getDescendantTerm(dA, genderA);
-                } else if (dA === 1 && dB === 1) {
-                    term = (genderA === 'M') ? "Brother" : (genderA === 'F') ? "Sister" : "Sibling";
-                } else if (dA === 1 && dB > 1) {
-                    // A is Sibling of B's Ancestor -> Great-Uncle/Aunt
-                    // Generation difference = dB - 1
-                    term = getNiblingTerm(dB - 1, genderA, true); 
-                } else if (dB === 1 && dA > 1) {
-                    // B is Sibling of A's Ancestor -> A is Niece/Nephew
-                    term = getNiblingTerm(dA - 1, genderA, false);
-                } else {
-                    // Cousins
-                    // Degree = min(dA, dB) - 1
-                    // Removed = abs(dA - dB)
-                    const degree = Math.min(dA, dB) - 1;
-                    const removed = Math.abs(dA - dB);
-                    term = getCousinTerm(degree, removed);
-                }
-
+                term = getBloodTerm(rel.distA, rel.distB, genderA);
                 const commonName = getDisplayName(records[rel.id]);
                 detail = `Common Ancestor: <strong>${commonName}</strong> (${rel.id})<br>
-                          Distance: ${nameA} (${dA}) ↔ Ancestor ↔ (${dB}) ${nameB}`;
+                          Distance: ${nameA} (${rel.distA}) ↔ Ancestor ↔ (${rel.distB}) ${nameB}`;
             } 
+            else if (rel.type === 'AFFINAL') {
+                // Determine In-Law vs Step vs other terms based on the specific blood link
+                const dBloodSubject = rel.bloodRel.distA; // Dist from CA to Subject/Spouse
+                const dBloodTarget = rel.bloodRel.distB;  // Dist from CA to Target/Spouse
+                
+                // We need the raw blood term (e.g. "Parent", "Sibling") to transform it
+                const rawBloodTerm = getBloodTerm(dBloodSubject, dBloodTarget, genderA); 
+
+                // Resolve Term Logic
+                if (rel.subtype === 'VIA_TARGET_SPOUSE') {
+                    // Scenario: A is [Relation] of B's Spouse.
+                    // Example: A is Parent of Spouse -> A is Parent-in-law.
+                    const spouseName = getDisplayName(records[rel.spouseId]);
+                    detail = `${nameA} is the <strong>${rawBloodTerm}</strong> of ${nameB}'s spouse (${spouseName}).`;
+
+                    // Term Mapping
+                    term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'INLAW');
+                } 
+                else if (rel.subtype === 'VIA_SUBJECT_SPOUSE') {
+                    // Scenario: A's Spouse is [Relation] of B.
+                    // Example: Spouse is Parent of B -> A is Stepparent.
+                    const spouseName = getDisplayName(records[rel.spouseId]);
+                    detail = `${nameA}'s spouse (${spouseName}) is the <strong>${getBloodTerm(rel.bloodRel.distA, rel.bloodRel.distB, getGender(records[rel.spouseId]))}</strong> of ${nameB}.`;
+
+                    // Term Mapping
+                    term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'STEP');
+                }
+            }
             else {
                 term = "No Relation Found";
                 detail = "Could not find a path through Parents or Unions.";
@@ -417,7 +482,6 @@ PARENT: DAD | BIO</textarea>
         function getDisplayName(rec) {
             if (!rec) return "Unknown";
             if (rec.data.NAME) {
-                // Look for PREF, else first
                 const pref = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
                 if (pref) return pref.parsed[0];
                 if (rec.data.NAME[0]) return rec.data.NAME[0].parsed[0];
@@ -430,6 +494,71 @@ PARENT: DAD | BIO</textarea>
                 return rec.data.SEX[0].parsed[0].trim().toUpperCase();
             }
             return 'U';
+        }
+
+        function getBloodTerm(distA, distB, sex) {
+            if (distA === 0) return getAncestorTerm(distB, sex); // A is Ancestor
+            if (distB === 0) return getDescendantTerm(distA, sex); // A is Descendant
+            
+            // Siblings
+            if (distA === 1 && distB === 1) {
+                return (sex === 'M') ? "Brother" : (sex === 'F') ? "Sister" : "Sibling";
+            }
+            // A is Uncle/Aunt (Sibling of Ancestor)
+            if (distA === 1 && distB > 1) {
+                 return getNiblingTerm(distB - 1, sex, true);
+            }
+            // A is Niece/Nephew (Child of Sibling)
+            if (distB === 1 && distA > 1) {
+                return getNiblingTerm(distA - 1, sex, false);
+            }
+            // Cousins
+            const degree = Math.min(distA, distB) - 1;
+            const removed = Math.abs(distA - distB);
+            return getCousinTerm(degree, removed);
+        }
+
+        // Transforms a Blood relationship distance into an Affinal/Step term
+        // mode = 'INLAW' (Subject is blood-relative of Target's Spouse)
+        // mode = 'STEP'  (Subject's Spouse is blood-relative of Target)
+        function getInLawTermFromBlood(distA, distB, sex, mode) {
+            // 1. Parent / Ancestor
+            if (distA === 0) { // Subject is Ancestor of Spouse (INLAW) OR Spouse is Ancestor of Target (STEP)
+                const term = getAncestorTerm(distB, sex);
+                if (mode === 'INLAW') return term + "-in-law"; // Parent -> Parent-in-law
+                if (mode === 'STEP') return "Step" + term.toLowerCase(); // Parent -> Stepparent
+            }
+            
+            // 2. Child / Descendant
+            if (distB === 0) {
+                const term = getDescendantTerm(distA, sex);
+                if (mode === 'INLAW') return "Step" + term.toLowerCase(); // Child of Spouse -> Stepchild
+                if (mode === 'STEP') return term + "-in-law"; // Spouse of Child -> Son-in-law
+            }
+
+            // 3. Sibling
+            if (distA === 1 && distB === 1) {
+                const term = (sex === 'M') ? "Brother" : (sex === 'F') ? "Sister" : "Sibling";
+                return term + "-in-law"; // Works for both ways
+            }
+
+            // 4. Uncle/Aunt
+            if (distA === 1 && distB > 1) {
+                const term = getNiblingTerm(distB - 1, sex, true);
+                return term + "-in-law"; // Uncle-in-law
+            }
+
+            // 5. Niece/Nephew
+            if (distB === 1 && distA > 1) {
+                const term = getNiblingTerm(distA - 1, sex, false);
+                return term + "-in-law"; // Nephew-in-law
+            }
+
+            // 6. Cousin
+            const degree = Math.min(distA, distB) - 1;
+            const removed = Math.abs(distA - distB);
+            const term = getCousinTerm(degree, removed);
+            return term + "-in-law";
         }
 
         function getAncestorTerm(dist, sex) {
@@ -446,15 +575,12 @@ PARENT: DAD | BIO</textarea>
             return `${dist-2}x Great-Grandchild`;
         }
 
-        // isUncleAunt: true if A is the Uncle/Great-Uncle, false if A is Niece/Nephew
         function getNiblingTerm(genDiff, sex, isUncleAunt) {
             if (isUncleAunt) {
-                // A is sibling of parent (1), grandparent (2)...
                 if (genDiff === 1) return sex === 'M' ? "Uncle" : sex === 'F' ? "Aunt" : "Parent's Sibling";
                 if (genDiff === 2) return sex === 'M' ? "Great-Uncle" : sex === 'F' ? "Great-Aunt" : "Grand-Uncle/Aunt";
                 return `${genDiff-2}x Great-Uncle/Aunt`;
             } else {
-                // A is child (1) of sibling, grandchild (2)...
                 if (genDiff === 1) return sex === 'M' ? "Nephew" : sex === 'F' ? "Niece" : "Sibling's Child";
                 if (genDiff === 2) return sex === 'M' ? "Great-Nephew" : sex === 'F' ? "Great-Niece" : "Grand-Nibling";
                 return `${genDiff-2}x Great-Niece/Nephew`;
