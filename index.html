@@ -210,24 +210,68 @@ EVENT: OCC | 2005 || Engineer
         // 2. Process Lineage
         for (const [childId, rec] of Object.entries(records)) {
             if (rec.data.PARENT) {
-                const parents = rec.data.PARENT.map(p => p.parsed[0]);
-                if (parents.length >= 2) {
-                    const unionKey = `${parents[0]}+${parents[1]}`;
+                const bioParents = [];
+                const otherParents = [];
+
+                // Split parents by type (BIO vs others like ADO, STE, FOS)
+                rec.data.PARENT.forEach(p => {
+                    const pId = p.parsed[0];
+                    const pType = (p.parsed[1] || 'BIO').toUpperCase();
+                    
+                    if (records[pId] || pId.startsWith('?')) {
+                        if (pType === 'BIO') {
+                            bioParents.push(pId);
+                        } else {
+                            otherParents.push({ id: pId, type: pType });
+                        }
+                    }
+                });
+
+                // A. Handle BIO Parents (Standard Tree Topology via Union Nodes)
+                if (bioParents.length >= 2) {
+                    const unionKey = `${bioParents[0]}+${bioParents[1]}`;
                     if (parentPairToUnionNode[unionKey]) {
-                        elements.push({ data: { source: parentPairToUnionNode[unionKey], target: childId }, classes: 'lineage-edge' });
+                        elements.push({ 
+                            data: { source: parentPairToUnionNode[unionKey], target: childId }, 
+                            classes: 'lineage-edge' 
+                        });
                     } else {
-                        parents.forEach(pid => {
-                            if (records[pid]) elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
+                        // Fallback: Link directly if no union defined
+                        bioParents.forEach(pid => {
+                            elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
                         });
                     }
-                } else if (parents.length === 1) {
-                    const pid = parents[0];
-                    if (records[pid] || pid.startsWith('?')) {
-                        elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
-                    }
+                } else if (bioParents.length === 1) {
+                    elements.push({ data: { source: bioParents[0], target: childId }, classes: 'lineage-edge' });
                 }
+
+                // B. Handle Other Parents (Direct Edges)
+                otherParents.forEach(op => {
+                    elements.push({ 
+                        data: { source: op.id, target: childId, label: op.type }, 
+                        classes: 'other-parent-edge' 
+                    });
+                });
             }
         }
+
+        // 3. Process Associates
+        for (const [id, rec] of Object.entries(records)) {
+            if (rec.data.ASSOC) {
+                rec.data.ASSOC.forEach(assoc => {
+                    const targetId = assoc.parsed[0];
+                    const role = assoc.parsed[1] || 'ASSOC';
+                    
+                    if (records[targetId] || targetId.startsWith('?')) {
+                         elements.push({
+                            data: { source: id, target: targetId, label: role },
+                            classes: 'assoc-edge'
+                        });
+                    }
+                });
+            }
+        }
+        
         return elements;
     }
 
@@ -296,6 +340,35 @@ EVENT: OCC | 2005 || Engineer
                         'width': 1.5, 'line-color': '#cc5de8',
                         'line-style': 'dashed',
                         'target-arrow-shape': 'none'
+                    }
+                },
+                {
+                    selector: '.assoc-edge',
+                    style: {
+                        'width': 1.5,
+                        'line-color': '#fab005', 
+                        'line-style': 'dotted',
+                        'target-arrow-shape': 'none',
+                        'label': 'data(label)',
+                        'font-size': '10px',
+                        'color': '#d08800',
+                        'text-background-opacity': 1,
+                        'text-background-color': '#ffffff'
+                    }
+                },
+                {
+                    selector: '.other-parent-edge',
+                    style: {
+                        'width': 2,
+                        'line-color': '#20c997', 
+                        'line-style': 'dashed',
+                        'target-arrow-shape': 'triangle',
+                        'target-arrow-color': '#20c997',
+                        'label': 'data(label)',
+                        'font-size': '10px',
+                        'color': '#0ca678',
+                        'text-background-opacity': 1,
+                        'text-background-color': '#ffffff'
                     }
                 },
                 {
