@@ -20,6 +20,8 @@ It prioritizes:
 ## ⚡ Quick Example
 
 ```text
+HEAD_FORMAT: FTT v0.1
+
 ID: SMITH-1950-A
 NAME: Arthur Smith | Smith, Arthur | BIRTH | PREF
 SEX: M
@@ -45,7 +47,7 @@ PARENT: DOE-1952-S | BIO
 
 ## 🚀 Usage
 
-### using the Visualizer
+### Using the Visualizer
 
 This repository is hosted via GitHub Pages. You can access the reference implementation visualizer here:
 **[Launch FTT Visualizer](https://arthurdick.github.io/familytree-text/tools/visualizer.html)**
@@ -57,6 +59,7 @@ The reference parser (`js/FTTParser.js`) is a dependency-free ES6 class.
 ```javascript
 const parser = new FTTParser();
 const fttData = `
+HEAD_FORMAT: FTT v0.1
 ID: ME-01
 NAME: My Name
 `;
