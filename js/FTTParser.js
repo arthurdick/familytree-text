@@ -515,6 +515,55 @@ class FTTParser {
                 if (!visited.has(id)) detectCycle(id);
             }
         }
+        
+        // 4. Date Format Validation (ISO 8601-2 / EDTF)
+        this._validateDates();
+    }
+    
+    _validateDates() {
+        // Regex for EDTF Level 2 Features
+        // 1. Unknown: "?"
+        // 2. Open Interval (Ongoing): ".."
+        // 3. Bounding Window: "[..]" (Supports [Start..End], [..End], [Start..])
+        // 4. Standard/Uncertain: YYYY, YYYY-MM, YYYY-MM-DD
+        
+        const datePattern = /^(\?|\.\.|\[.*\.\..*\]|-?\d{3,4}X*(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
+
+        const DATE_KEYS = {
+            'BORN': [0],
+            'DIED': [0],
+            'EVENT': [1, 2],
+            'UNION': [2, 3],
+            'ASSOC': [2, 3],
+            'MEDIA': [1],
+            'START_DATE': [0],
+            'END_DATE': [0]
+        };
+
+        // Check Global Headers
+        if (this.headers['HEAD_DATE'] && !datePattern.test(this.headers['HEAD_DATE'])) {
+            this._error(`Date Format Error: HEAD_DATE "${this.headers['HEAD_DATE']}" is invalid.`);
+        }
+
+        // Check All Records
+        for (const record of this.records.values()) {
+            for (const [key, fields] of Object.entries(record.data)) {
+                if (DATE_KEYS[key]) {
+                    const indicesToCheck = DATE_KEYS[key];
+                    
+                    fields.forEach(field => {
+                        indicesToCheck.forEach(idx => {
+                            if (field.parsed.length > idx) {
+                                const dateVal = field.parsed[idx];
+                                if (dateVal && !datePattern.test(dateVal)) {
+                                    this._error(`Date Format Error: Invalid date "${dateVal}" in ${record.id} (${key}). Expected ISO 8601-2/EDTF.`);
+                                }
+                            }
+                        });
+                    });
+                }
+            }
+        }
     }
 
     _checkReferences(record) {
