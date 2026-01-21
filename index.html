@@ -162,17 +162,17 @@ EVENT: OCC | 2005 || Engineer
 
         // --- Step A: Create Entity Nodes ---
         for (const [id, rec] of Object.entries(records)) {
+            // FILTER: Skip Source and Event nodes to reduce clutter
+            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+
             let label = id;
             let subLabel = "";
 
-            if (rec.type === 'INDIVIDUAL') {
+            if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
                 if (rec.data.NAME) label = rec.data.NAME[0].parsed[0] || id;
                 if (rec.data.BORN && rec.data.BORN[0].parsed[0]) subLabel = `b. ${rec.data.BORN[0].parsed[0]}`;
-            } else if (rec.type === 'EVENT') {
-                label = rec.data.TYPE ? rec.data.TYPE[0].parsed[0] : id;
-            } else if (rec.type === 'SOURCE') {
-                label = rec.data.TITLE ? rec.data.TITLE[0].parsed[0] : id;
             }
+            
             addNode(id, label, subLabel, rec.type);
         }
 
@@ -181,9 +181,16 @@ EVENT: OCC | 2005 || Engineer
 
         // 1. Process Unions
         for (const [id, rec] of Object.entries(records)) {
+            // Ensure we are only processing visible individuals
+            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+
             if (rec.data.UNION) {
                 rec.data.UNION.forEach(u => {
                     const partnerId = u.parsed[0];
+                    // Verify partner exists and is not filtered
+                    const partnerRec = records[partnerId];
+                    if (!partnerRec || partnerRec.type === 'SOURCE' || partnerRec.type === 'EVENT') return;
+
                     if (id < partnerId) {
                         const unionNodeId = `union_${unionCounter++}`;
                         const alignNodeId = `align_${unionNodeId}`;
@@ -209,16 +216,21 @@ EVENT: OCC | 2005 || Engineer
 
         // 2. Process Lineage
         for (const [childId, rec] of Object.entries(records)) {
+            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+
             if (rec.data.PARENT) {
                 const bioParents = [];
                 const otherParents = [];
 
-                // Split parents by type (BIO vs others like ADO, STE, FOS)
                 rec.data.PARENT.forEach(p => {
                     const pId = p.parsed[0];
                     const pType = (p.parsed[1] || 'BIO').toUpperCase();
                     
+                    // Ensure parent is valid and not filtered
                     if (records[pId] || pId.startsWith('?')) {
+                        const parentRec = records[pId];
+                        if (parentRec && (parentRec.type === 'SOURCE' || parentRec.type === 'EVENT')) return;
+
                         if (pType === 'BIO') {
                             bioParents.push(pId);
                         } else {
@@ -227,7 +239,7 @@ EVENT: OCC | 2005 || Engineer
                     }
                 });
 
-                // A. Handle BIO Parents (Standard Tree Topology via Union Nodes)
+                // A. Handle BIO Parents
                 if (bioParents.length >= 2) {
                     const unionKey = `${bioParents[0]}+${bioParents[1]}`;
                     if (parentPairToUnionNode[unionKey]) {
@@ -236,7 +248,6 @@ EVENT: OCC | 2005 || Engineer
                             classes: 'lineage-edge' 
                         });
                     } else {
-                        // Fallback: Link directly if no union defined
                         bioParents.forEach(pid => {
                             elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
                         });
@@ -245,7 +256,7 @@ EVENT: OCC | 2005 || Engineer
                     elements.push({ data: { source: bioParents[0], target: childId }, classes: 'lineage-edge' });
                 }
 
-                // B. Handle Other Parents (Direct Edges)
+                // B. Handle Other Parents
                 otherParents.forEach(op => {
                     elements.push({ 
                         data: { source: op.id, target: childId, label: op.type }, 
@@ -257,12 +268,17 @@ EVENT: OCC | 2005 || Engineer
 
         // 3. Process Associates
         for (const [id, rec] of Object.entries(records)) {
+            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+
             if (rec.data.ASSOC) {
                 rec.data.ASSOC.forEach(assoc => {
                     const targetId = assoc.parsed[0];
                     const role = assoc.parsed[1] || 'ASSOC';
                     
                     if (records[targetId] || targetId.startsWith('?')) {
+                        const targetRec = records[targetId];
+                        if (targetRec && (targetRec.type === 'SOURCE' || targetRec.type === 'EVENT')) return;
+
                          elements.push({
                             data: { source: id, target: targetId, label: role },
                             classes: 'assoc-edge'
@@ -308,6 +324,14 @@ EVENT: OCC | 2005 || Engineer
                     }
                 },
                 {
+                    selector: 'node[type="PLACEHOLDER"]',
+                    style: {
+                        'background-color': '#f8f9fa', 'border-color': '#adb5bd', 'border-style': 'dashed',
+                        'text-wrap': 'wrap',
+                        'label': (n) => n.data('label')
+                    }
+                },
+                {
                     selector: 'node[type="UNION_NODE"]',
                     style: {
                         'width': 12, 'height': 12,
@@ -316,21 +340,18 @@ EVENT: OCC | 2005 || Engineer
                     }
                 },
                 {
-                    selector: 'node[type="EVENT"]',
-                    style: { 'background-color': '#fff9db', 'border-color': '#fcc419', 'shape': 'ellipse' }
-                },
-                {
                     selector: '.hidden-node',
                     style: { 'visibility': 'hidden', 'width': 1, 'height': 1, 'display': 'none' }
                 },
                 {
                     selector: 'edge',
-                    style: { 'curve-style': 'taxi', 'taxi-direction': 'vertical' } 
+                    style: { 'curve-style': 'bezier' } 
                 },
                 {
                     selector: '.lineage-edge',
                     style: {
                         'width': 2, 'line-color': '#495057',
+                        'curve-style': 'taxi', 'taxi-direction': 'vertical',
                         'target-arrow-color': '#495057', 'target-arrow-shape': 'triangle'
                     }
                 },
@@ -339,6 +360,7 @@ EVENT: OCC | 2005 || Engineer
                     style: {
                         'width': 1.5, 'line-color': '#cc5de8',
                         'line-style': 'dashed',
+                        'curve-style': 'bezier',
                         'target-arrow-shape': 'none'
                     }
                 },
@@ -348,6 +370,7 @@ EVENT: OCC | 2005 || Engineer
                         'width': 1.5,
                         'line-color': '#fab005', 
                         'line-style': 'dotted',
+                        'curve-style': 'bezier',
                         'target-arrow-shape': 'none',
                         'label': 'data(label)',
                         'font-size': '10px',
@@ -362,6 +385,7 @@ EVENT: OCC | 2005 || Engineer
                         'width': 2,
                         'line-color': '#20c997', 
                         'line-style': 'dashed',
+                        'curve-style': 'bezier',
                         'target-arrow-shape': 'triangle',
                         'target-arrow-color': '#20c997',
                         'label': 'data(label)',
@@ -393,24 +417,22 @@ EVENT: OCC | 2005 || Engineer
             cy.layout({
                 name: 'dagre',
                 rankDir: 'TB',
-                nodeSep: 40,
-                rankSep: 60,
-                edgeSep: 10,
+                nodeSep: 60,
+                rankSep: 80,
+                edgeSep: 20,
                 padding: 40
             }).run();
         }
 
         // --- EXPORT FUNCTIONALITY ---
         function exportImage() {
-            // Generates a blob of the FULL graph (even parts not visible on screen)
             const pngBlob = cy.png({
                 full: true,
                 output: 'blob',
-                bg: 'white',  // Ensure background isn't transparent
-                scale: 2      // Higher resolution
+                bg: 'white',
+                scale: 2
             });
 
-            // Create temporary download link
             const url = URL.createObjectURL(pngBlob);
             const a = document.createElement('a');
             a.href = url;
@@ -418,7 +440,6 @@ EVENT: OCC | 2005 || Engineer
             document.body.appendChild(a);
             a.click();
             
-            // Cleanup
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
