@@ -14,7 +14,6 @@ ID: ^SRC-GENESIS
 TITLE: The Book of Genesis
 AUTHOR: Moses (Traditional)
 NOTES: Masoretic Text (MT) chronology used for dates.
-
 ---
 
 # ==========================================
@@ -22,7 +21,7 @@ NOTES: Masoretic Text (MT) chronology used for dates.
 # ==========================================
 
 ID: NOAH-01
-NAME: Noah | Noah | PREF
+NAME: Noah | Noah || PREF
 SEX: M
 BORN: -2948~
 BORN_SRC: ^SRC-GENESIS | Gen 5:28-29
@@ -33,17 +32,17 @@ CHILD: HAM-01
 CHILD: JAPHETH-01
 
 ID: HAM-01
-NAME: Ham | Ham | PREF
+NAME: Ham | Ham || PREF
 SEX: M
 PARENT: NOAH-01 | BIO
 
 ID: JAPHETH-01
-NAME: Japheth | Japheth | PREF
+NAME: Japheth | Japheth || PREF
 SEX: M
 PARENT: NOAH-01 | BIO
 
 ID: SHEM-01
-NAME: Shem | Shem | PREF
+NAME: Shem | Shem || PREF
 SEX: M
 BORN: -2446~
 BORN_SRC: ^SRC-GENESIS | Gen 5:32
@@ -53,7 +52,7 @@ PARENT: NOAH-01 | BIO
 CHILD: ARPHAXAD-01
 
 ID: ARPHAXAD-01
-NAME: Arphaxad | Arphaxad | PREF
+NAME: Arphaxad | Arphaxad || PREF
 SEX: M
 BORN: -2346~
 BORN_SRC: ^SRC-GENESIS | Gen 11:10
@@ -63,7 +62,7 @@ PARENT: SHEM-01 | BIO
 CHILD: SHELAH-01
 
 ID: SHELAH-01
-NAME: Shelah | Shelah | PREF
+NAME: Shelah | Shelah || PREF
 SEX: M
 BORN: -2311~
 BORN_SRC: ^SRC-GENESIS | Gen 11:12
@@ -73,7 +72,7 @@ PARENT: ARPHAXAD-01 | BIO
 CHILD: EBER-01
 
 ID: EBER-01
-NAME: Eber | Eber | PREF
+NAME: Eber | Eber || PREF
 SEX: M
 BORN: -2281~
 BORN_SRC: ^SRC-GENESIS | Gen 11:14
@@ -83,7 +82,7 @@ PARENT: SHELAH-01 | BIO
 CHILD: PELEG-01
 
 ID: PELEG-01
-NAME: Peleg | Peleg | PREF
+NAME: Peleg | Peleg || PREF
 SEX: M
 BORN: -2247~
 BORN_SRC: ^SRC-GENESIS | Gen 11:16
@@ -93,7 +92,7 @@ PARENT: EBER-01 | BIO
 CHILD: REU-01
 
 ID: REU-01
-NAME: Reu | Reu | PREF
+NAME: Reu | Reu || PREF
 SEX: M
 BORN: -2217~
 BORN_SRC: ^SRC-GENESIS | Gen 11:18
@@ -103,7 +102,7 @@ PARENT: PELEG-01 | BIO
 CHILD: SERUG-01
 
 ID: SERUG-01
-NAME: Serug | Serug | PREF
+NAME: Serug | Serug || PREF
 SEX: M
 BORN: -2185~
 BORN_SRC: ^SRC-GENESIS | Gen 11:20
@@ -113,7 +112,7 @@ PARENT: REU-01 | BIO
 CHILD: NAHOR-01
 
 ID: NAHOR-01
-NAME: Nahor | Nahor | PREF
+NAME: Nahor | Nahor || PREF
 SEX: M
 BORN: -2155~
 BORN_SRC: ^SRC-GENESIS | Gen 11:22
@@ -123,7 +122,7 @@ PARENT: SERUG-01 | BIO
 CHILD: TERAH-01
 
 ID: TERAH-01
-NAME: Terah | Terah | PREF
+NAME: Terah | Terah || PREF
 SEX: M
 BORN: -2126~ || Ur; Chaldea {=Iraq}
 BORN_SRC: ^SRC-GENESIS | Gen 11:24
@@ -142,7 +141,7 @@ CHILD: SARAH-01
 # ==========================================
 
 ID: HARAN-01
-NAME: Haran | Haran | PREF
+NAME: Haran | Haran || PREF
 SEX: M
 DIED: [..-1996] || Ur; Chaldea {=Iraq}
 DIED_SRC: ^SRC-GENESIS | Gen 11:28
@@ -152,31 +151,31 @@ CHILD: MILCAH-01
 CHILD: ISCAH-01
 
 ID: ISCAH-01
-NAME: Iscah | Iscah | PREF
+NAME: Iscah | Iscah || PREF
 SEX: F
 PARENT: HARAN-01 | BIO
 
 ID: LOT-01
-NAME: Lot | Lot | PREF
+NAME: Lot | Lot || PREF
 SEX: M
 PARENT: HARAN-01 | BIO
 
 ID: NAHOR-02
-NAME: Nahor | Nahor | PREF
+NAME: Nahor | Nahor || PREF
 SEX: M
 PARENT: TERAH-01 | BIO
 UNION: MILCAH-01 | MARR
 CHILD: BETHUEL-01
 
 ID: MILCAH-01
-NAME: Milcah | Milcah | PREF
+NAME: Milcah | Milcah || PREF
 SEX: F
 PARENT: HARAN-01 | BIO
 UNION: NAHOR-02 | MARR
 CHILD: BETHUEL-01
 
 ID: ABRAHAM-01
-NAME: Abraham | Abraham | PREF | PREF
+NAME: Abraham | Abraham || PREF
 NAME_SRC: ^SRC-GENESIS | Gen 17:5
 NAME: Abram | Abram | BIRTH
 SEX: M
@@ -191,7 +190,7 @@ CHILD: ISHMAEL-01
 CHILD: ISAAC-01
 
 ID: SARAH-01
-NAME: Sarah | Sarah | PREF | PREF
+NAME: Sarah | Sarah || PREF
 NAME_SRC: ^SRC-GENESIS | Gen 17:15
 NAME: Sarai | Sarai | BIRTH
 SEX: F
@@ -204,14 +203,14 @@ UNION: ABRAHAM-01 | MARR
 CHILD: ISAAC-01
 
 ID: HAGAR-01
-NAME: Hagar | Hagar | PREF
+NAME: Hagar | Hagar || PREF
 SEX: F
 BORN: || Egypt
 UNION: ABRAHAM-01 | PART
 CHILD: ISHMAEL-01
 
 ID: ISHMAEL-01
-NAME: Ishmael | Ishmael | PREF
+NAME: Ishmael | Ishmael || PREF
 SEX: M
 BORN: -1910~ || Mamre; Canaan
 BORN_SRC: ^SRC-GENESIS | Gen 16:15-16
@@ -227,7 +226,7 @@ PARENT: HAGAR-01 | BIO
 # ==========================================
 
 ID: BETHUEL-01
-NAME: Bethuel | Bethuel | PREF
+NAME: Bethuel | Bethuel || PREF
 SEX: M
 PARENT: NAHOR-02 | BIO
 PARENT: MILCAH-01 | BIO
@@ -235,14 +234,14 @@ CHILD: REBEKAH-01
 CHILD: LABAN-01
 
 ID: LABAN-01
-NAME: Laban | Laban | PREF
+NAME: Laban | Laban || PREF
 SEX: M
 PARENT: BETHUEL-01 | BIO
 CHILD: LEAH-01
 CHILD: RACHEL-01
 
 ID: ISAAC-01
-NAME: Isaac | Isaac | PREF
+NAME: Isaac | Isaac || PREF
 SEX: M
 BORN: -1896~ || Gerar; Canaan
 BORN_SRC: ^SRC-GENESIS | Gen 21:2-5
@@ -256,7 +255,7 @@ CHILD: ESAU-01
 CHILD: JACOB-01
 
 ID: REBEKAH-01
-NAME: Rebekah | Rebekah | PREF
+NAME: Rebekah | Rebekah || PREF
 SEX: F
 PARENT: BETHUEL-01 | BIO
 UNION: ISAAC-01 | MARR
@@ -264,7 +263,7 @@ CHILD: ESAU-01
 CHILD: JACOB-01
 
 ID: ESAU-01
-NAME: Esau | Esau | PREF
+NAME: Esau | Esau || PREF
 SEX: M
 BORN: -1836~ || Canaan
 BORN_SRC: ^SRC-GENESIS | Gen 25:24-26
@@ -272,7 +271,7 @@ PARENT: ISAAC-01 | BIO
 PARENT: REBEKAH-01 | BIO
 
 ID: JACOB-01
-NAME: Israel | Israel | PREF | PREF
+NAME: Israel | Israel || PREF
 NAME_SRC: ^SRC-GENESIS | Gen 32:28
 NAME: Jacob | Jacob | BIRTH
 SEX: M
@@ -298,7 +297,7 @@ CHILD: BENJAMIN-01
 # ==========================================
 
 ID: LEAH-01
-NAME: Leah | Leah | PREF
+NAME: Leah | Leah || PREF
 SEX: F
 PARENT: LABAN-01 | BIO
 UNION: JACOB-01 | MARR
@@ -306,7 +305,7 @@ CHILD: REUBEN-01
 CHILD: JUDAH-01
 
 ID: RACHEL-01
-NAME: Rachel | Rachel | PREF
+NAME: Rachel | Rachel || PREF
 SEX: F
 DIED: -1730~ || Ephrath {=Bethlehem}; Canaan
 DIED_SRC: ^SRC-GENESIS | Gen 35:18-19
@@ -316,17 +315,17 @@ CHILD: JOSEPH-01
 CHILD: BENJAMIN-01
 
 ID: BILHAH-01
-NAME: Bilhah | Bilhah | PREF
+NAME: Bilhah | Bilhah || PREF
 SEX: F
 UNION: JACOB-01 | PART
 
 ID: ZILPAH-01
-NAME: Zilpah | Zilpah | PREF
+NAME: Zilpah | Zilpah || PREF
 SEX: F
 UNION: JACOB-01 | PART
 
 ID: REUBEN-01
-NAME: Reuben | Reuben | PREF
+NAME: Reuben | Reuben || PREF
 SEX: M
 BORN: -1752~ || Paddan Aram {=Turkey}
 BORN_SRC: ^SRC-GENESIS | Gen 29:32
@@ -334,7 +333,7 @@ PARENT: JACOB-01 | BIO
 PARENT: LEAH-01 | BIO
 
 ID: JUDAH-01
-NAME: Judah | Judah | PREF
+NAME: Judah | Judah || PREF
 SEX: M
 BORN: -1749~ || Paddan Aram {=Turkey}
 BORN_SRC: ^SRC-GENESIS | Gen 29:35
@@ -342,7 +341,7 @@ PARENT: JACOB-01 | BIO
 PARENT: LEAH-01 | BIO
 
 ID: BENJAMIN-01
-NAME: Benjamin | Benjamin | PREF | PREF
+NAME: Benjamin | Benjamin || PREF
 NAME: Ben-oni | Ben-oni | BIRTH
 NAME_SRC: ^SRC-GENESIS | Gen 35:18
 SEX: M
@@ -352,7 +351,7 @@ PARENT: JACOB-01 | BIO
 PARENT: RACHEL-01 | BIO
 
 ID: JOSEPH-01
-NAME: Joseph | Joseph | PREF
+NAME: Joseph | Joseph || PREF
 NAME: Zaphnath-Paaneah | Zaphnath-Paaneah | PROF
 SEX: M
 BORN: -1745~ || Paddan Aram {=Turkey}
@@ -365,16 +364,15 @@ CHILD: MANASSEH-01
 CHILD: EPHRAIM-01
 
 ID: MANASSEH-01
-NAME: Manasseh | Manasseh | PREF
+NAME: Manasseh | Manasseh || PREF
 SEX: M
 BORN: [-1715~..-1706~] || Egypt
 BORN_SRC: ^SRC-GENESIS | Gen 41:50-51
 PARENT: JOSEPH-01 | BIO
 
 ID: EPHRAIM-01
-NAME: Ephraim | Ephraim | PREF
+NAME: Ephraim | Ephraim || PREF
 SEX: M
 BORN: [-1715~..-1706~] || Egypt
 BORN_SRC: ^SRC-GENESIS | Gen 41:52
 PARENT: JOSEPH-01 | BIO
-
