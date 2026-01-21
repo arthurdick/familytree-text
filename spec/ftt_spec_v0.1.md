@@ -72,6 +72,7 @@ To ensure consistent linking across different parsers and manual data entry, the
 * **Case Sensitivity:** IDs are **Case-Sensitive**. `smith-1980` is distinct from `SMITH-1980`.
 * **Normalization:** To ensure that identical-looking characters result in identical byte sequences, parsers and writers **must** treat all IDs as **Unicode Normalization Form C (NFC)**.
   * *Requirement:* When parsing a file, the parser must normalize all captured IDs to NFC before storing them in memory or performing lookups.
+* **Uniqueness:** Every ID within a single `.ftt` file must be unique. An ID serves as a global anchor for a specific entity; therefore, the same ID string cannot be used to initialize multiple record blocks.
 
 * **Forbidden Characters:** To ensure clean parsing, IDs **must not** contain:
   * Whitespace (Spaces, Tabs).
@@ -515,6 +516,15 @@ Parsers **must** raise a **Validation Error** if:
 
 1. A Modifier Key is encountered without a matching predecessor Key.
 2. A Modifier Key matches the predecessor structurally but has the wrong prefix (e.g., `DIED_SRC` appearing immediately after `BORN:`).
+
+#### **8.2.5 Duplicate ID Handling (Collision Policy)**
+
+To maintain data integrity and prevent the accidental overwriting of genealogical data, parsers must implement a "First-Win" collision policy.
+
+1. **Detection:** When a parser encounters an `ID:` key, it must check if that ID has already been indexed in the current session.
+2. **Error Reporting:** If the ID already exists, the parser **must raise a Validation Error** indicating the line number of the duplicate attempt.
+3. **Preservation:** The parser must ignore the second (duplicate) record block entirely to preserve the data of the original record.
+4. **Block Recovery:** To prevent subsequent fields (like `NAME:` or `BORN:`) from being incorrectly attached to the previous valid record or the global header, the parser should enter an "error state" for that block until a new valid `ID:` or block terminator (`---`) is encountered.
 
 ### **8.3 Graph Integrity: Relationship Resolution**
 

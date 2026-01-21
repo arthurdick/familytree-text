@@ -144,6 +144,13 @@ class FTTParser {
             // Normalize ID to NFC immediately (Section 3.1)
             const id = inlineValue.trim().normalize('NFC');
             this._validateID(id, lineNum);
+            
+            if (this.records.has(id)) {
+                this._error(`Line ${lineNum}: Duplicate Record ID "${id}". Ignoring this definition to preserve the original.`);
+                this.currentRecordId = null; // Ensure subsequent fields don't overwrite or merge into the existing record
+                return;
+            }
+            
             this.currentRecordId = id;
             
             this.records.set(id, {
