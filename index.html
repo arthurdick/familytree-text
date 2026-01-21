@@ -184,9 +184,22 @@ EVENT: OCC | 2005 || Engineer
             
             let label = id;
             let subLabel = "";
+            
             if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
-                if (rec.data.NAME) label = rec.data.NAME[0].parsed[0] || id;
-                if (rec.data.BORN && rec.data.BORN[0].parsed[0]) subLabel = `b. ${rec.data.BORN[0].parsed[0]}`;
+                if (rec.data.NAME && rec.data.NAME.length > 0) {
+                    // 1. Default to the first name listed (e.g., Birth Name)
+                    label = rec.data.NAME[0].parsed[0] || id;
+
+                    // 2. Check for a Preferred Name override
+                    const prefName = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
+                    if (prefName) {
+                        label = prefName.parsed[0];
+                    }
+                }
+                
+                if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
+                    subLabel = `b. ${rec.data.BORN[0].parsed[0]}`;
+                }
             }
             addNode(id, label, subLabel, rec.type);
         }
