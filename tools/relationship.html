@@ -333,9 +333,8 @@ SEX: F</textarea>
         function calculateAffinalRelationship(records, idA, idB) {
             // Strategy: 
             // 1. Is A related to B's Spouse? (A -> Spouse(B) -> B)
-            //    Term depends on A's relation to Spouse.
             // 2. Is A's Spouse related to B? (A -> Spouse(A) -> B)
-            //    Term depends on Spouse's relation to B.
+            // 3. Are Parents of A and Parents of B married? (Step-Siblings)
 
             // Helper to get spouses
             const getSpouses = (id) => {
@@ -372,6 +371,37 @@ SEX: F</textarea>
                         spouseId: sA, 
                         bloodRel: rel 
                     };
+                }
+            }
+
+            // Path 3: Step-Siblings (Parent(A) is married to Parent(B))
+            // Note: If they shared a parent, calculateBloodRelationship would have returned already.
+            const getParents = (id) => {
+                const rec = records[id];
+                if (!rec || !rec.data.PARENT) return [];
+                return rec.data.PARENT.map(p => p.parsed[0]).filter(pid => records[pid]);
+            };
+
+            const parentsA = getParents(idA);
+            const parentsB = getParents(idB);
+
+            for (const pA of parentsA) {
+                for (const pB of parentsB) {
+                    if (pA === pB) continue; // Safety check
+                    
+                    // Check if pA and pB are in a union
+                    const recPA = records[pA];
+                    if (recPA && recPA.data.UNION) {
+                        const union = recPA.data.UNION.find(u => u.parsed[0] === pB);
+                        if (union) {
+                            return {
+                                type: 'AFFINAL',
+                                subtype: 'STEP_SIBLING',
+                                parentA: pA,
+                                parentB: pB
+                            };
+                        }
+                    }
                 }
             }
             
@@ -436,31 +466,30 @@ SEX: F</textarea>
                           Distance: ${nameA} (${rel.distA}) ↔ Ancestor ↔ (${rel.distB}) ${nameB}`;
             } 
             else if (rel.type === 'AFFINAL') {
-                // Determine In-Law vs Step vs other terms based on the specific blood link
-                const dBloodSubject = rel.bloodRel.distA; // Dist from CA to Subject/Spouse
-                const dBloodTarget = rel.bloodRel.distB;  // Dist from CA to Target/Spouse
-                
-                // We need the raw blood term (e.g. "Parent", "Sibling") to transform it
-                const rawBloodTerm = getBloodTerm(dBloodSubject, dBloodTarget, genderA); 
+                // Handling Subtypes
+                if (rel.subtype === 'STEP_SIBLING') {
+                    const pAName = getDisplayName(records[rel.parentA]);
+                    const pBName = getDisplayName(records[rel.parentB]);
+                    
+                    term = (genderA === 'M') ? "Stepbrother" : (genderA === 'F') ? "Stepsister" : "Step-Sibling";
+                    detail = `${nameA}'s parent (${pAName}) is a partner of ${nameB}'s parent (${pBName}).`;
+                }
+                else {
+                    // Standard In-Law/Step-Parent Logic (Requires Blood Path)
+                    const dBloodSubject = rel.bloodRel.distA; 
+                    const dBloodTarget = rel.bloodRel.distB;  
+                    const rawBloodTerm = getBloodTerm(dBloodSubject, dBloodTarget, genderA); 
 
-                // Resolve Term Logic
-                if (rel.subtype === 'VIA_TARGET_SPOUSE') {
-                    // Scenario: A is [Relation] of B's Spouse.
-                    // Example: A is Parent of Spouse -> A is Parent-in-law.
-                    const spouseName = getDisplayName(records[rel.spouseId]);
-                    detail = `${nameA} is the <strong>${rawBloodTerm}</strong> of ${nameB}'s spouse (${spouseName}).`;
-
-                    // Term Mapping
-                    term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'INLAW');
-                } 
-                else if (rel.subtype === 'VIA_SUBJECT_SPOUSE') {
-                    // Scenario: A's Spouse is [Relation] of B.
-                    // Example: Spouse is Parent of B -> A is Stepparent.
-                    const spouseName = getDisplayName(records[rel.spouseId]);
-                    detail = `${nameA}'s spouse (${spouseName}) is the <strong>${getBloodTerm(rel.bloodRel.distA, rel.bloodRel.distB, getGender(records[rel.spouseId]))}</strong> of ${nameB}.`;
-
-                    // Term Mapping
-                    term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'STEP');
+                    if (rel.subtype === 'VIA_TARGET_SPOUSE') {
+                        const spouseName = getDisplayName(records[rel.spouseId]);
+                        detail = `${nameA} is the <strong>${rawBloodTerm}</strong> of ${nameB}'s spouse (${spouseName}).`;
+                        term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'INLAW');
+                    } 
+                    else if (rel.subtype === 'VIA_SUBJECT_SPOUSE') {
+                        const spouseName = getDisplayName(records[rel.spouseId]);
+                        detail = `${nameA}'s spouse (${spouseName}) is the <strong>${getBloodTerm(rel.bloodRel.distA, rel.bloodRel.distB, getGender(records[rel.spouseId]))}</strong> of ${nameB}.`;
+                        term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'STEP');
+                    }
                 }
             }
             else {
