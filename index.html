@@ -144,20 +144,17 @@ EVENT: OCC | 2005 || Engineer
 </div>
 
 <script>
-    // 1. Initialize Parser
     const parser = new FTTParser();
 
-    // 2. Converter Logic: FTT -> Cytoscape Elements
     function convertToCytoscape(parsedData) {
         const elements = [];
         const records = parsedData.records;
-        const createdNodeIds = new Set(); // Track existence to prevent duplicates
+        const createdNodeIds = new Set();
         let unionCounter = 0;
 
+        // --- Helper: Node Creation ---
         function addNode(id, label, subLabel, type, hidden = false) {
-            // Prevent duplicate nodes
             if (createdNodeIds.has(id)) return;
-            
             elements.push({
                 data: { id, label, subLabel, type },
                 classes: hidden ? 'hidden-node' : ''
@@ -165,150 +162,160 @@ EVENT: OCC | 2005 || Engineer
             createdNodeIds.add(id);
         }
 
-        // Helper: Handle Implicit Placeholders (defined in Spec Section 8.3.4)
-        // If an ID starts with '?', it might not have a record definition.
-        // We must create a node for it on-the-fly if referenced.
         function ensurePlaceholderNode(id) {
             if (id && id.startsWith('?') && !createdNodeIds.has(id)) {
                 addNode(id, id, '(Placeholder)', 'PLACEHOLDER');
             }
         }
 
-        // --- Step A: Create Entity Nodes (Explicit Records) ---
+        // --- Step 0: Pre-calculate Ancestry (Ancestral Gravity) ---
+        // We check if a node has *any* parents. If so, they are part of the "Vertical Lineage".
+        // Edges connected to them will be heavier to force alignment.
+        const hasParents = new Set();
         for (const [id, rec] of Object.entries(records)) {
-            // FILTER: Skip Source and Event nodes to reduce clutter
-            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+            if (rec.data.PARENT && rec.data.PARENT.length > 0) {
+                hasParents.add(id);
+            }
+        }
 
+        // --- Step 1: Create Entity Nodes ---
+        for (const [id, rec] of Object.entries(records)) {
+            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+            
             let label = id;
             let subLabel = "";
-
             if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
                 if (rec.data.NAME) label = rec.data.NAME[0].parsed[0] || id;
                 if (rec.data.BORN && rec.data.BORN[0].parsed[0]) subLabel = `b. ${rec.data.BORN[0].parsed[0]}`;
             }
-            
             addNode(id, label, subLabel, rec.type);
         }
 
-        // --- Step B: Handle Relationships & Topology ---
-        const parentPairToUnionNode = {}; 
+        // --- Step 2: Build Topology ---
+        const pairToHubId = {}; 
+        const soloToHubId = {}; 
 
-        // 1. Process Unions
-        const processedUnions = new Set(); // Track processed pairs to prevent duplicates
-
+        // A. Explicit Unions (MARR/PART from records)
+        const processedUnions = new Set();
         for (const [id, rec] of Object.entries(records)) {
-            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
-
             if (rec.data.UNION) {
                 rec.data.UNION.forEach(u => {
                     const partnerId = u.parsed[0];
-                    
-                    // FIX: Ensure implicit placeholders exist before linking
                     ensurePlaceholderNode(partnerId);
+                    
+                    const pRec = records[partnerId];
+                    if (pRec && (pRec.type === 'SOURCE' || pRec.type === 'EVENT')) return;
+                    if (!pRec && !partnerId.startsWith('?')) return;
 
-                    // Verify partner exists (or was just created) and is not filtered
-                    const partnerRec = records[partnerId];
-                    // If it's a real record, ensure it's not a Source/Event. If it's implicit (undefined), allow it.
-                    if (partnerRec && (partnerRec.type === 'SOURCE' || partnerRec.type === 'EVENT')) return;
-                    if (!partnerRec && !partnerId.startsWith('?')) return; // dangling ref check
-
-                    // Sort IDs to ensure consistent key regardless of order or which record defined it
                     const [p1, p2] = [id, partnerId].sort();
-                    const unionKey = `${p1}+${p2}`;
+                    const key = `${p1}+${p2}`;
+                    if (processedUnions.has(key)) return;
+                    processedUnions.add(key);
 
-                    if (processedUnions.has(unionKey)) return; // Already handled
-                    processedUnions.add(unionKey);
+                    const hubId = `union_${unionCounter++}`;
+                    pairToHubId[key] = hubId;
 
-                    const unionNodeId = `union_${unionCounter++}`;
-                    const alignNodeId = `align_${unionNodeId}`;
+                    elements.push({ data: { id: hubId, type: 'UNION_NODE' } });
+                    
+                    // WEIGHT LOGIC:
+                    // If p1 has ancestors, it's a "Vertical Lineage" -> Heavy Weight (10)
+                    // If p1 has NO ancestors (marrying in), it's "Lateral" -> Light Weight (1)
+                    const w1 = hasParents.has(p1) ? 10 : 1;
+                    const w2 = hasParents.has(p2) ? 10 : 1;
 
-                    parentPairToUnionNode[`${id}+${partnerId}`] = unionNodeId;
-                    parentPairToUnionNode[`${partnerId}+${id}`] = unionNodeId;
-
-                    // Union nodes are internal helpers, so we use a unique ID that won't conflict
-                    elements.push({ data: { id: unionNodeId, label: '', type: 'UNION_NODE' } });
-                    elements.push({ data: { id: alignNodeId, label: '', type: 'ALIGN_NODE' }, classes: 'hidden-node' });
-
-                    // Skeleton Edges
-                    [id, partnerId, unionNodeId].forEach(target => {
-                        elements.push({ data: { source: alignNodeId, target: target }, classes: 'layout-edge' });
-                    });
-
-                    // Visual Edges
-                    elements.push({ data: { source: id, target: unionNodeId }, classes: 'visual-edge' });
-                    elements.push({ data: { source: partnerId, target: unionNodeId }, classes: 'visual-edge' });
+                    elements.push({ data: { source: p1, target: hubId, weight: w1 }, classes: 'spouse-edge' });
+                    elements.push({ data: { source: p2, target: hubId, weight: w2 }, classes: 'spouse-edge' });
                 });
             }
         }
 
-        // 2. Process Lineage
+        // B. Lineage (Parents -> Hub -> Child)
         for (const [childId, rec] of Object.entries(records)) {
-            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+            if (!rec.data.PARENT) continue;
 
-            if (rec.data.PARENT) {
-                const bioParents = [];
-                const otherParents = [];
+            const bioParents = [];
+            const otherParents = [];
 
-                rec.data.PARENT.forEach(p => {
-                    const pId = p.parsed[0];
-                    const pType = (p.parsed[1] || 'BIO').toUpperCase();
+            rec.data.PARENT.forEach(p => {
+                const pId = p.parsed[0];
+                const pType = (p.parsed[1] || 'BIO').toUpperCase();
+                ensurePlaceholderNode(pId);
+                if (createdNodeIds.has(pId)) {
+                    if (pType === 'BIO') bioParents.push(pId);
+                    else otherParents.push({ id: pId, type: pType });
+                }
+            });
+
+            // 1. Handle Bio Parents (Pair or Single)
+            if (bioParents.length >= 2) {
+                const [p1, p2] = [bioParents[0], bioParents[1]].sort();
+                const key = `${p1}+${p2}`;
+                
+                let hubId = pairToHubId[key];
+
+                if (!hubId) {
+                    hubId = `implicit_${unionCounter++}`;
+                    pairToHubId[key] = hubId;
+                    elements.push({ data: { id: hubId, type: 'IMPLICIT_NODE' } });
                     
-                    // FIX: Ensure implicit placeholders exist before linking
-                    ensurePlaceholderNode(pId);
+                    const w1 = hasParents.has(p1) ? 10 : 1;
+                    const w2 = hasParents.has(p2) ? 10 : 1;
 
-                    // Ensure parent is valid 
-                    if (createdNodeIds.has(pId)) {
-                        if (pType === 'BIO') {
-                            bioParents.push(pId);
-                        } else {
-                            otherParents.push({ id: pId, type: pType });
-                        }
-                    }
-                });
-
-                // A. Handle BIO Parents
-                if (bioParents.length >= 2) {
-                    const unionKey = `${bioParents[0]}+${bioParents[1]}`;
-                    if (parentPairToUnionNode[unionKey]) {
-                        elements.push({ 
-                            data: { source: parentPairToUnionNode[unionKey], target: childId }, 
-                            classes: 'lineage-edge' 
-                        });
-                    } else {
-                        // Fallback: Link directly to parents if no union node found (or more than 2 parents)
-                        bioParents.forEach(pid => {
-                            elements.push({ data: { source: pid, target: childId }, classes: 'lineage-edge' });
-                        });
-                    }
-                } else if (bioParents.length === 1) {
-                    elements.push({ data: { source: bioParents[0], target: childId }, classes: 'lineage-edge' });
+                    elements.push({ data: { source: p1, target: hubId, weight: w1 }, classes: 'spouse-edge' });
+                    elements.push({ data: { source: p2, target: hubId, weight: w2 }, classes: 'spouse-edge' });
                 }
 
-                // B. Handle Other Parents
-                otherParents.forEach(op => {
-                    elements.push({ 
-                        data: { source: op.id, target: childId, label: op.type }, 
-                        classes: 'other-parent-edge' 
-                    });
-                });
+                // Child edges are always heavy to keep them under the union
+                elements.push({ data: { source: hubId, target: childId, weight: 10 }, classes: 'lineage-edge' });
+
+            } else if (bioParents.length === 1) {
+                const pId = bioParents[0];
+                const key = `${pId}+BIO`;
+                
+                let hubId = soloToHubId[key];
+                if (!hubId) {
+                    hubId = `solo_${unionCounter++}`;
+                    soloToHubId[key] = hubId;
+                    elements.push({ data: { id: hubId, type: 'SOLO_NODE', label: 'BIO' } });
+                    
+                    // Solo parent edge weight
+                    const w = hasParents.has(pId) ? 10 : 1;
+                    elements.push({ data: { source: pId, target: hubId, weight: w }, classes: 'spouse-edge' });
+                }
+                elements.push({ data: { source: hubId, target: childId, weight: 10 }, classes: 'lineage-edge' });
             }
+
+            // 2. Handle Other Parents
+            otherParents.forEach(op => {
+                const key = `${op.id}+${op.type}`;
+                let hubId = soloToHubId[key];
+                
+                if (!hubId) {
+                    hubId = `solo_${unionCounter++}`;
+                    soloToHubId[key] = hubId;
+                    elements.push({ data: { id: hubId, type: 'SOLO_NODE', label: op.type } });
+                    
+                    const w = hasParents.has(op.id) ? 10 : 1;
+                    elements.push({ data: { source: op.id, target: hubId, weight: w }, classes: 'spouse-edge' });
+                }
+                
+                elements.push({ 
+                    data: { source: hubId, target: childId, weight: 5 }, 
+                    classes: 'other-parent-edge' 
+                });
+            });
         }
 
-        // 3. Process Associates
+        // C. Associates
         for (const [id, rec] of Object.entries(records)) {
-            if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
-
             if (rec.data.ASSOC) {
                 rec.data.ASSOC.forEach(assoc => {
                     const targetId = assoc.parsed[0];
                     const role = assoc.parsed[1] || 'ASSOC';
-                    
-                    // FIX: Ensure implicit placeholders exist before linking
                     ensurePlaceholderNode(targetId);
-
                     if (createdNodeIds.has(targetId)) {
                         elements.push({
-                            data: { source: id, target: targetId, label: role },
+                            data: { source: id, target: targetId, label: role, weight: 0 },
                             classes: 'assoc-edge'
                         });
                     }
@@ -319,7 +326,6 @@ EVENT: OCC | 2005 || Engineer
         return elements;
     }
 
-    // 3. UI Logic
     document.addEventListener('DOMContentLoaded', () => {
         const editor = document.getElementById('editor');
         const btnRender = document.getElementById('btn-render');
@@ -359,37 +365,64 @@ EVENT: OCC | 2005 || Engineer
                         'label': (n) => n.data('label')
                     }
                 },
+                /* Union Node: The Diamond */
                 {
                     selector: 'node[type="UNION_NODE"]',
                     style: {
-                        'width': 12, 'height': 12,
+                        'width': 10, 'height': 10,
                         'background-color': '#cc5de8', 'border-width': 0,
                         'shape': 'diamond', 'label': ''
                     }
                 },
+                /* Implicit Node: Small Gray Circle for unmarried bio parents */
                 {
-                    selector: '.hidden-node',
-                    style: { 'visibility': 'hidden', 'width': 1, 'height': 1, 'display': 'none' }
+                    selector: 'node[type="IMPLICIT_NODE"]',
+                    style: {
+                        'width': 6, 'height': 6,
+                        'background-color': '#868e96', 'border-width': 0,
+                        'shape': 'ellipse', 'label': ''
+                    }
+                },
+                /* Solo Node: Small Hollow Circle for Adoptive/Single */
+                {
+                    selector: 'node[type="SOLO_NODE"]',
+                    style: {
+                        'width': 16, 'height': 16,
+                        'background-color': '#fff', 'border-width': 1, 'border-color': '#20c997',
+                        'shape': 'ellipse', 
+                        'label': 'data(label)', 'font-size': '6px', 'color': '#20c997'
+                    }
                 },
                 {
                     selector: 'edge',
-                    style: { 'curve-style': 'bezier' } 
+                    style: { 'curve-style': 'bezier', 'arrow-scale': 0.8 } 
                 },
+                /* Parent to Hub */
+                {
+                    selector: '.spouse-edge',
+                    style: {
+                        'width': 1.5, 'line-color': '#dee2e6',
+                        'curve-style': 'bezier', 
+                        'target-arrow-shape': 'none'
+                    }
+                },
+                /* Hub to Child (Standard) */
                 {
                     selector: '.lineage-edge',
                     style: {
                         'width': 2, 'line-color': '#495057',
                         'curve-style': 'taxi', 'taxi-direction': 'vertical',
-                        'target-arrow-color': '#495057', 'target-arrow-shape': 'triangle'
+                        'target-arrow-shape': 'triangle', 'target-arrow-color': '#495057'
                     }
                 },
+                /* Hub to Child (Other/Adoptive) */
                 {
-                    selector: '.visual-edge',
+                    selector: '.other-parent-edge',
                     style: {
-                        'width': 1.5, 'line-color': '#cc5de8',
+                        'width': 2, 'line-color': '#20c997',
+                        'curve-style': 'taxi', 'taxi-direction': 'vertical',
                         'line-style': 'dashed',
-                        'curve-style': 'bezier',
-                        'target-arrow-shape': 'none'
+                        'target-arrow-shape': 'triangle', 'target-arrow-color': '#20c997'
                     }
                 },
                 {
@@ -402,30 +435,8 @@ EVENT: OCC | 2005 || Engineer
                         'target-arrow-shape': 'none',
                         'label': 'data(label)',
                         'font-size': '10px',
-                        'color': '#d08800',
-                        'text-background-opacity': 1,
-                        'text-background-color': '#ffffff'
+                        'color': '#d08800', 'text-background-opacity': 1, 'text-background-color': '#fff'
                     }
-                },
-                {
-                    selector: '.other-parent-edge',
-                    style: {
-                        'width': 2,
-                        'line-color': '#20c997', 
-                        'line-style': 'dashed',
-                        'curve-style': 'bezier',
-                        'target-arrow-shape': 'triangle',
-                        'target-arrow-color': '#20c997',
-                        'label': 'data(label)',
-                        'font-size': '10px',
-                        'color': '#0ca678',
-                        'text-background-opacity': 1,
-                        'text-background-color': '#ffffff'
-                    }
-                },
-                {
-                    selector: '.layout-edge',
-                    style: { 'display': 'none' }
                 }
             ]
         });
@@ -447,28 +458,22 @@ EVENT: OCC | 2005 || Engineer
                 name: 'dagre',
                 rankDir: 'TB',
                 nodeSep: 60,
-                rankSep: 80,
+                rankSep: 40,
                 edgeSep: 20,
-                padding: 40
+                padding: 40,
+                spacingFactor: 1.2,
+                edgeWeight: function( edge ){ return edge.data('weight') || 1; }
             }).run();
         }
 
-        // --- EXPORT FUNCTIONALITY ---
         function exportImage() {
-            const pngBlob = cy.png({
-                full: true,
-                output: 'blob',
-                bg: 'white',
-                scale: 2
-            });
-
+            const pngBlob = cy.png({ full: true, output: 'blob', bg: 'white', scale: 2 });
             const url = URL.createObjectURL(pngBlob);
             const a = document.createElement('a');
             a.href = url;
             a.download = 'family_tree.png';
             document.body.appendChild(a);
             a.click();
-            
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
