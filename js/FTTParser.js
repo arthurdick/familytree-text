@@ -544,9 +544,11 @@ class FTTParser {
         // 1. Unknown: "?"
         // 2. Open Interval (Ongoing): ".."
         // 3. Bounding Window: "[..]" (Supports [Start..End], [..End], [Start..])
-        // 4. Standard/Uncertain: YYYY, YYYY-MM, YYYY-MM-DD
+        // 4. Standard/Uncertain/Unspecified:
+        //    - Support for Ancient/Far-Future years (more than 4 digits, negative years)
+        //    - Support for "Unspecified" digits 'X' in any position (e.g., 19X5, 1XXX)
         
-        const datePattern = /^(\?|\.\.|\[.*\.\..*\]|-?\d{3,4}X*(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
+        const datePattern = /^(\?|\.\.|\[.*\.\..*\]|-?[\dX]+(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
 
         const DATE_KEYS = {
             'BORN': [0],
