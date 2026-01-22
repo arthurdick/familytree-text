@@ -8,13 +8,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const inpId2 = document.getElementById('id2');
     const resultBox = document.getElementById('result-box');
 
+    const showError = (message) => {
+        resultBox.textContent = ''; // Clear previous
+        const span = document.createElement('span');
+        span.className = 'error';
+        span.textContent = message;
+        resultBox.appendChild(span);
+    };
+
     btnCalc.addEventListener('click', () => {
         const source = txtSource.value;
         const id1 = inpId1.value.trim();
         const id2 = inpId2.value.trim();
 
         if (!source || !id1 || !id2) {
-            resultBox.innerHTML = '<span class="error">Please provide FTT data and both IDs.</span>';
+            showError('Please provide FTT data and both IDs.');
             return;
         }
 
@@ -28,7 +36,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const parseResult = parser.parse(source);
 
             if (parseResult.errors.length > 0) {
-                resultBox.innerHTML = `<span class="error">Parse Error:<br>${parseResult.errors[0]}</span>`;
+                resultBox.textContent = '';
+                const span = document.createElement('span');
+                span.className = 'error';
+                span.appendChild(document.createTextNode('Parse Error:'));
+                span.appendChild(document.createElement('br'));
+                span.appendChild(document.createTextNode(parseResult.errors[0]));
+                resultBox.appendChild(span);
                 return;
             }
 
@@ -45,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderResult(rel, records, id1, id2);
 
         } catch (e) {
-            resultBox.innerHTML = `<span class="error">${e.message}</span>`;
+            showError(e.message);
         }
     });
 });
@@ -258,10 +272,21 @@ function renderResult(rel, records, idA, idB) {
     const nameB = getDisplayName(records[idB]);
     const genderA = getGender(records[idA]);
 
-    let html = `<div><strong>${nameA}</strong> is the</div>`;
+    const resultBox = document.getElementById('result-box');
+    resultBox.textContent = ''; // Clear previous results
+
+    // 1. Create Line: "[NameA] is the"
+    const div1 = document.createElement('div');
+    const strongA = document.createElement('strong');
+    strongA.textContent = nameA;
+    div1.appendChild(strongA);
+    div1.appendChild(document.createTextNode(' is the'));
+    resultBox.appendChild(div1);
+
     let term = "Unknown Relation";
     let detail = "";
 
+    // Calculation Logic
     if (rel.type === 'IDENTITY') {
         term = "Same Person";
     } else if (rel.type === 'UNION') {
@@ -276,29 +301,28 @@ function renderResult(rel, records, idA, idB) {
     } else if (rel.type === 'BLOOD') {
         term = getBloodTerm(rel.distA, rel.distB, genderA);
         const commonName = getDisplayName(records[rel.id]);
-        detail = `Common Ancestor: <strong>${commonName}</strong> (${rel.id})<br>
-                          Distance: ${nameA} (${rel.distA}) ↔ Ancestor ↔ (${rel.distB}) ${nameB}`;
+        detail = `Common Ancestor: ${commonName} (${rel.id})\n` +
+                 `Distance: ${nameA} (${rel.distA}) ↔ Ancestor ↔ (${rel.distB}) ${nameB}`;
     } else if (rel.type === 'AFFINAL') {
-        // Handling Subtypes
         if (rel.subtype === 'STEP_SIBLING') {
             const pAName = getDisplayName(records[rel.parentA]);
             const pBName = getDisplayName(records[rel.parentB]);
-
             term = (genderA === 'M') ? "Stepbrother" : (genderA === 'F') ? "Stepsister" : "Step-Sibling";
             detail = `${nameA}'s parent (${pAName}) is a partner of ${nameB}'s parent (${pBName}).`;
         } else {
-            // Standard In-Law/Step-Parent Logic (Requires Blood Path)
             const dBloodSubject = rel.bloodRel.distA;
             const dBloodTarget = rel.bloodRel.distB;
             const rawBloodTerm = getBloodTerm(dBloodSubject, dBloodTarget, genderA);
 
             if (rel.subtype === 'VIA_TARGET_SPOUSE') {
                 const spouseName = getDisplayName(records[rel.spouseId]);
-                detail = `${nameA} is the <strong>${rawBloodTerm}</strong> of ${nameB}'s spouse (${spouseName}).`;
+                detail = `${nameA} is the ${rawBloodTerm} of ${nameB}'s spouse (${spouseName}).`;
                 term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'INLAW');
             } else if (rel.subtype === 'VIA_SUBJECT_SPOUSE') {
                 const spouseName = getDisplayName(records[rel.spouseId]);
-                detail = `${nameA}'s spouse (${spouseName}) is the <strong>${getBloodTerm(rel.bloodRel.distA, rel.bloodRel.distB, getGender(records[rel.spouseId]))}</strong> of ${nameB}.`;
+                const spouseGender = getGender(records[rel.spouseId]);
+                const relationToB = getBloodTerm(rel.bloodRel.distA, rel.bloodRel.distB, spouseGender);
+                detail = `${nameA}'s spouse (${spouseName}) is the ${relationToB} of ${nameB}.`;
                 term = getInLawTermFromBlood(dBloodSubject, dBloodTarget, genderA, 'STEP');
             }
         }
@@ -307,11 +331,29 @@ function renderResult(rel, records, idA, idB) {
         detail = "Could not find a path through Parents or Unions.";
     }
 
-    html += `<span class="relationship-term">${term}</span>`;
-    html += `<div>of <strong>${nameB}</strong></div>`;
-    if (detail) html += `<div class="path-detail">${detail}</div>`;
+    // 2. Create Term: "[Term]"
+    const spanTerm = document.createElement('span');
+    spanTerm.className = 'relationship-term';
+    spanTerm.textContent = term;
+    resultBox.appendChild(spanTerm);
 
-    document.getElementById('result-box').innerHTML = html;
+    // 3. Create Line: "of [NameB]"
+    const div2 = document.createElement('div');
+    div2.appendChild(document.createTextNode('of '));
+    const strongB = document.createElement('strong');
+    strongB.textContent = nameB;
+    div2.appendChild(strongB);
+    resultBox.appendChild(div2);
+
+    // 4. Create Detail (if exists)
+    if (detail) {
+        const divDetail = document.createElement('div');
+        divDetail.className = 'path-detail';
+        // Ensure whitespace (newlines) are respected if we added them in the logic
+        divDetail.style.whiteSpace = 'pre-wrap'; 
+        divDetail.textContent = detail;
+        resultBox.appendChild(divDetail);
+    }
 }
 
 // ==========================================
@@ -357,9 +399,6 @@ function getBloodTerm(distA, distB, sex) {
     return getCousinTerm(degree, removed);
 }
 
-// Transforms a Blood relationship distance into an Affinal/Step term
-// mode = 'INLAW' (Subject is blood-relative of Target's Spouse)
-// mode = 'STEP'  (Subject's Spouse is blood-relative of Target)
 function getInLawTermFromBlood(distA, distB, sex, mode) {
     // 1. Parent / Ancestor
     if (distA === 0) { // Subject is Ancestor of Spouse (INLAW) OR Spouse is Ancestor of Target (STEP)

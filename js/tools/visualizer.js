@@ -453,10 +453,19 @@ document.addEventListener('DOMContentLoaded', () => {
         // Error Display
         if (result.errors.length > 0) {
             errorBox.style.display = 'block';
-            errorBox.innerHTML = '<strong>Errors:</strong><br>' + result.errors.join('<br>');
+            errorBox.textContent = ''; // Clear previous errors
+
+            const strong = document.createElement('strong');
+            strong.textContent = 'Errors:';
+            errorBox.appendChild(strong);
+            
+            result.errors.forEach(err => {
+                errorBox.appendChild(document.createElement('br'));
+                errorBox.appendChild(document.createTextNode(err));
+            });
         } else {
             errorBox.style.display = 'none';
-            errorBox.innerHTML = '';
+            errorBox.textContent = '';
         }
 
         const cyElements = convertToCytoscape(result);
