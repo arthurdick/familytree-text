@@ -167,7 +167,7 @@ To preserve the historical name recorded in source documents while ensuring mode
 
 #### **4.1.2 Coordinates**
 
-Exact geographic coordinates may be appended to the end of the string using angle brackets `<Lat, Long>`.
+Exact geographic coordinates may be appended to the end of the string using angle brackets containing a comma-separated pair of decimal numbers: `<Latitude, Longitude>`. Text within angle brackets that does not conform to a numeric format (e.g., `<Private>`) must be treated as part of the display string, not as coordinates.
 
 #### **Examples**
 

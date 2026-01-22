@@ -398,17 +398,31 @@ class ParseSession {
     }
 
     _parsePlaceString(str) {
-        const coordsMatch = str.match(/<([^>]+)>/);
-        const coords = coordsMatch ? coordsMatch[1].trim() : null;
+        const coordsRegex = /<(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)>/;
+        
+        const coordsMatch = str.match(coordsRegex);
+        
+        let coords = null;
+        if (coordsMatch) {
+            // We reconstruct the string to standard format "Lat, Long"
+            // This strips extra whitespace captured in the regex
+            coords = `${coordsMatch[1]}, ${coordsMatch[2]}`;
+        }
 
         let display = str
             .replace(/\s*\{=.*?\}/g, '') // Remove geocoding overrides
-            .replace(/\s*<.*?>/g, '');   // Remove coordinates
+            .replace(coordsRegex, '');   // Remove ONLY valid coordinates
         
+        // Safety Clean-up: If the user had multiple sets or invalid brackets,
+        // we generally leave them alone to avoid destroying data, 
+        // but we trim the result.
         display = display.trim();
 
+        // Extract Geo (Geocoding Override)
         const geoRaw = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
-        const geo = geoRaw.replace(/\s*<.*?>/g, '').trim();
+        
+        // Remove coordinates from the geo string as well
+        const geo = geoRaw.replace(coordsRegex, '').trim();
 
         return { display, geo, coords };
     }
