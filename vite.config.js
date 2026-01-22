@@ -3,6 +3,7 @@ import { resolve } from 'path';
 
 export default defineConfig({
   root: 'js',
+  base: '/familytree-text/', 
   build: {
     outDir: '../dist',
     emptyOutDir: true,
