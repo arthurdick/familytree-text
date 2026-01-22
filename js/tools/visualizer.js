@@ -413,6 +413,22 @@ document.addEventListener('DOMContentLoaded', () => {
             },
 
             // -------------------------------------------------------------------------
+            // 2b. Sync Highlighting
+            // -------------------------------------------------------------------------
+            {
+                selector: '.current-record',
+                style: {
+                    'border-color': '#fd7e14', // Orange
+                    'border-width': 4,
+                    'background-color': '#fff4e6',
+                    'shadow-blur': 10,
+                    'shadow-color': '#fd7e14',
+                    'transition-property': 'border-width, border-color, background-color',
+                    'transition-duration': '0.2s'
+                }
+            },
+
+            // -------------------------------------------------------------------------
             // 3. Topology Hubs (Internal Nodes)
             // -------------------------------------------------------------------------
             {
@@ -628,6 +644,72 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
         document.body.removeChild(a);
     }
+
+    // ======================================================
+    // Bidirectional Sync Features
+    // ======================================================
+
+    // 1. Graph -> Editor: Click a node to scroll to its definition
+    cy.on('tap', 'node', (evt) => {
+        const node = evt.target;
+        const id = node.id();
+
+        // Skip utility nodes (hubs)
+        if (['UNION_NODE', 'IMPLICIT_NODE', 'SOLO_NODE'].includes(node.data('type'))) return;
+
+        const text = editor.value;
+        const regex = new RegExp(`^ID:\\s*${id}\\s*$`, 'm');
+        const match = text.match(regex);
+
+        if (match) {
+            const index = match.index;
+            const lineNum = text.substring(0, index).split('\n').length;
+            
+            // Calculate approximate scroll position (assuming ~20px per line)
+            // This works reasonably well for monospace fonts in textareas
+            // A more precise method uses selection focus
+            editor.focus();
+            editor.setSelectionRange(index, index + match[0].length);
+            
+            // Trigger a visual scroll
+            // Note: 'input' event listener below might clear highlight, so we set a flag or just select
+            const lineHeight = 19.5; // Approximate line height for default monospace 13px
+            editor.scrollTop = (lineNum - 3) * lineHeight; // -3 to center it slightly
+        }
+    });
+
+    // 2. Editor -> Graph: Highlight node when cursor is inside its block
+    function syncGraphToCursor() {
+        const text = editor.value;
+        const cursorIndex = editor.selectionStart;
+
+        // Scan backwards from cursor to find the nearest "ID:" match
+        const textBefore = text.substring(0, cursorIndex);
+        const lastIdMatch = [...textBefore.matchAll(/^ID:\s*([^\s]+)/gm)].pop();
+
+        if (lastIdMatch) {
+            const currentId = lastIdMatch[1];
+            
+            // Remove highlight from all
+            cy.nodes().removeClass('current-record');
+            
+            // Add highlight to current
+            const targetNode = cy.getElementById(currentId);
+            if (targetNode.length > 0) {
+                targetNode.addClass('current-record');
+            }
+        }
+    }
+
+    // Debounce the editor listener to avoid lag on large files
+    let timeout;
+    editor.addEventListener('keyup', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(syncGraphToCursor, 200);
+    });
+    
+    // Also sync on click (immediate)
+    editor.addEventListener('mouseup', syncGraphToCursor);
 
     btnRender.addEventListener('click', render);
     btnExport.addEventListener('click', exportImage);
