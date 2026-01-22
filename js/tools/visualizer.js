@@ -236,55 +236,59 @@ function convertToCytoscape(parsedData) {
         }
     }
 
-    // --- Step 3: Child Lineage (Bio vs Non-Bio) ---
+    // --- Step 3: Child Lineage ---
     for (const [childId, rec] of Object.entries(records)) {
         if (!rec.data.PARENT) continue;
 
-        const bioParents = [];
-        const otherParents = [];
+        // Group parents by their "Union" or "Partnership"
+        // We'll use a Map where the key is the sorted pair of parents or a solo parent ID
+        const relationshipGroups = new Map();
 
-        // Sort parents into Bio vs Others
         rec.data.PARENT.forEach(p => {
             const pId = p.parsed[0];
             const pType = (p.parsed[1] || 'BIO').toUpperCase();
+            if (!pId) return;
 
             ensurePlaceholderNode(pId);
 
-            if (pType === 'BIO') {
-                bioParents.push(pId);
-            } else {
-                otherParents.push({
-                    id: pId,
-                    type: pType
+            // Find if this parent has a union with another parent of this child
+            let partnerId = null;
+            const parentRec = records[pId];
+            if (parentRec && parentRec.data.UNION) {
+                partnerId = parentRec.data.UNION.find(u => 
+                    rec.data.PARENT.some(p2 => p2.parsed[0] === u.parsed[0])
+                )?.parsed[0];
+            }
+
+            const groupKey = partnerId ? [pId, partnerId].sort().join('+') : pId;
+            
+            if (!relationshipGroups.has(groupKey)) {
+                relationshipGroups.set(groupKey, { 
+                    parents: partnerId ? [pId, partnerId].sort() : [pId], 
+                    types: new Set() 
                 });
             }
+            relationshipGroups.get(groupKey).types.add(pType);
         });
 
-        // A. Handle Biological Lineage (Via Hub)
-        if (bioParents.length > 0) {
-            bioParents.sort();
-            const hubId = (bioParents.length >= 2) ?
-                getHub(bioParents[0], bioParents[1]) :
-                getHub(bioParents[0], null);
+        // Create Hubs and Edges for each group
+        relationshipGroups.forEach((group) => {
+            const isPair = group.parents.length === 2;
+            const hubId = isPair ? 
+                getHub(group.parents[0], group.parents[1]) : 
+                getHub(group.parents[0], null);
+
+            // Determine if the connection to the child is primarily Biological
+            const isBio = group.types.has('BIO');
+            const primaryType = isBio ? 'BIO' : [...group.types][0];
 
             elements.push({
                 data: {
                     source: hubId,
-                    target: childId
-                },
-                classes: 'lineage-edge'
-            });
-        }
-
-        // B. Handle Non-Biological Lineage (Direct Edge)
-        otherParents.forEach(op => {
-            elements.push({
-                data: {
-                    source: op.id,
                     target: childId,
-                    edgeType: op.type
+                    edgeType: primaryType
                 },
-                classes: 'non-bio-edge'
+                classes: isBio ? 'lineage-edge' : 'non-bio-edge'
             });
         });
     }
