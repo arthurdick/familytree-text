@@ -66,7 +66,6 @@ NAME: My Name
 
 const result = parser.parse(fttData);
 console.log(result.records);
-
 ```
 
 ## 📂 Project Structure
@@ -90,6 +89,27 @@ This is an open draft. We welcome:
 * Pull Requests for the Specification.
 * Improvements to the JS Parser.
 * New renderers (Python, Rust, etc.).
+
+### 🛠 Development Setup
+
+The JavaScript reference implementation uses **Node.js** and **Vite** to bundle dependencies.
+
+1. **Install Dependencies:**
+```bash
+npm install
+```
+
+2. **Start the Local Server:**
+Run the development server with hot-reloading:
+```bash
+npm run dev
+```
+
+3. **Build for Production:**
+To generate the static `dist/` folder (used for GitHub Pages):
+```bash
+npm run build
+```
 
 ## 📄 License
 
