@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const inpId1 = document.getElementById('id1');
     const inpId2 = document.getElementById('id2');
     const resultBox = document.getElementById('result-box');
+    
+    // File I/O Elements
+    const btnOpenFile = document.getElementById('btn-open-file');
+    const fileInput = document.getElementById('file-input');
 
     const showError = (message) => {
         resultBox.textContent = ''; // Clear previous
@@ -16,6 +20,27 @@ document.addEventListener('DOMContentLoaded', () => {
         resultBox.appendChild(span);
     };
 
+    // --- File Loading Logic ---
+    btnOpenFile.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            txtSource.value = e.target.result;
+            // Clear result box on new file load to avoid confusion
+            resultBox.innerHTML = '<span style="color:#ccc;">File loaded. Enter IDs to calculate.</span>';
+        };
+        reader.readAsText(file);
+        // Reset input so the same file can be re-selected if modified externally
+        fileInput.value = '';
+    });
+
+    // --- Calculation Logic ---
     btnCalc.addEventListener('click', () => {
         const source = txtSource.value;
         const id1 = inpId1.value.trim();

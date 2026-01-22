@@ -51,9 +51,28 @@
             display: flex;
             flex-direction: column;
             gap: 5px;
+            height: 100%;
+        }
+
+        .input-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         label { font-weight: 600; font-size: 0.9rem; }
+
+        .btn-small {
+            padding: 4px 10px;
+            font-size: 12px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-small:hover { background-color: #5c636a; }
 
         textarea {
             flex: 1;
@@ -96,7 +115,7 @@
             box-sizing: border-box;
         }
 
-        button {
+        button.btn-calc {
             padding: 8px 16px;
             background-color: var(--primary);
             color: white;
@@ -105,7 +124,7 @@
             cursor: pointer;
             font-weight: 600;
         }
-        button:hover { background-color: #0b5ed7; }
+        button.btn-calc:hover { background-color: #0b5ed7; }
 
         #result-box {
             flex: 1;
@@ -152,8 +171,12 @@
 
     <div class="container">
         <div class="panel-left">
-            <div class="input-group" style="height: 100%;">
-                <label for="ftt-source">FTT Data Source:</label>
+            <div class="input-group">
+                <div class="input-header">
+                    <label for="ftt-source">FTT Data Source:</label>
+                    <button id="btn-open-file" class="btn-small">📂 Open File</button>
+                    <input type="file" id="file-input" accept=".ftt,.txt" style="display: none;">
+                </div>
                 <textarea id="ftt-source" spellcheck="false" placeholder="Paste .ftt content here...">HEAD_FORMAT: FTT v0.1
 HEAD_TITLE: Sample Tree
 
@@ -197,7 +220,7 @@ SEX: F</textarea>
                     <label for="id2">Person 2 ID (To)</label>
                     <input type="text" id="id2" placeholder="e.g. ME">
                 </div>
-                <button id="btn-calc">Calculate</button>
+                <button id="btn-calc" class="btn-calc">Calculate</button>
             </div>
 
             <div id="result-box">
