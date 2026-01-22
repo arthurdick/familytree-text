@@ -26,7 +26,71 @@
             align-items: center;
         }
 
-        #toolbar-group { display: flex; gap: 10px; }
+        #toolbar-group { display: flex; gap: 10px; align-items: center; }
+
+        /* Dropdown Menu Styles */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.1);
+            z-index: 10;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+
+        .dropdown-content button {
+            color: #212529;
+            padding: 10px 16px;
+            text-decoration: none;
+            display: block;
+            background: none;
+            width: 100%;
+            text-align: left;
+            border: none;
+            border-radius: 0;
+            font-weight: normal;
+        }
+
+        .dropdown-content button:hover {
+            background-color: #f8f9fa;
+        }
+        
+        /* Separator inside dropdown */
+        .dropdown-divider {
+            height: 1px;
+            background-color: #dee2e6;
+            margin: 4px 0;
+        }
+
+        .show { display: block; }
+
+        /* Toolbar Buttons */
+        .btn {
+            padding: 8px 16px;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 13px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        
+        .btn-primary { background: #0d6efd; }
+        .btn-primary:hover { background: #0b5ed7; }
+        .btn-primary:active { transform: scale(0.98); }
+
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5c636a; }
 
         #editor {
             flex-grow: 1;
@@ -42,30 +106,10 @@
             color: #212529;
         }
 
-        /* Selection highlight color */
         #editor::selection {
-            background-color: #ffe8cc; /* Light orange matches node highlight */
+            background-color: #ffe8cc;
             color: #000;
         }
-
-        button {
-            padding: 8px 16px;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 13px;
-            transition: background 0.2s, transform 0.1s;
-        }
-        
-        #btn-render { background: #0d6efd; }
-        #btn-render:hover { background: #0b5ed7; }
-        #btn-render:active { transform: scale(0.98); }
-
-        #btn-export { background: #198754; }
-        #btn-export:hover { background: #157347; }
-        #btn-export:active { transform: scale(0.98); }
 
         /* Graph Pane */
         #cy {
@@ -94,9 +138,22 @@
       <div id="toolbar">
         <span style="font-weight:600; color:#495057;">FTT Editor</span>
         <div id="toolbar-group">
-          <button id="btn-render">Render Graph</button> <button id= "btn-export">Export PNG</button>
+            <button id="btn-render" class="btn btn-primary" title="Ctrl+Enter">Render Graph</button>
+            
+            <div class="dropdown">
+                <button id="btn-file-menu" class="btn btn-secondary">File ▼</button>
+                <div id="file-menu-content" class="dropdown-content">
+                    <button id="btn-open">Open File...</button>
+                    <button id="btn-save">Save as .ftt</button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-export-png">Export Image (.png)</button>
+                </div>
+            </div>
         </div>
       </div>
+      
+      <input type="file" id="file-input" accept=".ftt,.txt" style="display: none;">
+
       <textarea id="editor" spellcheck= "false">HEAD_FORMAT: FTT v0.1
 HEAD_TITLE: Topology Test
 

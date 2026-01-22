@@ -4,28 +4,21 @@ import FTTParser from '../FTTParser.js';
 
 cytoscape.use(elk);
 
-// Initialize Parser
 const parser = new FTTParser();
 
 /**
- * Advanced Generation Calculation (Topological Sort on Spousal Clusters)
- * Ensures spouses align horizontally regardless of lineage depth.
+ * Advanced Generation Calculation
  */
 function calculateGenerations(records) {
     const idToRank = {};
-    
-    // --- 1. efficient Union-Find Data Structure ---
     const parent = new Map();
     const rank = new Map();
 
-    // Initialize: Every person is their own parent
     Object.keys(records).forEach(id => {
         parent.set(id, id);
         rank.set(id, 0);
     });
 
-    // Find with Path Compression
-    // Flattens the tree structure whenever we look up a node
     function find(i) {
         if (parent.get(i) !== i) {
             parent.set(i, find(parent.get(i)));
@@ -33,67 +26,49 @@ function calculateGenerations(records) {
         return parent.get(i);
     }
 
-    // Union by Rank
-    // Attaches the shorter tree to the taller tree to minimize depth
     function union(i, j) {
         const rootI = find(i);
         const rootJ = find(j);
-
         if (rootI !== rootJ) {
             const rankI = rank.get(rootI);
             const rankJ = rank.get(rootJ);
-
             if (rankI < rankJ) {
                 parent.set(rootI, rootJ);
             } else if (rankI > rankJ) {
                 parent.set(rootJ, rootI);
             } else {
-                parent.set(rootJ, rootI); // Arbitrary choice
+                parent.set(rootJ, rootI);
                 rank.set(rootI, rankI + 1);
             }
         }
     }
 
-    // --- 2. Build Spousal Clusters ---
     Object.values(records).forEach(rec => {
         if (rec.data.UNION) {
             rec.data.UNION.forEach(u => {
                 const partner = u.parsed[0];
-                // Only union if the partner actually exists in our record set
-                if (records[partner]) {
-                    union(rec.id, partner);
-                }
+                if (records[partner]) union(rec.id, partner);
             });
         }
     });
 
-    // Map every individual to their Cluster ID (The Representative Root)
-    // This allows O(1) lookups for the rest of the logic
     const clusterMap = new Map();
-    Object.keys(records).forEach(id => {
-        clusterMap.set(id, find(id));
-    });
+    Object.keys(records).forEach(id => clusterMap.set(id, find(id)));
 
-    // --- 3. Build Cluster DAG (Edges: ParentCluster -> ChildCluster) ---
     const uniqueClusters = new Set(clusterMap.values());
-    const clusterGraph = new Map(); // ClusterID -> { parents: Set<ClusterID>, baseRank: 0 }
+    const clusterGraph = new Map();
 
-    // Initialize Graph Nodes
     uniqueClusters.forEach(cId => {
         clusterGraph.set(cId, { parents: new Set(), rank: 0 });
     });
 
-    // Populate Edges
     Object.values(records).forEach(child => {
         if (child.data.PARENT) {
             const childCluster = clusterMap.get(child.id);
-            
             child.data.PARENT.forEach(p => {
                 const parentId = p.parsed[0];
                 if (records[parentId]) {
                     const parentCluster = clusterMap.get(parentId);
-                    
-                    // Add edge if they are different clusters (avoids self-loops)
                     if (parentCluster !== childCluster) {
                         clusterGraph.get(childCluster).parents.add(parentCluster);
                     }
@@ -102,19 +77,16 @@ function calculateGenerations(records) {
         }
     });
 
-    // --- 4. Compute Ranks (Longest Path / Memoization) ---
     const memo = new Map();
-    const visiting = new Set(); // Cycle detection
+    const visiting = new Set();
 
     function getRank(cId) {
         if (memo.has(cId)) return memo.get(cId);
-        if (visiting.has(cId)) return 0; // Cycle detected, fallback
+        if (visiting.has(cId)) return 0;
 
         visiting.add(cId);
-        
-        let maxParentRank = -1; // Starts at -1 so roots become 0
+        let maxParentRank = -1;
         const node = clusterGraph.get(cId);
-        
         if (node && node.parents.size > 0) {
             node.parents.forEach(pId => {
                 const pRank = getRank(pId);
@@ -123,7 +95,6 @@ function calculateGenerations(records) {
         }
 
         visiting.delete(cId);
-        // Step is 2: Parent(0) -> UnionHub(1) -> Child(2)
         const myRank = maxParentRank + 2; 
         memo.set(cId, myRank);
         return myRank;
@@ -131,7 +102,6 @@ function calculateGenerations(records) {
 
     uniqueClusters.forEach(cId => getRank(cId));
 
-    // --- 5. Map back to Individuals ---
     Object.keys(records).forEach(id => {
         const cId = clusterMap.get(id);
         idToRank[id] = memo.get(cId) || 0;
@@ -146,26 +116,15 @@ function convertToCytoscape(parsedData) {
     const ranks = calculateGenerations(records);
     const createdNodeIds = new Set();
     let unionCounter = 0;
-
-    // Tracking Hubs
     const pairToHubId = {};
     const soloToHubId = {};
 
-    // --- Helper: Node Creation ---
     function addNode(id, label, subLabel, type) {
         if (createdNodeIds.has(id)) return;
-        
-        // Individuals get their calculated rank.
-        // Placeholders inherit rank 0 (or calculated if linked).
         const rank = ranks[id] !== undefined ? ranks[id] : 0;
-        
         elements.push({
             data: {
-                id,
-                label,
-                subLabel,
-                type,
-                // Direct ELK instruction
+                id, label, subLabel, type,
                 elk: { 'org.eclipse.elk.layered.layerIndex': rank }
             }
         });
@@ -178,31 +137,26 @@ function convertToCytoscape(parsedData) {
         }
     }
 
-    // --- Step 1: Create Nodes ---
     for (const [id, rec] of Object.entries(records)) {
         if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
-
         let label = id;
         let subLabel = "";
-
         if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
             if (rec.data.NAME && rec.data.NAME.length > 0) {
-                label = rec.data.NAME[0].parsed[0] || id; // Display Name
+                label = rec.data.NAME[0].parsed[0] || id;
                 const prefName = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
                 if (prefName) label = prefName.parsed[0];
             }
             if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
-                subLabel = rec.data.BORN[0].parsed[0]; // Birth Date
+                subLabel = rec.data.BORN[0].parsed[0];
             }
         }
         addNode(id, label, subLabel, rec.type);
     }
 
-    // --- Helper: Get/Create Hub ---
     function getHub(p1, p2) {
         const isPair = !!p2;
         const key = isPair ? `${p1}+${p2}` : `${p1}+BIO`;
-
         if (isPair && pairToHubId[key]) return pairToHubId[key];
         if (!isPair && soloToHubId[key]) return soloToHubId[key];
 
@@ -212,72 +166,42 @@ function convertToCytoscape(parsedData) {
         if (isPair) pairToHubId[key] = hubId;
         else soloToHubId[key] = hubId;
 
-        // We ensure the Hub Node sits exactly one layer below the parents.
-        // Because our clustering logic forces p1 and p2 to have the same rank,
-        // we can safely rely on p1's rank.
         const p1Rank = ranks[p1] || 0;
         const hubRank = p1Rank + 1;
 
         elements.push({
             data: {
-                id: hubId,
-                type: type,
-                // Direct instruction to ELK to place this node on the specific tier
+                id: hubId, type: type,
                 elk: { 'org.eclipse.elk.layered.layerIndex': hubRank }
             }
         });
-
-        // Create Edges from Parents -> Hub
-        elements.push({
-            data: {
-                source: p1,
-                target: hubId
-            },
-            classes: 'spouse-edge'
-        });
+        elements.push({ data: { source: p1, target: hubId }, classes: 'spouse-edge' });
         if (isPair) {
-            elements.push({
-                data: {
-                    source: p2,
-                    target: hubId
-                },
-                classes: 'spouse-edge'
-            });
+            elements.push({ data: { source: p2, target: hubId }, classes: 'spouse-edge' });
         }
-
         return hubId;
     }
 
-    // --- Step 2: Explicit Unions (Hubs without Children yet) ---
     for (const [id, rec] of Object.entries(records)) {
         if (rec.data.UNION) {
             rec.data.UNION.forEach(u => {
                 const partnerId = u.parsed[0];
                 if (!partnerId) return;
                 ensurePlaceholderNode(partnerId);
-
                 const [p1, p2] = [id, partnerId].sort();
                 getHub(p1, p2);
             });
         }
     }
 
-    // --- Step 3: Child Lineage ---
     for (const [childId, rec] of Object.entries(records)) {
         if (!rec.data.PARENT) continue;
-
-        // Group parents by their "Union" or "Partnership"
-        // We'll use a Map where the key is the sorted pair of parents or a solo parent ID
         const relationshipGroups = new Map();
-
         rec.data.PARENT.forEach(p => {
             const pId = p.parsed[0];
             const pType = (p.parsed[1] || 'BIO').toUpperCase();
             if (!pId) return;
-
             ensurePlaceholderNode(pId);
-
-            // Find if this parent has a union with another parent of this child
             let partnerId = null;
             const parentRec = records[pId];
             if (parentRec && parentRec.data.UNION) {
@@ -285,9 +209,7 @@ function convertToCytoscape(parsedData) {
                     rec.data.PARENT.some(p2 => p2.parsed[0] === u.parsed[0])
                 )?.parsed[0];
             }
-
             const groupKey = partnerId ? [pId, partnerId].sort().join('+') : pId;
-            
             if (!relationshipGroups.has(groupKey)) {
                 relationshipGroups.set(groupKey, { 
                     parents: partnerId ? [pId, partnerId].sort() : [pId], 
@@ -297,302 +219,121 @@ function convertToCytoscape(parsedData) {
             relationshipGroups.get(groupKey).types.add(pType);
         });
 
-        // Create Hubs and Edges for each group
         relationshipGroups.forEach((group) => {
             const isPair = group.parents.length === 2;
             const hubId = isPair ? 
                 getHub(group.parents[0], group.parents[1]) : 
                 getHub(group.parents[0], null);
-
-            // Determine if the connection to the child is primarily Biological
             const isBio = group.types.has('BIO');
             const primaryType = isBio ? 'BIO' : [...group.types][0];
-
             elements.push({
-                data: {
-                    source: hubId,
-                    target: childId,
-                    edgeType: primaryType
-                },
+                data: { source: hubId, target: childId, edgeType: primaryType },
                 classes: isBio ? 'lineage-edge' : 'non-bio-edge'
             });
         });
     }
 
-    // --- Step 4: Associations ---
     for (const [id, rec] of Object.entries(records)) {
         if (rec.data.ASSOC) {
             rec.data.ASSOC.forEach(assoc => {
-                // Parse Structure: ID | ROLE | START | END | DETAILS
                 const targetId = assoc.parsed[0];
                 const role = assoc.parsed[1] || 'ASSOC';
-
                 if (!targetId) return;
-
-                // Ensure the associate exists in the graph (even if just a placeholder)
                 ensurePlaceholderNode(targetId);
-
                 elements.push({
-                    data: {
-                        source: id,
-                        target: targetId,
-                        label: role
-                    },
-                    classes: 'assoc-edge' // Matches existing CSS in index.html
+                    data: { source: id, target: targetId, label: role },
+                    classes: 'assoc-edge'
                 });
             });
         }
     }
-
     return elements;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // DOM Elements
     const editor = document.getElementById('editor');
     const btnRender = document.getElementById('btn-render');
-    const btnExport = document.getElementById('btn-export');
     const errorBox = document.getElementById('error-box');
+    
+    // File Menu Elements
+    const btnFileMenu = document.getElementById('btn-file-menu');
+    const fileMenuContent = document.getElementById('file-menu-content');
+    const btnOpen = document.getElementById('btn-open');
+    const btnSave = document.getElementById('btn-save');
+    const btnExportPng = document.getElementById('btn-export-png');
+    const fileInput = document.getElementById('file-input');
 
     const cy = cytoscape({
         container: document.getElementById('cy'),
         style: [
-            // -------------------------------------------------------------------------
-            // 1. Base Node Styles
-            // -------------------------------------------------------------------------
             {
                 selector: 'node',
                 style: {
                     'label': 'data(label)',
-                    'text-valign': 'center',
-                    'text-halign': 'center',
-                    'color': '#333',
-                    'font-size': '12px',
-                    'font-weight': 'bold',
+                    'text-valign': 'center', 'text-halign': 'center',
+                    'color': '#333', 'font-size': '12px', 'font-weight': 'bold',
                     'width': (ele) => {
                         const label = ele.data('label') || '';
                         const lines = label.split('\n');
                         const maxLen = Math.max(...lines.map(l => l.length));
-                        // Approx: 9px per char + 24px padding buffer
                         return (maxLen * 9) + 24; 
                     },
                     'height': (ele) => {
                         const label = ele.data('label') || '';
                         const lines = label.split('\n');
-                        // Approx: 20px per line + 20px padding buffer
                         return (lines.length * 20) + 20; 
                     },
-                    'padding': '12px',
-                    'background-color': '#fff',
-                    'border-width': 2,
-                    'border-color': '#555',
+                    'padding': '12px', 'background-color': '#fff',
+                    'border-width': 2, 'border-color': '#555',
                     'shape': 'round-rectangle'
                 }
             },
-
-            // -------------------------------------------------------------------------
-            // 2. Entity Types
-            // -------------------------------------------------------------------------
             {
                 selector: 'node[type="INDIVIDUAL"]',
-                style: {
-                    'background-color': '#e7f5ff',
-                    'border-color': '#1c7ed6',
-                    'text-wrap': 'wrap',
-                    'label': (n) => n.data('label') + (n.data('subLabel') ? '\n' + n.data('subLabel') : '')
-                }
+                style: { 'background-color': '#e7f5ff', 'border-color': '#1c7ed6', 'text-wrap': 'wrap', 'label': (n) => n.data('label') + (n.data('subLabel') ? '\n' + n.data('subLabel') : '') }
             },
             {
                 selector: 'node[type="PLACEHOLDER"]',
-                style: {
-                    'background-color': '#f8f9fa',
-                    'border-color': '#adb5bd',
-                    'border-style': 'dashed',
-                    'text-wrap': 'wrap',
-                    'label': (n) => n.data('label')
-                }
+                style: { 'background-color': '#f8f9fa', 'border-color': '#adb5bd', 'border-style': 'dashed', 'text-wrap': 'wrap', 'label': (n) => n.data('label') }
             },
-
-            // -------------------------------------------------------------------------
-            // 2b. Sync Highlighting
-            // -------------------------------------------------------------------------
             {
                 selector: '.current-record',
-                style: {
-                    'border-color': '#fd7e14', // Orange
-                    'border-width': 4,
-                    'background-color': '#fff4e6',
-                    'shadow-blur': 10,
-                    'shadow-color': '#fd7e14',
-                    'transition-property': 'border-width, border-color, background-color',
-                    'transition-duration': '0.2s'
-                }
+                style: { 'border-color': '#fd7e14', 'border-width': 4, 'background-color': '#fff4e6', 'shadow-blur': 10, 'shadow-color': '#fd7e14', 'transition-property': 'border-width, border-color, background-color', 'transition-duration': '0.2s' }
             },
-
-            // -------------------------------------------------------------------------
-            // 3. Topology Hubs (Internal Nodes)
-            // -------------------------------------------------------------------------
             {
-                // Shared Union Hub (Purple Diamond)
                 selector: 'node[type="UNION_NODE"]',
-                style: {
-                    'width': 10,
-                    'height': 10,
-                    'background-color': '#cc5de8',
-                    'border-width': 0,
-                    'shape': 'diamond',
-                    'label': ''
-                }
+                style: { 'width': 10, 'height': 10, 'background-color': '#cc5de8', 'border-width': 0, 'shape': 'diamond', 'label': '' }
             },
             {
-                // Implicit/Solo Hub (Small Grey Dot)
                 selector: 'node[type="IMPLICIT_NODE"]',
-                style: {
-                    'width': 6,
-                    'height': 6,
-                    'background-color': '#868e96',
-                    'border-width': 0,
-                    'shape': 'ellipse',
-                    'label': ''
-                }
+                style: { 'width': 6, 'height': 6, 'background-color': '#868e96', 'border-width': 0, 'shape': 'ellipse', 'label': '' }
             },
             {
-                // Solo Parent Hub (Base Shape)
                 selector: 'node[type="SOLO_NODE"]',
-                style: {
-                    'width': 16,
-                    'height': 16,
-                    'background-color': '#fff',
-                    'border-width': 1,
-                    'border-color': '#20c997',
-                    'shape': 'ellipse',
-                    'label': '' // Default to empty string to satisfy mapper
-                }
+                style: { 'width': 16, 'height': 16, 'background-color': '#fff', 'border-width': 1, 'border-color': '#20c997', 'shape': 'ellipse', 'label': '' }
             },
-            {
-                // Solo Parent Hub (Label - Only if data exists)
-                selector: 'node[type="SOLO_NODE"][label]',
-                style: {
-                    'label': 'data(label)',
-                    'font-size': '6px',
-                    'color': '#20c997'
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 4. Base Edge Styles
-            // -------------------------------------------------------------------------
-            {
-                selector: 'edge',
-                style: {
-                    'curve-style': 'bezier',
-                    'arrow-scale': 0.8,
-                    'width': 1
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 5. Lineage & Relationship Edges
-            // -------------------------------------------------------------------------
-
-            // A. Spouse / Union Input (Parents -> Hub)
-            {
-                selector: '.spouse-edge',
-                style: {
-                    'width': 1,
-                    'line-color': '#adb5bd',
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'none'
-                }
-            },
-
-            // B. Biological Lineage (Hub -> Child)
-            {
-                selector: '.lineage-edge',
-                style: {
-                    'width': 2,
-                    'line-color': '#495057',
-                    'curve-style': 'taxi',
-                    'taxi-direction': 'vertical',
-                    'target-arrow-shape': 'triangle',
-                    'target-arrow-color': '#495057'
-                }
-            },
-
-            // C. Non-Biological Lineage (Parent -> Child Direct)
-            {
-                selector: '.non-bio-edge',
-                style: {
-                    'width': 2,
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'triangle',
-                    'label': 'data(edgeType)', // Displays "ADO", "STE", etc.
-                    'font-size': '9px',
-                    'text-background-opacity': 1,
-                    'text-background-color': '#fff',
-                    'text-background-padding': '2px'
-                }
-            },
-
-            // D. Specific Non-Bio Styles
-            {
-                selector: 'edge[edgeType="ADO"]',
-                style: {
-                    'line-color': '#20c997',
-                    'target-arrow-color': '#20c997',
-                    'line-style': 'dashed'
-                }
-            },
-            {
-                selector: 'edge[edgeType="STE"]',
-                style: {
-                    'line-color': '#fd7e14',
-                    'target-arrow-color': '#fd7e14',
-                    'line-style': 'dotted'
-                }
-            },
-            {
-                selector: 'edge[edgeType="FOS"]',
-                style: {
-                    'line-color': '#be4bdb',
-                    'target-arrow-color': '#be4bdb',
-                    'line-style': 'dashed',
-                    'line-dash-pattern': [6, 3]
-                }
-            },
-
-            // -------------------------------------------------------------------------
-            // 6. Associates (Optional)
-            // -------------------------------------------------------------------------
-            {
-                selector: '.assoc-edge',
-                style: {
-                    'width': 1.5,
-                    'line-color': '#fab005',
-                    'line-style': 'dotted',
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'none',
-                    'label': 'data(label)',
-                    'font-size': '10px',
-                    'color': '#d08800',
-                    'text-background-opacity': 1,
-                    'text-background-color': '#fff'
-                }
-            }
+            { selector: 'node[type="SOLO_NODE"][label]', style: { 'label': 'data(label)', 'font-size': '6px', 'color': '#20c997' } },
+            { selector: 'edge', style: { 'curve-style': 'bezier', 'arrow-scale': 0.8, 'width': 1 } },
+            { selector: '.spouse-edge', style: { 'width': 1, 'line-color': '#adb5bd', 'curve-style': 'bezier', 'target-arrow-shape': 'none' } },
+            { selector: '.lineage-edge', style: { 'width': 2, 'line-color': '#495057', 'curve-style': 'taxi', 'taxi-direction': 'vertical', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#495057' } },
+            { selector: '.non-bio-edge', style: { 'width': 2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'label': 'data(edgeType)', 'font-size': '9px', 'text-background-opacity': 1, 'text-background-color': '#fff', 'text-background-padding': '2px' } },
+            { selector: 'edge[edgeType="ADO"]', style: { 'line-color': '#20c997', 'target-arrow-color': '#20c997', 'line-style': 'dashed' } },
+            { selector: 'edge[edgeType="STE"]', style: { 'line-color': '#fd7e14', 'target-arrow-color': '#fd7e14', 'line-style': 'dotted' } },
+            { selector: 'edge[edgeType="FOS"]', style: { 'line-color': '#be4bdb', 'target-arrow-color': '#be4bdb', 'line-style': 'dashed', 'line-dash-pattern': [6, 3] } },
+            { selector: '.assoc-edge', style: { 'width': 1.5, 'line-color': '#fab005', 'line-style': 'dotted', 'curve-style': 'bezier', 'target-arrow-shape': 'none', 'label': 'data(label)', 'font-size': '10px', 'color': '#d08800', 'text-background-opacity': 1, 'text-background-color': '#fff' } }
         ]
     });
 
+    // --- Rendering Logic ---
     function render() {
         const result = parser.parse(editor.value);
-
-        // Error Display
         if (result.errors.length > 0) {
             errorBox.style.display = 'block';
-            errorBox.textContent = ''; // Clear previous errors
-
+            errorBox.textContent = ''; 
             const strong = document.createElement('strong');
             strong.textContent = 'Errors:';
             errorBox.appendChild(strong);
-            
             result.errors.forEach(err => {
                 errorBox.appendChild(document.createElement('br'));
                 errorBox.appendChild(document.createTextNode(err));
@@ -601,41 +342,59 @@ document.addEventListener('DOMContentLoaded', () => {
             errorBox.style.display = 'none';
             errorBox.textContent = '';
         }
-
         const cyElements = convertToCytoscape(result);
         cy.elements().remove();
         cy.add(cyElements);
-
-        // --- ELK Layout Configuration ---
         cy.layout({
             name: 'elk',
             elk: {
-                // Core Algorithm: 'layered' is best for hierarchies/genealogies
-                algorithm: 'layered',
-
-                // Direction: Top-to-Bottom
-                'elk.direction': 'DOWN',
-
-                // Separation settings to prevent clutter
-                'elk.spacing.nodeNode': 50, // Horizontal space between siblings
-                'elk.layered.spacing.nodeNodeBetweenLayers': 80, // Vertical space between generations
-
-                // Strategy: LONG_PATH or BRANDES_KOEPF often works well for trees
-                'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-
-                // Edges: Orthogonal routing for clean "circuit board" look
-                'elk.edgeRouting': 'ORTHOGONAL',
+                algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': 50,
+                'elk.layered.spacing.nodeNodeBetweenLayers': 80,
+                'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.edgeRouting': 'ORTHOGONAL',
             }
         }).run();
     }
 
-    function exportImage() {
-        const pngBlob = cy.png({
-            full: true,
-            output: 'blob',
-            bg: 'white',
-            scale: 2
-        });
+    // --- File Handlers ---
+
+    // 1. Open File
+    btnOpen.addEventListener('click', () => {
+        fileMenuContent.classList.remove('show');
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            editor.value = e.target.result;
+            render(); // Auto-render on load
+        };
+        reader.readAsText(file);
+        // Reset input so same file can be selected again if needed
+        fileInput.value = ''; 
+    });
+
+    // 2. Save File (.ftt)
+    btnSave.addEventListener('click', () => {
+        fileMenuContent.classList.remove('show');
+        const blob = new Blob([editor.value], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'family_tree.ftt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // 3. Export Image (.png)
+    btnExportPng.addEventListener('click', () => {
+        fileMenuContent.classList.remove('show');
+        const pngBlob = cy.png({ full: true, output: 'blob', bg: 'white', scale: 2 });
         const url = URL.createObjectURL(pngBlob);
         const a = document.createElement('a');
         a.href = url;
@@ -643,20 +402,42 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-    }
+    });
 
-    // ======================================================
-    // Bidirectional Sync Features
-    // ======================================================
+    // --- UI Interactions ---
 
-    // 1. Graph -> Editor: Click a node to scroll to its definition
+    // Toggle Dropdown
+    btnFileMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileMenuContent.classList.toggle('show');
+    });
+
+    // Close Dropdown on click outside
+    window.addEventListener('click', (e) => {
+        if (!e.target.matches('#btn-file-menu')) {
+            if (fileMenuContent.classList.contains('show')) {
+                fileMenuContent.classList.remove('show');
+            }
+        }
+    });
+
+    // Shortcut: Ctrl+Enter / Cmd+Enter to Render
+    editor.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            render();
+            // Optional visual feedback
+            btnRender.style.transform = "scale(0.95)";
+            setTimeout(() => btnRender.style.transform = "", 100);
+        }
+    });
+
+    // Sync: Graph -> Editor
     cy.on('tap', 'node', (evt) => {
         const node = evt.target;
         const id = node.id();
-
-        // Skip utility nodes (hubs)
         if (['UNION_NODE', 'IMPLICIT_NODE', 'SOLO_NODE'].includes(node.data('type'))) return;
-
+        
         const text = editor.value;
         const regex = new RegExp(`^ID:\\s*${id}\\s*$`, 'm');
         const match = text.match(regex);
@@ -664,55 +445,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (match) {
             const index = match.index;
             const lineNum = text.substring(0, index).split('\n').length;
-            
-            // Calculate approximate scroll position (assuming ~20px per line)
-            // This works reasonably well for monospace fonts in textareas
-            // A more precise method uses selection focus
             editor.focus();
             editor.setSelectionRange(index, index + match[0].length);
-            
-            // Trigger a visual scroll
-            // Note: 'input' event listener below might clear highlight, so we set a flag or just select
-            const lineHeight = 19.5; // Approximate line height for default monospace 13px
-            editor.scrollTop = (lineNum - 3) * lineHeight; // -3 to center it slightly
+            const lineHeight = 19.5; 
+            editor.scrollTop = (lineNum - 3) * lineHeight;
         }
     });
 
-    // 2. Editor -> Graph: Highlight node when cursor is inside its block
+    // Sync: Editor -> Graph
     function syncGraphToCursor() {
         const text = editor.value;
         const cursorIndex = editor.selectionStart;
-
-        // Scan backwards from cursor to find the nearest "ID:" match
         const textBefore = text.substring(0, cursorIndex);
         const lastIdMatch = [...textBefore.matchAll(/^ID:\s*([^\s]+)/gm)].pop();
 
         if (lastIdMatch) {
             const currentId = lastIdMatch[1];
-            
-            // Remove highlight from all
             cy.nodes().removeClass('current-record');
-            
-            // Add highlight to current
             const targetNode = cy.getElementById(currentId);
-            if (targetNode.length > 0) {
-                targetNode.addClass('current-record');
-            }
+            if (targetNode.length > 0) targetNode.addClass('current-record');
         }
     }
 
-    // Debounce the editor listener to avoid lag on large files
     let timeout;
     editor.addEventListener('keyup', () => {
         clearTimeout(timeout);
         timeout = setTimeout(syncGraphToCursor, 200);
     });
-    
-    // Also sync on click (immediate)
     editor.addEventListener('mouseup', syncGraphToCursor);
 
     btnRender.addEventListener('click', render);
-    btnExport.addEventListener('click', exportImage);
 
     if (typeof FTTParser !== 'undefined') render();
 });
