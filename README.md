@@ -71,8 +71,7 @@ console.log(result.records);
 ## 📂 Project Structure
 
 * **`spec/`**: Contains the formal **FamilyTree-Text Specification v0.1**.
-* **`js/`**: Contains the reference `FTTParser` class.
-* **`index.html`**: The web-based graph visualizer and editor (uses Cytoscape.js).
+* **`js/`**: Contains the reference `FTTParser` class and sample tools using it.
 * **`examples/`**: Sample `.ftt` files for testing.
 
 ## 🛠 specification Highlights
