@@ -8,60 +8,116 @@ cytoscape.use(elk);
 const parser = new FTTParser();
 
 /**
- * Helper: Calculate generations to enforce cleaner layering.
- * Uses a simple top-down traversal from root candidates.
+ * Advanced Generation Calculation (Topological Sort on Spousal Clusters)
+ * Ensures spouses align horizontally regardless of lineage depth.
  */
-function calculateGenerations(elements, records) {
-    const idToGen = {};
-    const queue = [];
-    const visited = new Set();
+function calculateGenerations(records) {
+    const idToRank = {};
+    const clusterMap = new Map(); // PersonID -> ClusterID
+    const clusterGraph = new Map(); // ClusterID -> { parents: Set<ClusterID>, baseRank: 0 }
+    let clusterCounter = 0;
 
-    // 1. Identify Roots (Nodes with no PARENTs)
+    // 1. Build Spousal Clusters (Union-Find approach)
+    // Every person starts in their own cluster
+    Object.keys(records).forEach(id => {
+        clusterMap.set(id, clusterCounter++);
+    });
+
+    // Merge clusters based on Unions
+    function getClusterId(id) {
+        let c = clusterMap.get(id);
+        while (clusterMap.has(c) && clusterMap.get(c) !== c) {
+            c = clusterMap.get(c); // Path compression could be added, but simple lookup is fine here
+        }
+        return c;
+    }
+    
+    function unionClusters(id1, id2) {
+        const c1 = getClusterId(id1);
+        const c2 = getClusterId(id2);
+        if (c1 !== c2) {
+            // Remap all instances of c2 to c1 (Simplified Union)
+            // For a perfect Union-Find we'd use parent pointers, but iterating keys is safe for small trees
+            for (const [key, val] of clusterMap.entries()) {
+                if (val === c2) clusterMap.set(key, c1);
+            }
+        }
+    }
+
     Object.values(records).forEach(rec => {
-        if (rec.type === 'INDIVIDUAL' && (!rec.data.PARENT || rec.data.PARENT.length === 0)) {
-            idToGen[rec.id] = 0;
-            queue.push({
-                id: rec.id,
-                gen: 0
+        if (rec.data.UNION) {
+            rec.data.UNION.forEach(u => {
+                const partner = u.parsed[0];
+                if (records[partner]) unionClusters(rec.id, partner);
             });
-            visited.add(rec.id);
         }
     });
 
-    // 2. BFS to assign generations
-    while (queue.length > 0) {
-        const current = queue.shift();
+    // 2. Build Cluster DAG (Edges: ParentCluster -> ChildCluster)
+    // Initialize Graph Nodes
+    const uniqueClusters = new Set(clusterMap.values());
+    uniqueClusters.forEach(cId => {
+        clusterGraph.set(cId, { parents: new Set(), rank: 0 });
+    });
 
-        // Check unions (Same generation)
-        const record = records[current.id];
-        if (record && record.data.UNION) {
-            record.data.UNION.forEach(u => {
-                const spouseId = u.parsed[0];
-                if (spouseId && !visited.has(spouseId)) {
-                    idToGen[spouseId] = current.gen;
-                    visited.add(spouseId);
-                    queue.push({
-                        id: spouseId,
-                        gen: current.gen
-                    });
+    // Populate Edges
+    Object.values(records).forEach(child => {
+        if (child.data.PARENT) {
+            const childCluster = getClusterId(child.id);
+            child.data.PARENT.forEach(p => {
+                const parentId = p.parsed[0];
+                if (records[parentId]) {
+                    const parentCluster = getClusterId(parentId);
+                    if (parentCluster !== childCluster) { // Avoid self-loops
+                        clusterGraph.get(childCluster).parents.add(parentCluster);
+                    }
                 }
             });
         }
+    });
 
-        // Check children (Next generation)
-        // Note: In FTT, children point to parents. We have to reverse lookup or check explicit CHILD lists if available.
-        // Since we built 'elements', we can scan edges efficiently.
+    // 3. Compute Ranks (Longest Path / Memoization)
+    const memo = new Map();
+    const visiting = new Set(); // Cycle detection
+
+    function getRank(cId) {
+        if (memo.has(cId)) return memo.get(cId);
+        if (visiting.has(cId)) return 0; // Cycle detected, fallback
+
+        visiting.add(cId);
+        
+        let maxParentRank = -1; // Starts at -1 so roots become 0
+        const node = clusterGraph.get(cId);
+        
+        if (node && node.parents.size > 0) {
+            node.parents.forEach(pId => {
+                const pRank = getRank(pId);
+                if (pRank > maxParentRank) maxParentRank = pRank;
+            });
+        }
+
+        visiting.delete(cId);
+        // Step is 2: Parent(0) -> UnionHub(1) -> Child(2)
+        const myRank = maxParentRank + 2; 
+        memo.set(cId, myRank);
+        return myRank;
     }
 
-    // Refinement: Scan Cytoscape edges to propagate generations down from Parents to Union Hubs to Children
-    // This is a simplified pass; ELK handles topological sorting well, but explicit tiers help.
-    // We will return a map to be used in 'layoutOptions'.
-    return idToGen;
+    uniqueClusters.forEach(cId => getRank(cId));
+
+    // 4. Map back to Individuals
+    Object.keys(records).forEach(id => {
+        const cId = getClusterId(id);
+        idToRank[id] = memo.get(cId) || 0;
+    });
+
+    return idToRank;
 }
 
 function convertToCytoscape(parsedData) {
     const elements = [];
     const records = parsedData.records;
+    const ranks = calculateGenerations(records);
     const createdNodeIds = new Set();
     let unionCounter = 0;
 
@@ -72,12 +128,19 @@ function convertToCytoscape(parsedData) {
     // --- Helper: Node Creation ---
     function addNode(id, label, subLabel, type) {
         if (createdNodeIds.has(id)) return;
+        
+        // Individuals get their calculated rank.
+        // Placeholders inherit rank 0 (or calculated if linked).
+        const rank = ranks[id] !== undefined ? ranks[id] : 0;
+        
         elements.push({
             data: {
                 id,
                 label,
                 subLabel,
-                type
+                type,
+                // Direct ELK instruction
+                elk: { 'org.eclipse.elk.layered.layerIndex': rank }
             }
         });
         createdNodeIds.add(id);
@@ -123,10 +186,18 @@ function convertToCytoscape(parsedData) {
         if (isPair) pairToHubId[key] = hubId;
         else soloToHubId[key] = hubId;
 
+        // We ensure the Hub Node sits exactly one layer below the parents.
+        // Because our clustering logic forces p1 and p2 to have the same rank,
+        // we can safely rely on p1's rank.
+        const p1Rank = ranks[p1] || 0;
+        const hubRank = p1Rank + 1;
+
         elements.push({
             data: {
                 id: hubId,
-                type: type
+                type: type,
+                // Direct instruction to ELK to place this node on the specific tier
+                elk: { 'org.eclipse.elk.layered.layerIndex': hubRank }
             }
         });
 
