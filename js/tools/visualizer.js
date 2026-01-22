@@ -13,49 +13,72 @@ const parser = new FTTParser();
  */
 function calculateGenerations(records) {
     const idToRank = {};
-    const clusterMap = new Map(); // PersonID -> ClusterID
-    const clusterGraph = new Map(); // ClusterID -> { parents: Set<ClusterID>, baseRank: 0 }
-    let clusterCounter = 0;
+    
+    // --- 1. efficient Union-Find Data Structure ---
+    const parent = new Map();
+    const rank = new Map();
 
-    // 1. Build Spousal Clusters (Union-Find approach)
-    // Every person starts in their own cluster
+    // Initialize: Every person is their own parent
     Object.keys(records).forEach(id => {
-        clusterMap.set(id, clusterCounter++);
+        parent.set(id, id);
+        rank.set(id, 0);
     });
 
-    // Merge clusters based on Unions
-    function getClusterId(id) {
-        let c = clusterMap.get(id);
-        while (clusterMap.has(c) && clusterMap.get(c) !== c) {
-            c = clusterMap.get(c); // Path compression could be added, but simple lookup is fine here
+    // Find with Path Compression
+    // Flattens the tree structure whenever we look up a node
+    function find(i) {
+        if (parent.get(i) !== i) {
+            parent.set(i, find(parent.get(i)));
         }
-        return c;
+        return parent.get(i);
     }
-    
-    function unionClusters(id1, id2) {
-        const c1 = getClusterId(id1);
-        const c2 = getClusterId(id2);
-        if (c1 !== c2) {
-            // Remap all instances of c2 to c1 (Simplified Union)
-            // For a perfect Union-Find we'd use parent pointers, but iterating keys is safe for small trees
-            for (const [key, val] of clusterMap.entries()) {
-                if (val === c2) clusterMap.set(key, c1);
+
+    // Union by Rank
+    // Attaches the shorter tree to the taller tree to minimize depth
+    function union(i, j) {
+        const rootI = find(i);
+        const rootJ = find(j);
+
+        if (rootI !== rootJ) {
+            const rankI = rank.get(rootI);
+            const rankJ = rank.get(rootJ);
+
+            if (rankI < rankJ) {
+                parent.set(rootI, rootJ);
+            } else if (rankI > rankJ) {
+                parent.set(rootJ, rootI);
+            } else {
+                parent.set(rootJ, rootI); // Arbitrary choice
+                rank.set(rootI, rankI + 1);
             }
         }
     }
 
+    // --- 2. Build Spousal Clusters ---
     Object.values(records).forEach(rec => {
         if (rec.data.UNION) {
             rec.data.UNION.forEach(u => {
                 const partner = u.parsed[0];
-                if (records[partner]) unionClusters(rec.id, partner);
+                // Only union if the partner actually exists in our record set
+                if (records[partner]) {
+                    union(rec.id, partner);
+                }
             });
         }
     });
 
-    // 2. Build Cluster DAG (Edges: ParentCluster -> ChildCluster)
-    // Initialize Graph Nodes
+    // Map every individual to their Cluster ID (The Representative Root)
+    // This allows O(1) lookups for the rest of the logic
+    const clusterMap = new Map();
+    Object.keys(records).forEach(id => {
+        clusterMap.set(id, find(id));
+    });
+
+    // --- 3. Build Cluster DAG (Edges: ParentCluster -> ChildCluster) ---
     const uniqueClusters = new Set(clusterMap.values());
+    const clusterGraph = new Map(); // ClusterID -> { parents: Set<ClusterID>, baseRank: 0 }
+
+    // Initialize Graph Nodes
     uniqueClusters.forEach(cId => {
         clusterGraph.set(cId, { parents: new Set(), rank: 0 });
     });
@@ -63,12 +86,15 @@ function calculateGenerations(records) {
     // Populate Edges
     Object.values(records).forEach(child => {
         if (child.data.PARENT) {
-            const childCluster = getClusterId(child.id);
+            const childCluster = clusterMap.get(child.id);
+            
             child.data.PARENT.forEach(p => {
                 const parentId = p.parsed[0];
                 if (records[parentId]) {
-                    const parentCluster = getClusterId(parentId);
-                    if (parentCluster !== childCluster) { // Avoid self-loops
+                    const parentCluster = clusterMap.get(parentId);
+                    
+                    // Add edge if they are different clusters (avoids self-loops)
+                    if (parentCluster !== childCluster) {
                         clusterGraph.get(childCluster).parents.add(parentCluster);
                     }
                 }
@@ -76,7 +102,7 @@ function calculateGenerations(records) {
         }
     });
 
-    // 3. Compute Ranks (Longest Path / Memoization)
+    // --- 4. Compute Ranks (Longest Path / Memoization) ---
     const memo = new Map();
     const visiting = new Set(); // Cycle detection
 
@@ -105,9 +131,9 @@ function calculateGenerations(records) {
 
     uniqueClusters.forEach(cId => getRank(cId));
 
-    // 4. Map back to Individuals
+    // --- 5. Map back to Individuals ---
     Object.keys(records).forEach(id => {
-        const cId = getClusterId(id);
+        const cId = clusterMap.get(id);
         idToRank[id] = memo.get(cId) || 0;
     });
 
