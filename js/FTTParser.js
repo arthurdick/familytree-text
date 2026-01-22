@@ -9,10 +9,28 @@
 export default class FTTParser {
     constructor() {
         this.SUPPORTED_VERSION = 0.1;
-        this.reset();
     }
 
-    reset() {
+    /**
+     * Main Entry Point
+     * @param {string} rawText - The UTF-8 file content.
+     * @returns {object} - { headers, records, errors, warnings }
+     */
+    parse(rawText) {
+        // Delegate to a fresh session to ensure purity (no mutation of FTTParser instance)
+        const session = new ParseSession(this.SUPPORTED_VERSION);
+        return session.run(rawText);
+    }
+}
+
+/**
+ * Internal class to handle the state of a single parse operation.
+ */
+class ParseSession {
+    constructor(version) {
+        this.SUPPORTED_VERSION = version;
+        
+        // Output Data
         this.headers = {};
         this.records = new Map(); // Map<ID, RecordObject>
         this.ids = new Set();     // Fast lookup for existence
@@ -22,18 +40,12 @@ export default class FTTParser {
         // Internal Parsing State
         this.currentRecordId = null;
         this.currentKey = null;
-        this.buffer = []; // Line buffer for multi-line content
+        this.buffer = [];         // Line buffer for multi-line content
         this.lastFieldRef = null; // Pointer to the last created field object (for Modifiers)
+        this.currentModifierTarget = null;
     }
 
-    /**
-     * Main Entry Point
-     * @param {string} rawText - The UTF-8 file content.
-     * @returns {object} - { headers, records, errors, warnings }
-     */
-    parse(rawText) {
-        this.reset();
-        
+    run(rawText) {
         // Normalize line endings and split
         const lines = rawText.replace(/\r\n/g, '\n').split('\n');
 
