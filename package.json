@@ -1,13 +1,12 @@
 {
   "name": "familytree-text",
   "version": "1.0.0",
-  "description": "**Status:** Draft / Experimental (v0.1)",
-  "main": "index.js",
-  "directories": {
-    "example": "examples"
-  },
+  "description": "FTT Reference Implementation",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "repository": {
     "type": "git",
@@ -15,7 +14,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/arthurdick/familytree-text/issues"
   },
