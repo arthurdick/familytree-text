@@ -254,7 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const cy = cytoscape({
         container: document.getElementById('cy'),
-        wheelSensitivity: 0.2,
         style: [
             // -------------------------------------------------------------------------
             // 1. Base Node Styles
@@ -268,8 +267,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     'color': '#333',
                     'font-size': '12px',
                     'font-weight': 'bold',
-                    'width': 'label',
-                    'height': 'label',
+                    'width': (ele) => {
+                        const label = ele.data('label') || '';
+                        const lines = label.split('\n');
+                        const maxLen = Math.max(...lines.map(l => l.length));
+                        // Approx: 9px per char + 24px padding buffer
+                        return (maxLen * 9) + 24; 
+                    },
+                    'height': (ele) => {
+                        const label = ele.data('label') || '';
+                        const lines = label.split('\n');
+                        // Approx: 20px per line + 20px padding buffer
+                        return (lines.length * 20) + 20; 
+                    },
                     'padding': '12px',
                     'background-color': '#fff',
                     'border-width': 2,
@@ -329,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             },
             {
-                // Solo Parent Hub (White Dot with Green Border)
+                // Solo Parent Hub (Base Shape)
                 selector: 'node[type="SOLO_NODE"]',
                 style: {
                     'width': 16,
@@ -338,6 +348,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     'border-width': 1,
                     'border-color': '#20c997',
                     'shape': 'ellipse',
+                    'label': '' // Default to empty string to satisfy mapper
+                }
+            },
+            {
+                // Solo Parent Hub (Label - Only if data exists)
+                selector: 'node[type="SOLO_NODE"][label]',
+                style: {
                     'label': 'data(label)',
                     'font-size': '6px',
                     'color': '#20c997'
