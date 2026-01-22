@@ -283,6 +283,11 @@ function convertToCytoscape(parsedData) {
     return elements;
 }
 
+// Helper: Escape Regex special characters
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const editor = document.getElementById('editor');
@@ -506,7 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (['UNION_NODE', 'IMPLICIT_NODE', 'SOLO_NODE'].includes(node.data('type'))) return;
         
         const text = editor.value;
-        const regex = new RegExp(`^ID:\\s*${id}\\s*$`, 'm');
+        const escapedId = escapeRegExp(id);
+        const regex = new RegExp(`^ID:\\s*${escapedId}\\s*$`, 'm');
         const match = text.match(regex);
 
         if (match) {
