@@ -1,0 +1,31 @@
+{
+  "name": "familytree-text",
+  "version": "1.0.0",
+  "description": "**Status:** Draft / Experimental (v0.1)",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthurdick/familytree-text.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/arthurdick/familytree-text/issues"
+  },
+  "homepage": "https://github.com/arthurdick/familytree-text#readme",
+  "dependencies": {
+    "cytoscape": "^3.33.1",
+    "cytoscape-elk": "^2.3.0",
+    "elkjs": "^0.11.0"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1"
+  }
+}

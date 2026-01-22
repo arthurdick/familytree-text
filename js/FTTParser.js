@@ -6,7 +6,7 @@
  * console.log(result);
  */
 
-class FTTParser {
+export default class FTTParser {
     constructor() {
         this.SUPPORTED_VERSION = 0.1;
         this.reset();
@@ -670,6 +670,3 @@ class FTTParser {
         this.warnings.push(msg);
     }
 }
-
-// Export for Node.js or Browser
-if (typeof module !== 'undefined') module.exports = FTTParser;
