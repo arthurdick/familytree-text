@@ -154,36 +154,7 @@
       
       <input type="file" id="file-input" accept=".ftt,.txt" style="display: none;">
 
-      <textarea id="editor" spellcheck= "false">HEAD_FORMAT: FTT v0.1
-HEAD_TITLE: Topology Test
-
-ID: GRANDPA-01
-NAME: Arthur Smith
-BORN: 1920
-UNION: GRANDMA-01 | MARR | 1945 ||
-
-ID: GRANDMA-01
-NAME: Mary Jones
-BORN: 1922
-
-ID: DAD-01
-NAME: John Smith
-BORN: 1950
-# Note: Dad links to parents, but graph draws from Union Node
-PARENT: GRANDPA-01 | BIO ||
-PARENT: GRANDMA-01 | BIO ||
-UNION: MOM-01 | MARR | 1975 ||
-
-ID: MOM-01
-NAME: Sarah Doe
-BORN: 1952
-
-ID: SON-01
-NAME: Junior Smith
-BORN: 1980
-PARENT: DAD-01 | BIO ||
-PARENT: MOM-01 | BIO ||
-EVENT: OCC | 2005 || Engineer</textarea>
+      <textarea id="editor" spellcheck= "false"></textarea>
       <div id="error-box"></div>
     </div>
     <div id="cy"></div>

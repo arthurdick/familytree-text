@@ -5,6 +5,39 @@ import FTTParser from '../FTTParser.js';
 cytoscape.use(elk);
 
 const parser = new FTTParser();
+const STORAGE_KEY = 'ftt_autosave_data';
+
+// Default template if no local storage is found
+const DEFAULT_TEMPLATE = `HEAD_FORMAT: FTT v0.1
+HEAD_TITLE: Topology Test
+
+ID: GRANDPA-01
+NAME: Arthur Smith
+BORN: 1920
+UNION: GRANDMA-01 | MARR | 1945 ||
+
+ID: GRANDMA-01
+NAME: Mary Jones
+BORN: 1922
+
+ID: DAD-01
+NAME: John Smith
+BORN: 1950
+# Note: Dad links to parents, but graph draws from Union Node
+PARENT: GRANDPA-01 | BIO ||
+PARENT: GRANDMA-01 | BIO ||
+UNION: MOM-01 | MARR | 1975 ||
+
+ID: MOM-01
+NAME: Sarah Doe
+BORN: 1952
+
+ID: SON-01
+NAME: Junior Smith
+BORN: 1980
+PARENT: DAD-01 | BIO ||
+PARENT: MOM-01 | BIO ||
+EVENT: OCC | 2005 || Engineer`;
 
 /**
  * Advanced Generation Calculation
@@ -259,10 +292,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // File Menu Elements
     const btnFileMenu = document.getElementById('btn-file-menu');
     const fileMenuContent = document.getElementById('file-menu-content');
+    const btnNew = document.createElement('button'); // Created dynamically
     const btnOpen = document.getElementById('btn-open');
     const btnSave = document.getElementById('btn-save');
     const btnExportPng = document.getElementById('btn-export-png');
     const fileInput = document.getElementById('file-input');
+
+    // Add New File Button to DOM
+    btnNew.textContent = "New File (Reset)";
+    btnNew.id = "btn-new";
+    fileMenuContent.insertBefore(btnNew, fileMenuContent.firstChild);
 
     const cy = cytoscape({
         container: document.getElementById('cy'),
@@ -325,6 +364,23 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     });
 
+    // --- Persistence Logic ---
+
+    // Load from storage or use default
+    function loadInitialContent() {
+        const savedData = localStorage.getItem(STORAGE_KEY);
+        if (savedData) {
+            editor.value = savedData;
+        } else {
+            editor.value = DEFAULT_TEMPLATE;
+        }
+    }
+
+    // Save to storage
+    function saveContent() {
+        localStorage.setItem(STORAGE_KEY, editor.value);
+    }
+
     // --- Rendering Logic ---
     function render() {
         const result = parser.parse(editor.value);
@@ -357,6 +413,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- File Handlers ---
 
+    // 0. New File (Reset)
+    btnNew.addEventListener('click', () => {
+        fileMenuContent.classList.remove('show');
+        if (confirm("Are you sure you want to clear the editor? This will erase unsaved changes.")) {
+            editor.value = DEFAULT_TEMPLATE;
+            saveContent(); // Force update storage
+            render();
+        }
+    });
+
     // 1. Open File
     btnOpen.addEventListener('click', () => {
         fileMenuContent.classList.remove('show');
@@ -370,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const reader = new FileReader();
         reader.onload = (e) => {
             editor.value = e.target.result;
+            saveContent(); // Update storage
             render(); // Auto-render on load
         };
         reader.readAsText(file);
@@ -467,14 +534,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Auto-Save / Cursor Sync Debouncer
     let timeout;
     editor.addEventListener('keyup', () => {
         clearTimeout(timeout);
-        timeout = setTimeout(syncGraphToCursor, 200);
+        timeout = setTimeout(() => {
+            syncGraphToCursor();
+            saveContent(); // Save on keyup
+        }, 200);
     });
-    editor.addEventListener('mouseup', syncGraphToCursor);
+    
+    // Also sync/save on click
+    editor.addEventListener('mouseup', () => {
+        syncGraphToCursor();
+        saveContent();
+    });
 
     btnRender.addEventListener('click', render);
 
-    if (typeof FTTParser !== 'undefined') render();
+    // Initial Load
+    if (typeof FTTParser !== 'undefined') {
+        loadInitialContent();
+        render();
+    }
 });
