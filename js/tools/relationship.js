@@ -322,7 +322,10 @@ function renderResult(rel, records, idA, idB) {
     resultBox.textContent = '';
 
     const div1 = document.createElement('div');
-    div1.innerHTML = `<strong>${nameA}</strong> is the`;
+    const strongA = document.createElement('strong');
+    strongA.textContent = nameA;
+    div1.appendChild(strongA);
+    div1.appendChild(document.createTextNode(' is the'));
     resultBox.appendChild(div1);
 
     const textGen = new RelationText(records);
@@ -334,7 +337,10 @@ function renderResult(rel, records, idA, idB) {
     resultBox.appendChild(spanTerm);
 
     const div2 = document.createElement('div');
-    div2.innerHTML = `of <strong>${nameB}</strong>`;
+    div2.appendChild(document.createTextNode('of '));
+    const strongB = document.createElement('strong');
+    strongB.textContent = nameB;
+    div2.appendChild(strongB);
     resultBox.appendChild(div2);
 
     if (detail) {
