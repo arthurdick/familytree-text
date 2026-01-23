@@ -12,6 +12,7 @@ export default defineConfig({
         main: resolve(__dirname, 'js/index.html'),
         visualizer: resolve(__dirname, 'js/tools/visualizer.html'),
         relationship: resolve(__dirname, 'js/tools/relationship.html'),
+        converter: resolve(__dirname, 'js/tools/converter.html'),
       },
     },
   },

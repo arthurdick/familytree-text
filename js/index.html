@@ -47,9 +47,9 @@
         /* Tools Navigation */
         .tools-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 2rem;
-            max-width: 900px;
+            max-width: 1100px; 
             margin: -3rem auto 3rem auto; /* Overlap hero */
             padding: 0 1rem;
         }
@@ -62,6 +62,9 @@
             border: 1px solid var(--border);
             text-align: center;
             transition: transform 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
         .tool-card:hover {
@@ -139,22 +142,34 @@
         <p class="tagline">Data durability through human-readable, machine-parseable UTF-8 plain text.</p>
         
         <div style="margin-top: 1rem;">
-            <a href="spec/ftt_spec_v0.1.md" class="btn btn-outline">Read Specification (v0.1)</a>
+            <a href="https://github.com/arthurdick/familytree-text/blob/main/spec/ftt_spec_v0.1.md" class="btn btn-outline">Read Specification (v0.1)</a>
             <a href="https://github.com/arthurdick/familytree-text" class="btn btn-outline" target="_blank">View on GitHub</a>
         </div>
     </section>
 
     <div class="tools-grid">
         <div class="tool-card">
-            <h2>Graph Visualizer</h2>
-            <p>Write FTT code in the browser and instantly render an interactive genealogy graph.</p>
+            <div>
+                <h2>Graph Visualizer</h2>
+                <p>Write FTT code in the browser and instantly render an interactive genealogy graph.</p>
+            </div>
             <a href="tools/visualizer.html" class="btn">Launch Visualizer</a>
         </div>
 
         <div class="tool-card">
-            <h2>Relationship Calculator</h2>
-            <p>Input your FTT data and two IDs to calculate the exact kinship between individuals.</p>
+            <div>
+                <h2>Relationship Calculator</h2>
+                <p>Input your FTT data and two IDs to calculate the exact kinship between individuals.</p>
+            </div>
             <a href="tools/relationship.html" class="btn">Launch Calculator</a>
+        </div>
+
+        <div class="tool-card">
+            <div>
+                <h2>Format Bridge</h2>
+                <p>Import existing data from GEDCOM 5.5.1 or export your FTT tree for use in other software.</p>
+            </div>
+            <a href="tools/converter.html" class="btn">Launch Converter</a>
         </div>
     </div>
 
@@ -172,15 +187,6 @@
             <li><strong>Git Friendliness:</strong> The line-based structure allows for clean "diffs," making it perfect for version-controlling family history.</li>
             <li><strong>Data Durability:</strong> No binary encoding or complex XML schemas. Just UTF-8 text.</li>
         </ul>
-
-        <h3>Quick Syntax Example</h3>
-        <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto;">
-ID: SMITH-01
-NAME: Arthur Smith | Smith, Arthur | BIRTH | PREF
-SEX:  M
-BORN: 1950-01-01 | Calgary; AB
-UNION: DOE-01 | MARR | 1975-06-01
-CHILD: SMITH-02</pre>
     </section>
 
     <footer>

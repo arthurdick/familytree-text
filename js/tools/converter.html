@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FTT <-> GEDCOM Converter</title>
+    <style>
+        :root { --primary: #0d6efd; --bg: #f8f9fa; --border: #dee2e6; --warning: #ffc107; --text-dark: #212529; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: var(--bg); display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; color: var(--text-dark); }
+        
+        header { margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        h1 { margin: 0; color: #333; display: flex; align-items: center; gap: 10px; }
+        
+        .badge {
+            font-size: 0.8rem;
+            background-color: var(--warning);
+            color: #000;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .version-info { font-size: 0.9rem; color: #666; margin-top: 5px; }
+
+        .workspace { display: flex; gap: 20px; flex: 1; min-height: 0; }
+        .panel { flex: 1; display: flex; flex-direction: column; }
+        
+        label { font-weight: bold; margin-bottom: 5px; display: block; }
+        textarea { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; resize: none; }
+        
+        .controls { display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 150px; }
+        button { padding: 10px; cursor: pointer; background: var(--primary); color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #0b5ed7; }
+        
+        #error-msg { color: #dc3545; margin-top: 10px; font-weight: bold; text-align: center; min-height: 20px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Format Bridge <span class="badge">Experimental</span></h1>
+        <div class="version-info">Supports: <strong>GEDCOM 5.5.1</strong> &harr; <strong>FTT v0.1</strong></div>
+        <p>Convert legacy GEDCOM files to FTT, or export FTT back to standard GEDCOM.</p>
+    </header>
+
+    <div class="workspace">
+        <div class="panel">
+            <label for="input-area">Input Data</label>
+            <textarea id="input-area" placeholder="Paste GEDCOM or FTT data here..."></textarea>
+        </div>
+
+        <div class="controls">
+            <button id="btn-to-ftt">GEDCOM &rarr; FTT</button>
+            <button id="btn-to-ged">FTT &rarr; GEDCOM</button>
+        </div>
+
+        <div class="panel">
+            <label for="output-area">Converted Output</label>
+            <textarea id="output-area" readonly placeholder="Result will appear here..."></textarea>
+        </div>
+    </div>
+    
+    <div id="error-msg"></div>
+
+    <script type="module" src="./converter.js"></script>
+</body>
+</html>
