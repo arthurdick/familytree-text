@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>FTT Visualizer</title>
+  <link rel="stylesheet" href="../css/shared.css">
   <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        /* Visualizer-specific Layout */
+        body { overflow: hidden; }
         
         #container { display: flex; height: 100vh; }
         
@@ -13,14 +15,14 @@
             width: 35%;
             display: flex;
             flex-direction: column;
-            border-right: 1px solid #ccc;
-            background: #f8f9fa;
+            border-right: 1px solid var(--border);
+            background: var(--light);
         }
         
         #toolbar {
             padding: 10px 15px;
             background: #e9ecef;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -29,11 +31,7 @@
         #toolbar-group { display: flex; gap: 10px; align-items: center; }
 
         /* Dropdown Menu Styles */
-        .dropdown {
-            position: relative;
-            display: inline-block;
-        }
-
+        .dropdown { position: relative; display: inline-block; }
         .dropdown-content {
             display: none;
             position: absolute;
@@ -42,13 +40,12 @@
             min-width: 160px;
             box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.1);
             z-index: 10;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--border);
             border-radius: 4px;
             margin-top: 5px;
         }
-
         .dropdown-content button {
-            color: #212529;
+            color: var(--dark);
             padding: 10px 16px;
             text-decoration: none;
             display: block;
@@ -56,80 +53,33 @@
             width: 100%;
             text-align: left;
             border: none;
-            border-radius: 0;
             font-weight: normal;
         }
-
-        .dropdown-content button:hover {
-            background-color: #f8f9fa;
-        }
-        
-        /* Separator inside dropdown */
-        .dropdown-divider {
-            height: 1px;
-            background-color: #dee2e6;
-            margin: 4px 0;
-        }
-
+        .dropdown-content button:hover { background-color: var(--light); }
+        .dropdown-divider { height: 1px; background-color: var(--border); margin: 4px 0; }
         .show { display: block; }
-
-        /* Toolbar Buttons */
-        .btn {
-            padding: 8px 16px;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 13px;
-            transition: background 0.2s, transform 0.1s;
-        }
-        
-        .btn-primary { background: #0d6efd; }
-        .btn-primary:hover { background: #0b5ed7; }
-        .btn-primary:active { transform: scale(0.98); }
-
-        .btn-secondary { background: #6c757d; color: white; }
-        .btn-secondary:hover { background: #5c636a; }
 
         #editor {
             flex-grow: 1;
             width: 100%;
             border: none;
-            resize: none;
+            outline: none;
             padding: 20px;
-            font-family: 'Consolas', 'Monaco', monospace;
             font-size: 13px;
             line-height: 1.5;
-            box-sizing: border-box;
-            outline: none;
-            color: #212529;
         }
 
-        #editor::selection {
-            background-color: #ffe8cc;
-            color: #000;
-        }
+        #editor::selection { background-color: #ffe8cc; color: #000; }
 
         /* Graph Pane */
         #cy {
             width: 65%;
             background: #ffffff;
-            background-image: radial-gradient(#dee2e6 1px, transparent 1px);
+            background-image: radial-gradient(var(--border) 1px, transparent 1px);
             background-size: 20px 20px;
         }
         
-        /* Error Box */
-        #error-box {
-            color: #842029;
-            background-color: #f8d7da;
-            padding: 10px;
-            font-size: 12px;
-            display: none;
-            border-top: 1px solid #f5c6cb;
-            max-height: 120px;
-            overflow-y: auto;
-        }
+        #error-box { display: none; max-height: 120px; overflow-y: auto; border-radius: 0; border-top: 1px solid #f5c6cb; border-left: 0; border-right: 0; border-bottom: 0; margin-top: 0; }
   </style>
 </head>
 <body>
@@ -154,8 +104,8 @@
       
       <input type="file" id="file-input" accept=".ftt,.txt" style="display: none;">
 
-      <textarea id="editor" spellcheck= "false"></textarea>
-      <div id="error-box"></div>
+      <textarea id="editor" spellcheck="false"></textarea>
+      <div id="error-box" class="error-box"></div>
     </div>
     <div id="cy"></div>
   </div>

@@ -4,53 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FamilyTree-Text (FTT) Project</title>
+    <link rel="stylesheet" href="./css/shared.css">
     <style>
-        :root {
-            --primary: #0d6efd;
-            --primary-hover: #0b5ed7;
-            --secondary: #6c757d;
-            --light: #f8f9fa;
-            --dark: #212529;
-            --border: #dee2e6;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: var(--dark);
-            margin: 0;
-            padding: 0;
-            background-color: #fff;
-        }
-
-        /* Hero Section */
+        /* Homepage-specific styles */
+        body { background-color: white; }
+        
         .hero {
             background-color: var(--light);
             padding: 4rem 2rem;
             text-align: center;
             border-bottom: 1px solid var(--border);
         }
+        .hero h1 { justify-content: center; font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .hero p.tagline { font-size: 1.25rem; max-width: 600px; margin: 0 auto 2rem auto; }
 
-        .hero h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            color: var(--dark);
-        }
-
-        .hero p.tagline {
-            font-size: 1.25rem;
-            color: var(--secondary);
-            max-width: 600px;
-            margin: 0 auto 2rem auto;
-        }
-
-        /* Tools Navigation */
         .tools-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 2rem;
             max-width: 1100px; 
-            margin: -3rem auto 3rem auto; /* Overlap hero */
+            margin: -3rem auto 3rem auto;
             padding: 0 1rem;
         }
 
@@ -66,63 +39,11 @@
             flex-direction: column;
             justify-content: space-between;
         }
+        .tool-card:hover { transform: translateY(-5px); }
+        .tool-card h2 { color: var(--primary); margin-top: 0; }
 
-        .tool-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .tool-card h2 {
-            margin-top: 0;
-            color: var(--primary);
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            margin-top: 15px;
-            background-color: var(--primary);
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-
-        .btn:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .btn-outline {
-            background-color: transparent;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-        }
-
-        .btn-outline:hover {
-            background-color: var(--primary);
-            color: white;
-        }
-
-        /* Features / Info Section */
-        .info-section {
-            max-width: 800px;
-            margin: 0 auto 4rem auto;
-            padding: 0 2rem;
-        }
-
-        .info-section h3 {
-            border-bottom: 2px solid var(--light);
-            padding-bottom: 0.5rem;
-            margin-top: 2rem;
-        }
-
-        code {
-            background: var(--light);
-            padding: 2px 5px;
-            border-radius: 3px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            color: #d63384;
-        }
+        .info-section { max-width: 800px; margin: 0 auto 4rem auto; padding: 0 2rem; }
+        .info-section h3 { border-bottom: 2px solid var(--light); padding-bottom: 0.5rem; margin-top: 2rem; }
 
         footer {
             background: var(--light);
@@ -130,8 +51,8 @@
             padding: 2rem;
             margin-top: auto;
             border-top: 1px solid var(--border);
-            font-size: 0.9rem;
             color: var(--secondary);
+            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -142,7 +63,7 @@
         <p class="tagline">Data durability through human-readable, machine-parseable UTF-8 plain text.</p>
         
         <div style="margin-top: 1rem;">
-            <a href="https://github.com/arthurdick/familytree-text/blob/main/spec/ftt_spec_v0.1.md" class="btn btn-outline">Read Specification (v0.1)</a>
+            <a href="https://github.com/arthurdick/familytree-text/blob/main/spec/ftt_spec_v0.1.md" class="btn btn-outline">Read Specification</a>
             <a href="https://github.com/arthurdick/familytree-text" class="btn btn-outline" target="_blank">View on GitHub</a>
         </div>
     </section>
@@ -153,7 +74,7 @@
                 <h2>Graph Visualizer</h2>
                 <p>Write FTT code in the browser and instantly render an interactive genealogy graph.</p>
             </div>
-            <a href="tools/visualizer.html" class="btn">Launch Visualizer</a>
+            <a href="tools/visualizer.html" class="btn btn-primary" style="margin-top:15px;">Launch Visualizer</a>
         </div>
 
         <div class="tool-card">
@@ -161,7 +82,7 @@
                 <h2>Relationship Calculator</h2>
                 <p>Input your FTT data and two IDs to calculate the exact kinship between individuals.</p>
             </div>
-            <a href="tools/relationship.html" class="btn">Launch Calculator</a>
+            <a href="tools/relationship.html" class="btn btn-primary" style="margin-top:15px;">Launch Calculator</a>
         </div>
 
         <div class="tool-card">
@@ -169,7 +90,7 @@
                 <h2>Format Bridge</h2>
                 <p>Import existing data from GEDCOM 5.5.1 or export your FTT tree for use in other software.</p>
             </div>
-            <a href="tools/converter.html" class="btn">Launch Converter</a>
+            <a href="tools/converter.html" class="btn btn-primary" style="margin-top:15px;">Launch Converter</a>
         </div>
     </div>
 
