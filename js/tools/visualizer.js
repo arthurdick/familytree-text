@@ -308,6 +308,39 @@ document.addEventListener('DOMContentLoaded', () => {
     btnNew.id = "btn-new";
     fileMenuContent.insertBefore(btnNew, fileMenuContent.firstChild);
 
+    let cachedLineHeight = 20; // Safe fallback
+
+    function updateLineHeight() {
+        const computedStyle = window.getComputedStyle(editor);
+        const lhStr = computedStyle.lineHeight;
+        
+        // Use explicit pixel value if available
+        if (lhStr.endsWith('px')) {
+            cachedLineHeight = parseFloat(lhStr);
+            return;
+        }
+
+        // Measure strictly if 'normal' or unitless
+        const tempSpan = document.createElement('span');
+        tempSpan.style.fontFamily = computedStyle.fontFamily;
+        tempSpan.style.fontSize = computedStyle.fontSize;
+        tempSpan.style.lineHeight = lhStr;
+        tempSpan.style.whiteSpace = 'pre';
+        tempSpan.style.visibility = 'hidden';
+        tempSpan.style.position = 'absolute';
+        tempSpan.textContent = 'Mg'; // Mixed ascenders/descenders
+
+        document.body.appendChild(tempSpan);
+        cachedLineHeight = tempSpan.offsetHeight;
+        document.body.removeChild(tempSpan);
+    }
+
+    // Initialize & Listen for Resize
+    updateLineHeight();
+    window.addEventListener('resize', () => {
+        updateLineHeight();
+    });
+
     const cy = cytoscape({
         container: document.getElementById('cy'),
         style: [
@@ -504,34 +537,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Helper: Calculate dynamic line height of the textarea
-    function getLineHeight(element) {
-        const computedStyle = window.getComputedStyle(element);
-        const lineHeight = computedStyle.lineHeight;
-
-        // If explicitly set to pixels (e.g. "20px")
-        if (lineHeight.endsWith('px')) {
-            return parseFloat(lineHeight);
-        }
-
-        // If "normal" or unitless, we must measure a dummy element
-        // (Browsers vary on "normal", usually ~1.2 * fontSize)
-        const tempSpan = document.createElement('span');
-        tempSpan.style.fontFamily = computedStyle.fontFamily;
-        tempSpan.style.fontSize = computedStyle.fontSize;
-        tempSpan.style.lineHeight = lineHeight;
-        tempSpan.style.whiteSpace = 'pre';
-        tempSpan.style.visibility = 'hidden';
-        tempSpan.style.position = 'absolute';
-        tempSpan.textContent = 'Mg'; // Mixed ascenders/descenders
-
-        document.body.appendChild(tempSpan);
-        const height = tempSpan.offsetHeight;
-        document.body.removeChild(tempSpan);
-
-        return height;
-    }
-
     // Sync: Graph -> Editor
     cy.on('tap', 'node', (evt) => {
         const node = evt.target;
@@ -546,15 +551,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (match) {
             const index = match.index;
             const lineNum = text.substring(0, index).split('\n').length;
-            
-            // Calculate dynamic line height
-            const lineHeight = getLineHeight(editor);
 
             editor.focus();
             editor.setSelectionRange(index, index + match[0].length);
             
             // Scroll so the line is roughly vertically centered (minus 3 lines padding)
-            editor.scrollTop = (lineNum - 3) * lineHeight;
+            editor.scrollTop = (lineNum - 3) * cachedLineHeight;
         }
     });
 
