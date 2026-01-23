@@ -1,10 +1,13 @@
 /**
  * FamilyTree-Text (FTT) Reference Parser v0.1
- * * Usage:
+ * Usage:
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
- * console.log(result);
  */
+
+const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
+const KEY_PATTERN = /^([A-Z0-9_]+):(?:\s+(.*))?$/;
+const DATE_PATTERN = /^(\?|\.\.|\[.*\.\..*\]|-?[\dX]+(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
 
 export default class FTTParser {
     constructor() {
@@ -13,35 +16,35 @@ export default class FTTParser {
 
     /**
      * Main Entry Point
+     * Creates a fresh session for every parse to ensure no shared state side-effects.
      * @param {string} rawText - The UTF-8 file content.
      * @returns {object} - { headers, records, errors, warnings }
      */
     parse(rawText) {
-        // Delegate to a fresh session to ensure purity (no mutation of FTTParser instance)
         const session = new ParseSession(this.SUPPORTED_VERSION);
         return session.run(rawText);
     }
 }
 
 /**
- * Internal class to handle the state of a single parse operation.
+ * Internal Class: Encapsulates the state of a single parse operation.
  */
 class ParseSession {
     constructor(version) {
         this.SUPPORTED_VERSION = version;
-        
+
         // Output Data
         this.headers = {};
         this.records = new Map(); // Map<ID, RecordObject>
-        this.ids = new Set();     // Fast lookup for existence
-        this.errors = [];         // Critical Validation Errors
-        this.warnings = [];       // Consistency Warnings & Notices
-        
+        this.ids = new Set(); // Fast lookup for existence
+        this.errors = []; // Critical Validation Errors
+        this.warnings = []; // Consistency Warnings & Notices
+
         // Internal Parsing State
         this.currentRecordId = null;
         this.currentKey = null;
-        this.buffer = [];         // Line buffer for multi-line content
-        this.lastFieldRef = null; // Pointer to the last created field object (for Modifiers)
+        this.buffer = []; // Line buffer for multi-line content
+        this.lastFieldRef = null; // Pointer to the last created field object
         this.currentModifierTarget = null;
     }
 
@@ -50,8 +53,7 @@ class ParseSession {
         const lines = rawText.replace(/\r\n/g, '\n').split('\n');
 
         for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            this._processLine(line, i + 1);
+            this._processLine(lines[i], i + 1);
         }
 
         // Flush final buffer
@@ -72,7 +74,7 @@ class ParseSession {
     }
 
     // =========================================================================
-    // 1. Line Processing Logic (Section 8.1)
+    // 1. Line Processing Logic
     // =========================================================================
 
     _processLine(line, lineNum) {
@@ -89,17 +91,15 @@ class ParseSession {
         // 3. Indentation Check (Continuation)
         if (line.startsWith('  ')) {
             if (!this.currentKey) {
-                // Orphaned indentation (Validation Error)
                 this._error(`Line ${lineNum}: Indented content without a preceding key.`);
                 return;
             }
-            
-            // Strip exactly 2 spaces
+
             const content = line.substring(2);
-            
-            // Space Folding Rule: If buffer has content and doesn't end in newline, add space
+
+            // Space Folding Rule
             if (this.buffer.length > 0 && this.buffer[this.buffer.length - 1] !== '\n') {
-                this.buffer.push(' '); 
+                this.buffer.push(' ');
             }
             this.buffer.push(content);
             return;
@@ -108,22 +108,16 @@ class ParseSession {
         // 4. Blank Line Check (Paragraph Break)
         if (!line.trim()) {
             if (this.currentKey) {
-                // Inject paragraph marker into buffer, but don't close block yet
-                this.buffer.push('\n'); 
+                this.buffer.push('\n');
             }
             return;
         }
 
         // 5. New Key Detection (Column 0)
-        const keyMatch = line.match(/^([A-Z0-9_]+):(?:\s+(.*))?$/);
+        const keyMatch = line.match(KEY_PATTERN);
         if (keyMatch) {
-            // Terminate previous block
-            this._flushBuffer();
-
-            const key = keyMatch[1];
-            const inlineValue = keyMatch[2] || '';
-
-            this._handleNewKey(key, inlineValue, lineNum);
+            this._flushBuffer(); // Terminate previous block
+            this._handleNewKey(keyMatch[1], keyMatch[2] || '', lineNum);
             return;
         }
 
@@ -132,62 +126,55 @@ class ParseSession {
     }
 
     // =========================================================================
-    // 2. Key Handling & Modifier Logic (Section 8.2)
+    // 2. Key Handling & Modifier Logic
     // =========================================================================
 
     _handleNewKey(key, inlineValue, lineNum) {
         this.currentKey = key;
         if (inlineValue) this.buffer.push(inlineValue);
 
-        // Handle Global Headers (Before any ID)
+        // Global Headers
         if (key.startsWith('HEAD_')) {
             if (this.currentRecordId) {
                 this._error(`Line ${lineNum}: Header ${key} found inside a record block.`);
             }
-            // Headers are single strings, usually not repeatable.
-            // Normalize header values to NFC
             this.headers[key] = inlineValue.trim().normalize('NFC');
             return;
         }
 
-        // Handle Record ID (Start of new record)
+        // Record ID
         if (key === 'ID') {
-            // Normalize ID to NFC immediately (Section 3.1)
             const id = inlineValue.trim().normalize('NFC');
             this._validateID(id, lineNum);
-            
+
             if (this.records.has(id)) {
-                this._error(`Line ${lineNum}: Duplicate Record ID "${id}". Ignoring this definition to preserve the original.`);
-                this.currentRecordId = null; // Ensure subsequent fields don't overwrite or merge into the existing record
+                this._error(`Line ${lineNum}: Duplicate Record ID "${id}". Ignoring definition.`);
+                this.currentRecordId = null;
                 return;
             }
-            
+
             this.currentRecordId = id;
-            
             this.records.set(id, {
                 id: id,
                 type: this._determineRecordType(id),
                 data: {}
             });
             this.ids.add(id);
-            this.lastFieldRef = null; // Reset field context
+            this.lastFieldRef = null;
             return;
         }
 
-        // Handle Data Keys inside a Record
+        // Data Keys
         if (this.currentRecordId) {
             const record = this.records.get(this.currentRecordId);
 
-            // Check if this is a Modifier (ends in _SRC or _NOTE)
             if (key.endsWith('_SRC') || key.endsWith('_NOTE')) {
                 this._attachModifier(record, key, lineNum);
             } else {
-                // It is a primary field
                 this._createField(record, key);
             }
         } else {
-             // Key found outside header and outside record
-             this._error(`Line ${lineNum}: Key ${key} found outside of a record block.`);
+            this._error(`Line ${lineNum}: Key ${key} found outside of a record block.`);
         }
     }
 
@@ -196,43 +183,40 @@ class ParseSession {
             record.data[key] = [];
         }
 
-        // Create a new field object. 
-        // We store it as an object so modifiers can attach to it by reference.
         const newFieldObj = {
             raw: '',
-            parsed: [], // Will hold split pipe values
+            parsed: [],
             modifiers: {}
         };
 
         record.data[key].push(newFieldObj);
-        this.lastFieldRef = { key: key, obj: newFieldObj }; // Update pointer
+        this.lastFieldRef = {
+            key: key,
+            obj: newFieldObj
+        };
     }
 
     _attachModifier(record, modKey, lineNum) {
-        // Validation: Modifier must follow a valid target (Section 8.2.4)
-        // e.g., BORN_SRC must follow BORN
         const baseKey = modKey.replace(/_(SRC|NOTE)$/, '');
-        
+
         if (!this.lastFieldRef || this.lastFieldRef.key !== baseKey) {
             this._error(`Line ${lineNum}: Modifier ${modKey} does not immediately follow a ${baseKey} field.`);
             return;
         }
 
-        // Attach to the specific field instance
         if (!this.lastFieldRef.obj.modifiers[modKey]) {
             this.lastFieldRef.obj.modifiers[modKey] = [];
         }
-        
-        // We create a container for the modifier value
-        const modObj = { raw: '' }; 
+
+        const modObj = {
+            raw: ''
+        };
         this.lastFieldRef.obj.modifiers[modKey].push(modObj);
-        
-        // Hijack the flush logic to update this specific modifier object
         this.currentModifierTarget = modObj;
     }
 
     // =========================================================================
-    // 3. Buffer Flushing & Parsing (Pipe Splitting)
+    // 3. Buffer Flushing & Parsing
     // =========================================================================
 
     _flushBuffer() {
@@ -244,35 +228,22 @@ class ParseSession {
         }
 
         const fullText = this.buffer.join('').trim();
-        
-        // Scenario A: flushing a Modifier
+
         if (this.currentModifierTarget) {
             this.currentModifierTarget.raw = fullText;
-            // Modifiers might have pipe structures too (e.g. citations), allow parsing
             this.currentModifierTarget.parsed = this._parsePipes(fullText);
             this.currentModifierTarget = null;
-        } 
-        // Scenario B: flushing a Global Header
-        else if (this.currentKey.startsWith('HEAD_')) {
-            // Normalize multiline headers
+        } else if (this.currentKey.startsWith('HEAD_')) {
             this.headers[this.currentKey] = fullText.normalize('NFC');
-        }
-        // Scenario C: flushing a Record Field
-        else if (this.currentRecordId && this.lastFieldRef) {
-            // Update the object created in _createField
+        } else if (this.currentRecordId && this.lastFieldRef) {
             this.lastFieldRef.obj.raw = fullText;
             this.lastFieldRef.obj.parsed = this._parsePipes(fullText);
         }
 
-        // Reset
         this.buffer = [];
         this.currentKey = null;
     }
 
-    /**
-     * Splits string by pipe `|` but respects escaped `\|`
-     * Normalizes all values to NFC.
-     */
     _parsePipes(text) {
         const values = [];
         let currentVal = '';
@@ -280,23 +251,20 @@ class ParseSession {
 
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
-            
+
             if (isEscaped) {
                 currentVal += char;
                 isEscaped = false;
             } else if (char === '\\') {
                 isEscaped = true;
             } else if (char === '|') {
-                // Pipe delimiter - Push normalized value
                 values.push(currentVal.trim().normalize('NFC'));
                 currentVal = '';
             } else {
                 currentVal += char;
             }
         }
-        // Push last value, normalized
         values.push(currentVal.trim().normalize('NFC'));
-        
         return values;
     }
 
@@ -309,11 +277,7 @@ class ParseSession {
         this._processPlaceHierarchies();
     }
 
-    /**
-     * Section 8.3.2: Symmetric Relationship Injection & Consistency Check
-     */
     _injectImplicitUnions() {
-        // Iterate over all records to find defined unions
         for (const [id, record] of this.records) {
             if (!record.data['UNION']) continue;
 
@@ -322,25 +286,21 @@ class ParseSession {
                 if (!partnerId) continue;
 
                 const partnerRecord = this.records.get(partnerId);
-                
-                // If partner doesn't exist, _validateGraph will catch it as a dangling ref later.
-                if (!partnerRecord) continue; 
+                if (!partnerRecord) continue;
 
-                // Check if partner already links back to `id`
+                // Check reciprocals
                 let reciprocalField = null;
                 if (partnerRecord.data['UNION']) {
                     reciprocalField = partnerRecord.data['UNION'].find(u => u.parsed[0] === id);
                 }
 
                 if (reciprocalField) {
-                    // RESOLUTION: Consistency Check
-                    // Compare TYPE (1), START (2), END (3), REASON (4)
+                    // Consistency Check
                     for (let i = 1; i <= 4; i++) {
                         const valA = (unionField.parsed[i] || '').trim();
                         const valB = (reciprocalField.parsed[i] || '').trim();
-                        
                         if (valA !== valB) {
-                            this._warning(`Consistency Warning: Union between ${id} and ${partnerId} has conflicting data at field index ${i} ("${valA}" vs "${valB}").`);
+                            this._warning(`Consistency Warning: Union between ${id} and ${partnerId} conflict at index ${i} ("${valA}" vs "${valB}").`);
                         }
                     }
                 } else {
@@ -348,15 +308,13 @@ class ParseSession {
                     if (!partnerRecord.data['UNION']) {
                         partnerRecord.data['UNION'] = [];
                     }
-
-                    // Clone the definition but swap the ID to point back to the original record
                     const implicitParsed = [...unionField.parsed];
-                    implicitParsed[0] = id; // Set target to current ID
+                    implicitParsed[0] = id;
 
                     partnerRecord.data['UNION'].push({
                         raw: `(Implicit Reciprocal of ${id})`,
                         parsed: implicitParsed,
-                        modifiers: {} // We do not copy modifiers (notes/citations) as they may be person-specific
+                        modifiers: {}
                     });
                 }
             }
@@ -364,11 +322,10 @@ class ParseSession {
     }
 
     _processPlaceHierarchies() {
-        // Map of Keys to the Index where the Place string is located
         const PLACE_INDICES = {
             'BORN': 1,
             'DIED': 1,
-            'EVENT': 3, // TYPE | START | END | PLACE
+            'EVENT': 3,
             'PLACE': 0
         };
 
@@ -381,12 +338,12 @@ class ParseSession {
                     if (field.parsed.length > placeIdx) {
                         const rawPlace = field.parsed[placeIdx];
                         if (rawPlace && (rawPlace.includes('{=') || rawPlace.includes('<'))) {
-                            const { display, geo, coords } = this._parsePlaceString(rawPlace);
-                            
-                            // 1. Update parsed value to satisfy "Display Value" requirement
+                            const {
+                                display,
+                                geo,
+                                coords
+                            } = this._parsePlaceString(rawPlace);
                             field.parsed[placeIdx] = display;
-                            
-                            // 2. Attach metadata for Geocoding (Runtime Memory Model)
                             if (!field.metadata) field.metadata = {};
                             if (geo) field.metadata.geo = geo;
                             if (coords) field.metadata.coords = coords;
@@ -399,36 +356,29 @@ class ParseSession {
 
     _parsePlaceString(str) {
         const coordsRegex = /<(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)>/;
-        
         const coordsMatch = str.match(coordsRegex);
-        
         let coords = null;
         if (coordsMatch) {
-            // We reconstruct the string to standard format "Lat, Long"
-            // This strips extra whitespace captured in the regex
             coords = `${coordsMatch[1]}, ${coordsMatch[2]}`;
         }
 
         let display = str
-            .replace(/\s*\{=.*?\}/g, '') // Remove geocoding overrides
-            .replace(coordsRegex, '');   // Remove ONLY valid coordinates
-        
-        // Safety Clean-up: If the user had multiple sets or invalid brackets,
-        // we generally leave them alone to avoid destroying data, 
-        // but we trim the result.
-        display = display.trim();
+            .replace(/\s*\{=.*?\}/g, '')
+            .replace(coordsRegex, '')
+            .trim();
 
-        // Extract Geo (Geocoding Override)
         const geoRaw = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
-        
-        // Remove coordinates from the geo string as well
         const geo = geoRaw.replace(coordsRegex, '').trim();
 
-        return { display, geo, coords };
+        return {
+            display,
+            geo,
+            coords
+        };
     }
 
     // =========================================================================
-    // 5. Validation & Types (Section 3 & 8.3)
+    // 5. Validation & Types
     // =========================================================================
 
     _determineRecordType(id) {
@@ -440,59 +390,45 @@ class ParseSession {
 
     _validateID(id, lineNum) {
         if (/[\s|;\p{C}]/u.test(id)) {
-            this._error(`Line ${lineNum}: ID "${id}" contains forbidden characters (Whitespace, Pipe, Semicolon, or Control).`);
-            return; 
+            this._error(`Line ${lineNum}: ID "${id}" contains forbidden characters.`);
+            return;
         }
 
         const firstChar = id.charAt(0);
         if (!['^', '&', '?'].includes(firstChar)) {
-            const standardIdPattern = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
-            if (!standardIdPattern.test(id)) {
-                this._error(`Line ${lineNum}: Invalid Standard ID "${id}". Must start with alphanumeric and contain only alphanumeric or hyphens.`);
+            if (!STANDARD_ID_PATTERN.test(id)) {
+                this._error(`Line ${lineNum}: Invalid Standard ID "${id}".`);
             }
         }
     }
 
     _validateGraph() {
-        // Check for Required Headers & Version Compatibility
         const formatHeader = this.headers['HEAD_FORMAT'];
         if (!formatHeader) {
-            this._error('Missing Required Header: File must declare "HEAD_FORMAT" (e.g., "HEAD_FORMAT: FTT v0.1").');
+            this._error('Missing Header: HEAD_FORMAT');
         } else {
             const match = formatHeader.match(/v(\d+(\.\d+)?)/);
-            if (match) {
-                const fileVersion = parseFloat(match[1]);
-                if (fileVersion > this.SUPPORTED_VERSION) {
-                    this._error(`Version Error: File version (v${fileVersion}) is higher than supported version (v${this.SUPPORTED_VERSION}).`);
-                }
-            } else {
-                 this._error(`Header Format Error: Could not parse version number from "${formatHeader}". Expected format "FTT vX.X".`);
+            if (match && parseFloat(match[1]) > this.SUPPORTED_VERSION) {
+                this._error(`Version Error: File (v${match[1]}) > Supported (v${this.SUPPORTED_VERSION}).`);
             }
         }
-        
+
         // 1. Dangling Reference Check
-        this.records.forEach((record, id) => {
-            this._checkReferences(record);
-        });
+        this.records.forEach((record) => this._checkReferences(record));
 
         // 2. Ghost Child Check
         this.records.forEach((record, parentId) => {
             if (record.data['CHILD']) {
                 record.data['CHILD'].forEach(childField => {
                     const childId = childField.parsed[0];
-                    if (!childId) return;
-                    if (childId.startsWith('?')) return;
+                    if (!childId || childId.startsWith('?')) return;
 
                     const childRecord = this.records.get(childId);
-                    if (!childRecord) return; 
+                    if (!childRecord) return;
 
-                    let pointsBack = false;
-                    if (childRecord.data['PARENT']) {
-                        pointsBack = childRecord.data['PARENT'].some(p => p.parsed[0] === parentId);
-                    }
-
+                    const pointsBack = childRecord.data['PARENT']?.some(p => p.parsed[0] === parentId);
                     if (!pointsBack) {
-                        this._error(`Ghost Child Error: Record ${parentId} claims ${childId} is a CHILD, but ${childId} does not list ${parentId} as a PARENT.`);
+                        this._error(`Ghost Child Error: ${parentId} -> ${childId} (Missing PARENT link).`);
                     }
                 });
             }
@@ -515,13 +451,12 @@ class ParseSession {
                     const parentId = pField.parsed[0];
                     if (parentId && !parentId.startsWith('?') && this.records.has(parentId)) {
                         if (detectCycle(parentId)) {
-                            this._error(`Circular Lineage detected involving ${currId} and ${parentId}.`);
+                            this._error(`Circular Lineage: ${currId} <-> ${parentId}`);
                             return true;
                         }
                     }
                 }
             }
-
             recursionStack.delete(currId);
             return false;
         };
@@ -531,29 +466,25 @@ class ParseSession {
                 if (!visited.has(id)) detectCycle(id);
             }
         }
-        
-        // 4. Vocabulary Validation
-        this._validateVocabulary();
 
-        // 5. Date Format Validation
+        // 4. Vocabulary & Date Validation
+        this._validateVocabulary();
         this._validateDates();
     }
 
     _validateVocabulary() {
-        // Appendix A.1: Parent/Child Types
+        // 1. Parent/Child Types
         const VALID_PARENT_TYPES = new Set(['BIO', 'ADO', 'STE', 'FOS', 'UNK']);
-        
-        // Appendix A.2: Union Types
+
+        // 2. Union Types
         const VALID_UNION_TYPES = new Set(['MARR', 'PART', 'UNK']);
-        
-        // Appendix A.3: Relationship Termination Codes
         const VALID_UNION_REASONS = new Set(['DIV', 'SEP', 'WID', 'ANN']);
 
-        // Appendix B.1 & B.2: Name Types & Status
+        // 3. Name Types & Status
         const VALID_NAME_TYPES = new Set(['BIRTH', 'MARR', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']);
         const VALID_NAME_STATUS = new Set(['PREF']);
 
-        // Appendix E: Associate Roles
+        // 4. Associate Roles
         const VALID_ASSOC_ROLES = new Set([
             'GODP', 'GODC', 'SPON', 'OFFI', // Religious
             'WITN', 'EXEC', 'GUAR', 'WARD', 'INFO', // Legal
@@ -561,61 +492,50 @@ class ParseSession {
         ]);
 
         for (const record of this.records.values()) {
-            // 1. Validate PARENT Types (Strict)
-            if (record.data['PARENT']) {
-                record.data['PARENT'].forEach(f => {
-                    const type = (f.parsed[1] || '').trim();
-                    if (type && !VALID_PARENT_TYPES.has(type)) {
-                        this._error(`Vocabulary Error: Invalid PARENT Type "${type}" in record ${record.id}. Expected one of: ${[...VALID_PARENT_TYPES].join(', ')}.`);
-                    }
-                });
-            }
+            // Parent Checks
+            record.data['PARENT']?.forEach(f => {
+                const type = (f.parsed[1] || '').trim();
+                if (type && !VALID_PARENT_TYPES.has(type)) {
+                    this._error(`Invalid PARENT Type "${type}" in ${record.id}`);
+                }
+            });
 
-            // 2. Validate UNION Types & Reasons (Strict)
-            if (record.data['UNION']) {
-                record.data['UNION'].forEach(f => {
-                    const type = (f.parsed[1] || '').trim();
-                    const reason = (f.parsed[4] || '').trim();
+            // Union Checks
+            record.data['UNION']?.forEach(f => {
+                const type = (f.parsed[1] || '').trim();
+                const reason = (f.parsed[4] || '').trim();
+                if (type && !VALID_UNION_TYPES.has(type)) {
+                    this._error(`Invalid UNION Type "${type}" in ${record.id}`);
+                }
+                if (reason && !VALID_UNION_REASONS.has(reason)) {
+                    this._error(`Invalid UNION Reason "${reason}" in ${record.id}`);
+                }
+            });
 
-                    if (type && !VALID_UNION_TYPES.has(type)) {
-                        this._error(`Vocabulary Error: Invalid UNION Type "${type}" in record ${record.id}. Expected one of: ${[...VALID_UNION_TYPES].join(', ')}.`);
-                    }
-                    if (reason && !VALID_UNION_REASONS.has(reason)) {
-                        this._error(`Vocabulary Error: Invalid UNION End Reason "${reason}" in record ${record.id}. Expected one of: ${[...VALID_UNION_REASONS].join(', ')}.`);
-                    }
-                });
-            }
+            // Name Checks (Advisory)
+            record.data['NAME']?.forEach(f => {
+                const type = (f.parsed[2] || '').trim();
+                const status = (f.parsed[3] || '').trim();
 
-            // 3. Validate NAME Types (Advisory Warning)
-            if (record.data['NAME']) {
-                record.data['NAME'].forEach(f => {
-                    const type = (f.parsed[2] || '').trim();
-                    const status = (f.parsed[3] || '').trim();
+                if (type && !VALID_NAME_TYPES.has(type)) {
+                    this._warning(`Vocabulary Notice: Non-standard NAME Type "${type}" in record ${record.id}.`);
+                }
+                if (status && !VALID_NAME_STATUS.has(status)) {
+                    this._error(`Vocabulary Error: Invalid NAME Status "${status}" in record ${record.id}.`);
+                }
+            });
 
-                    if (type && !VALID_NAME_TYPES.has(type)) {
-                        this._warning(`Vocabulary Notice: Non-standard NAME Type "${type}" in record ${record.id}.`);
-                    }
-                    if (status && !VALID_NAME_STATUS.has(status)) {
-                        this._error(`Vocabulary Error: Invalid NAME Status "${status}" in record ${record.id}. Expected "PREF" or empty.`);
-                    }
-                });
-            }
-
-            // 4. Validate ASSOC Roles (Advisory Warning)
-            if (record.data['ASSOC']) {
-                record.data['ASSOC'].forEach(f => {
-                    const role = (f.parsed[1] || '').trim();
-                    if (role && !VALID_ASSOC_ROLES.has(role)) {
-                        this._warning(`Vocabulary Notice: Non-standard ASSOC Role "${role}" in record ${record.id}.`);
-                    }
-                });
-            }
+            // Assoc Checks (Advisory)
+            record.data['ASSOC']?.forEach(f => {
+                const role = (f.parsed[1] || '').trim();
+                if (role && !VALID_ASSOC_ROLES.has(role)) {
+                    this._warning(`Vocabulary Notice: Non-standard ASSOC Role "${role}" in record ${record.id}.`);
+                }
+            });
         }
     }
-    
-    _validateDates() {
-        const datePattern = /^(\?|\.\.|\[.*\.\..*\]|-?[\dX]+(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
 
+    _validateDates() {
         const DATE_KEYS = {
             'BORN': [0],
             'DIED': [0],
@@ -627,23 +547,20 @@ class ParseSession {
             'END_DATE': [0]
         };
 
-        // Check Global Headers
-        if (this.headers['HEAD_DATE'] && !datePattern.test(this.headers['HEAD_DATE'])) {
-            this._error(`Date Format Error: HEAD_DATE "${this.headers['HEAD_DATE']}" is invalid.`);
+        if (this.headers['HEAD_DATE'] && !DATE_PATTERN.test(this.headers['HEAD_DATE'])) {
+            this._error(`Invalid HEAD_DATE: "${this.headers['HEAD_DATE']}"`);
         }
 
-        // Check All Records
         for (const record of this.records.values()) {
             for (const [key, fields] of Object.entries(record.data)) {
                 if (DATE_KEYS[key]) {
                     const indicesToCheck = DATE_KEYS[key];
-                    
                     fields.forEach(field => {
                         indicesToCheck.forEach(idx => {
                             if (field.parsed.length > idx) {
                                 const dateVal = field.parsed[idx];
-                                if (dateVal && !datePattern.test(dateVal)) {
-                                    this._error(`Date Format Error: Invalid date "${dateVal}" in ${record.id} (${key}). Expected ISO 8601-2/EDTF.`);
+                                if (dateVal && !DATE_PATTERN.test(dateVal)) {
+                                    this._error(`Invalid Date "${dateVal}" in ${record.id} (${key})`);
                                 }
                             }
                         });
@@ -655,16 +572,13 @@ class ParseSession {
 
     _checkReferences(record) {
         const refKeys = ['PARENT', 'CHILD', 'UNION', 'ASSOC', 'SRC', 'EVENT_REF'];
-        
         refKeys.forEach(key => {
-            if (record.data[key]) {
-                record.data[key].forEach(field => {
-                    const targetId = field.parsed[0];
-                    if (targetId && !this._idExists(targetId)) {
-                        this._error(`Dangling Reference: ${record.id} points to missing ID ${targetId} in ${key}.`);
-                    }
-                });
-            }
+            record.data[key]?.forEach(field => {
+                const targetId = field.parsed[0];
+                if (targetId && !this._idExists(targetId)) {
+                    this._error(`Dangling Reference: ${record.id} -> ${targetId} (${key})`);
+                }
+            });
         });
 
         Object.values(record.data).forEach(fieldList => {
@@ -674,7 +588,7 @@ class ParseSession {
                         field.modifiers[modKey].forEach(mod => {
                             const srcId = mod.parsed[0];
                             if (srcId && !this._idExists(srcId)) {
-                                this._error(`Dangling Reference: ${record.id} cites missing Source ${srcId} in ${modKey}.`);
+                                this._error(`Dangling Citation: ${record.id} -> ${srcId} (${modKey})`);
                             }
                         });
                     }
@@ -691,7 +605,6 @@ class ParseSession {
     _error(msg) {
         this.errors.push(msg);
     }
-
     _warning(msg) {
         this.warnings.push(msg);
     }
