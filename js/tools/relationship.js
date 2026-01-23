@@ -53,10 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // 1. Parse Data using the included library
-            if (typeof FTTParser === 'undefined') {
-                throw new Error("FTTParser.js not found. Please ensure it is in the js/ folder.");
-            }
-
             const parser = new FTTParser();
             const parseResult = parser.parse(source);
 
