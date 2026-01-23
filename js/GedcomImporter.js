@@ -9,7 +9,6 @@
 
 export default class GedcomImporter {
   constructor() {
-    this.ids = new Map(); // Maps GEDCOM IDs (@I1@) to FTT IDs (I1)
     this.individuals = new Map();
     this.families = new Map();
     this.sources = new Map();
@@ -22,7 +21,6 @@ export default class GedcomImporter {
   }
 
   _reset() {
-    this.ids.clear();
     this.individuals.clear();
     this.families.clear();
     this.sources.clear();
@@ -78,7 +76,6 @@ export default class GedcomImporter {
         if (tag === 'INDI') this.individuals.set(cleanId, currentRecord);
         else if (tag === 'FAM') this.families.set(cleanId, currentRecord);
         else if (tag === 'SOUR') this.sources.set(cleanId, currentRecord);
-        else if (tag === 'HEAD') this.header = currentRecord;
 
       } else {
         // Child Node
