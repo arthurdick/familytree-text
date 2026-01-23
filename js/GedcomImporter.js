@@ -1,10 +1,6 @@
 /**
- * GedcomImporter (v0.1)
+ * GedcomImporter
  * Converts GEDCOM 5.5.1 to FamilyTree-Text (FTT).
- *
- * Usage:
- * const converter = new GedcomImporter();
- * const fttOutput = converter.convert(gedcomString);
  */
 
 export default class GedcomImporter {
@@ -26,7 +22,7 @@ export default class GedcomImporter {
     this.sources.clear();
   }
 
-// =========================================================================
+  // =========================================================================
   // Pass 1: Parse GEDCOM into Memory Objects
   // =========================================================================
   _firstPassParse(data) {
@@ -34,56 +30,65 @@ export default class GedcomImporter {
     let currentRecord = null;
     let stack = []; // To handle hierarchy levels
 
+    // Regex to parse: Level + [Optional ID] + Tag + [Optional Value]
+    // Capture Groups:
+    // 1: Level (Digits)
+    // 2: ID (Optional, @...@)
+    // 3: Tag (Alphanumeric)
+    // 4: Value (Optional, rest of line)
+    const lineRegex = /^\s*(\d+)\s+(?:(@[^@]+@)\s+)?(\w+)(?: (.*))?$/;
+
     lines.forEach((line) => {
-      line = line.trim();
-      if (!line) return;
+      if (!line.trim()) return;
 
-      // 1. Tokenize the line
-      // GEDCOM is strict: Level + Space + [Optional ID] + Space + Tag + [Space + Value]
-      const parts = line.split(/\s+/);
-      const level = parseInt(parts[0], 10);
-      
-      let id = null;
-      let tag = null;
-      let value = '';
+      const match = line.match(lineRegex);
+      if (!match) return; // Skip malformed lines
 
-      // Check if the second token is an ID (Starts/Ends with @)
-      if (parts[1] && parts[1].startsWith('@') && parts[1].endsWith('@')) {
-          // Format: 0 @I1@ INDI
-          id = parts[1];
-          tag = parts[2];
-          // Value is everything after the tag
-          value = parts.slice(3).join(' '); 
-      } else {
-          // Format: 1 NAME John Doe
-          tag = parts[1];
-          // Value is everything after the tag
-          value = parts.slice(2).join(' ');
+      const level = parseInt(match[1], 10);
+      const id = match[2] || null;
+      const tag = match[3];
+      const rawValue = match[4] || '';
+
+      const cleanId = id ? id.replace(/@/g, '') : null;
+
+      // --- Handle CONT / CONC (Concatenation) ---
+      // These tags modify the *previous* node (the parent of this level).
+      // Standard: CONT/CONC are at level n+1, modifying the node at level n.
+      // Therefore, the target is stack[level - 1].
+      if (tag === 'CONT' || tag === 'CONC') {
+        const targetNode = stack[level - 1];
+        if (targetNode) {
+          if (tag === 'CONT') {
+            targetNode.value += '\n' + rawValue;
+          } else {
+            // CONC: Concatenate strictly (preserve leading spaces in rawValue)
+            targetNode.value += rawValue;
+          }
+        }
+        return; // Done. Do not create a new node for CONT/CONC.
       }
 
-      // Cleanup
-      const cleanId = id ? id.replace(/@/g, '') : null;
-      if (!tag) return; // Skip malformed lines
-
-      const node = { tag, value, children: [] };
+      // --- Handle Standard Tags ---
+      const node = { tag, value: rawValue, children: [] };
 
       if (level === 0) {
-        // New Record Start
+        // Root Record Start
         currentRecord = { id: cleanId, type: tag, ...node };
-        stack = [currentRecord]; // Reset stack, index 0 is root
+        stack = []; // Reset stack
+        stack[0] = currentRecord; // Level 0 is at index 0
 
         // Store based on Type
         if (tag === 'INDI') this.individuals.set(cleanId, currentRecord);
         else if (tag === 'FAM') this.families.set(cleanId, currentRecord);
         else if (tag === 'SOUR') this.sources.set(cleanId, currentRecord);
-
+      
       } else {
         // Child Node
-        // Parent is always at level - 1
-        // Safety: Ensure stack has a parent at this level
-        if (stack[level - 1]) {
-          stack[level - 1].children.push(node);
-          stack[level] = node; // Set this node as the parent for level + 1
+        // Parent is strictly at level - 1
+        const parent = stack[level - 1];
+        if (parent) {
+          parent.children.push(node);
+          stack[level] = node; // Set this node as the parent for potential level + 1 children
         }
       }
     });
@@ -136,10 +141,10 @@ export default class GedcomImporter {
     out.push(`ID: ${fttId}`);
 
     const title = this._findTag(rec, 'TITL');
-    if (title) out.push(`TITLE: ${title}`);
+    if (title) out.push(`TITLE: ${title.replace(/\n/g, ' ')}`); // Flatten titles
 
     const auth = this._findTag(rec, 'AUTH');
-    if (auth) out.push(`AUTHOR: ${auth}`);
+    if (auth) out.push(`AUTHOR: ${auth.replace(/\n/g, ' ')}`);
   }
 
   _writeIndividual(indi, out) {
@@ -220,6 +225,21 @@ export default class GedcomImporter {
             out.push(`UNION: ${spouseId} | MARR | ${dateStr} || ${endReason}`);
         }
       }
+    });
+
+    // NOTES
+    // Handle multi-line notes that were merged via CONT/CONC
+    const noteNodes = indi.children.filter(c => c.tag === 'NOTE');
+    noteNodes.forEach(n => {
+        // FTT uses indented blocks for multi-line notes
+        // We split the note value by newline and indent subsequent lines
+        const lines = n.value.split('\n');
+        if(lines.length > 0) {
+            out.push(`NOTES: ${lines[0]}`);
+            for(let i=1; i<lines.length; i++) {
+                out.push(`  ${lines[i]}`);
+            }
+        }
     });
   }
 
