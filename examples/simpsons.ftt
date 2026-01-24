@@ -1,0 +1,167 @@
+HEAD_FORMAT: FTT v0.1
+HEAD_TITLE: The Simpsons: Complete Canonical Tree
+HEAD_AUTHOR: Gemini
+---
+
+# ==========================================
+# THE SIMPSON LINE
+# ==========================================
+
+ID: SIMPSON-OLD-PAPPY
+NAME: "Old Pappy" Simpson | Simpson, ? | BIRTH | PREF
+SEX: M
+CHILD: SIMPSON-ABRAHAM
+
+ID: SIMPSON-ABRAHAM
+NAME: Abraham Jebediah Simpson II | Simpson, Abraham Jebediah | BIRTH | PREF
+NAME: Grampa | Simpson, Abraham | NICK
+SEX: M
+BORN: 1907~
+PARENT: SIMPSON-OLD-PAPPY | BIO
+UNION: OLSEN-MONA | MARR | 1963~ | ? | SEP
+UNION: ?UNK-CARNIVAL-WORKER | PART
+UNION: WINTHROP-EDWINA | PART | 1944 | 1944 |
+CHILD: SIMPSON-HOMER
+CHILD: POWELL-HERBERT
+CHILD: SIMPSON-ABBIE
+
+ID: OLSEN-MONA
+NAME: Mona J. Olsen | Olsen, Mona | BIRTH
+NAME: Mona Simpson | Simpson, Mona | MARR | PREF
+SEX: F
+BORN: 1929~
+DIED: 2008
+UNION: SIMPSON-ABRAHAM | MARR | 1963~ | ? | SEP
+CHILD: SIMPSON-HOMER
+
+ID: SIMPSON-HOMER
+NAME: Homer Jay Simpson | Simpson, Homer Jay | BIRTH | PREF
+SEX: M
+BORN: 1956-05-12
+PARENT: SIMPSON-ABRAHAM | BIO
+PARENT: OLSEN-MONA | BIO
+UNION: BOUVIER-MARGE | MARR | 1980~ | .. |
+CHILD: SIMPSON-BART
+CHILD: SIMPSON-LISA
+CHILD: SIMPSON-MAGGIE
+
+ID: POWELL-HERBERT
+NAME: Herbert Powell | Powell, Herbert | BIRTH | PREF
+SEX: M
+PARENT: SIMPSON-ABRAHAM | BIO
+PARENT: ?UNK-CARNIVAL-WORKER | BIO
+
+ID: ?UNK-CARNIVAL-WORKER
+NAME: Unnamed Carnival Worker | ? || PREF
+SEX: F
+UNION: SIMPSON-ABRAHAM | PART
+CHILD: POWELL-HERBERT
+
+ID: SIMPSON-ABBIE
+NAME: Abbie | ? | BIRTH | PREF
+SEX: F
+BORN: 1944~ | England
+PARENT: SIMPSON-ABRAHAM | BIO
+PARENT: WINTHROP-EDWINA | BIO
+
+ID: WINTHROP-EDWINA
+NAME: Edwina Winthrop | Winthrop, Edwina | BIRTH | PREF
+SEX: F
+UNION: SIMPSON-ABRAHAM | PART | 1944 | 1944 |
+CHILD: SIMPSON-ABBIE
+
+# ==========================================
+# THE BOUVIER LINE
+# ==========================================
+
+ID: BOUVIER-PEPE
+NAME: Pepe Bouvier | Bouvier, Pepe | BIRTH | PREF
+SEX: M
+CHILD: BOUVIER-CLANCY
+
+ID: BOUVIER-CLANCY
+NAME: Clancy Bouvier | Bouvier, Clancy | BIRTH | PREF
+SEX: M
+PARENT: BOUVIER-PEPE | BIO
+UNION: GURNEY-JACQUELINE | MARR
+CHILD: BOUVIER-MARGE
+CHILD: BOUVIER-PATTY
+CHILD: BOUVIER-SELMA
+
+ID: GURNEY-JACQUELINE
+NAME: Jacqueline Gurney | Gurney, Jacqueline | BIRTH
+NAME: Jacqueline Bouvier | Bouvier, Jacqueline | MARR | PREF
+SEX: F
+UNION: BOUVIER-CLANCY | MARR
+CHILD: BOUVIER-MARGE
+CHILD: BOUVIER-PATTY
+CHILD: BOUVIER-SELMA
+
+ID: BOUVIER-MARGE
+NAME: Marjorie Jacqueline Bouvier | Bouvier, Marjorie | BIRTH
+NAME: Marge Simpson | Simpson, Marge | MARR | PREF
+SEX: F
+BORN: 1956-10-01
+PARENT: BOUVIER-CLANCY | BIO
+PARENT: GURNEY-JACQUELINE | BIO
+UNION: SIMPSON-HOMER | MARR | 1980~ | .. |
+CHILD: SIMPSON-BART
+CHILD: SIMPSON-LISA
+CHILD: SIMPSON-MAGGIE
+
+ID: BOUVIER-PATTY
+NAME: Patricia Maleficent Bouvier | Bouvier, Patricia | BIRTH | PREF
+SEX: F
+PARENT: BOUVIER-CLANCY | BIO
+PARENT: GURNEY-JACQUELINE | BIO
+
+ID: BOUVIER-SELMA
+NAME: Selma Bouvier | Bouvier, Selma | BIRTH | PREF
+SEX: F
+PARENT: BOUVIER-CLANCY | BIO
+PARENT: GURNEY-JACQUELINE | BIO
+UNION: TERWILLIGER-ROBERT | MARR | ? | ? | DIV
+UNION: MCCLURE-TROY | MARR | ? | ? | DIV
+CHILD: BOUVIER-LING
+
+ID: BOUVIER-LING
+NAME: Ling Bouvier | Bouvier, Ling | BIRTH | PREF
+SEX: F
+BORN: 2005~ | China
+PARENT: BOUVIER-SELMA | ADO
+
+# ==========================================
+# THE CHILDREN & ASSOCIATES
+# ==========================================
+
+ID: SIMPSON-BART
+NAME: Bartholomew JoJo Simpson | Simpson, Bartholomew | BIRTH | PREF
+NAME: Bart Simpson | Simpson, Bart | NICK
+SEX: M
+BORN: 1980-04-01
+PARENT: SIMPSON-HOMER | BIO
+PARENT: BOUVIER-MARGE | BIO
+
+ID: SIMPSON-LISA
+NAME: Lisa Marie Simpson | Simpson, Lisa Marie | BIRTH | PREF
+SEX: F
+BORN: 1982-05-09
+PARENT: SIMPSON-HOMER | BIO
+PARENT: BOUVIER-MARGE | BIO
+
+ID: SIMPSON-MAGGIE
+NAME: Margaret Evelyn Simpson | Simpson, Margaret | BIRTH | PREF
+NAME: Maggie Simpson | Simpson, Maggie | NICK
+SEX: F
+PARENT: SIMPSON-HOMER | BIO
+PARENT: BOUVIER-MARGE | BIO
+
+ID: TERWILLIGER-ROBERT
+NAME: Robert Underdunk Terwilliger Jr. | Terwilliger, Robert | BIRTH | PREF
+SEX: M
+UNION: BOUVIER-SELMA | MARR | ? | ? | DIV
+
+ID: MCCLURE-TROY
+NAME: Troy McClure | McClure, Troy | BIRTH | PREF
+SEX: M
+UNION: BOUVIER-SELMA | MARR | ? | ? | DIV
