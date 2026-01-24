@@ -1,6 +1,5 @@
 /**
- * FamilyTree-Text (FTT) Reference Parser v0.1
- * Usage:
+ * FamilyTree-Text (FTT) Reference Parser v0.1.1
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
  */
@@ -16,9 +15,8 @@ export default class FTTParser {
 
     /**
      * Main Entry Point
-     * Creates a fresh session for every parse to ensure no shared state side-effects.
-     * @param {string} rawText - The UTF-8 file content.
-     * @returns {object} - { headers, records, errors, warnings }
+     * @param {string} rawText
+     * @returns {object} { headers, records, errors, warnings }
      */
     parse(rawText) {
         const session = new ParseSession(this.SUPPORTED_VERSION);
@@ -27,7 +25,24 @@ export default class FTTParser {
 }
 
 /**
- * Internal Class: Encapsulates the state of a single parse operation.
+ * Structured Error Object
+ */
+class FTTError {
+    constructor(code, message, line, severity = 'ERROR') {
+        this.code = code;
+        this.message = message;
+        this.line = line;
+        this.severity = severity;
+        this.timestamp = new Date().toISOString();
+    }
+
+    toString() {
+        return `[${this.severity}] Line ${this.line}: ${this.message} (${this.code})`;
+    }
+}
+
+/**
+ * Internal Parse Session
  */
 class ParseSession {
     constructor(version) {
@@ -35,34 +50,33 @@ class ParseSession {
 
         // Output Data
         this.headers = {};
-        this.records = new Map(); // Map<ID, RecordObject>
-        this.ids = new Set(); // Fast lookup for existence
-        this.errors = []; // Critical Validation Errors
-        this.warnings = []; // Consistency Warnings & Notices
+        this.records = new Map();
+        this.ids = new Set();
 
-        // Internal Parsing State
+        // Structured Logs
+        this.errors = []; // Array<FTTError>
+        this.warnings = []; // Array<FTTError>
+
+        // State
         this.currentRecordId = null;
         this.currentKey = null;
-        this.buffer = []; // Line buffer for multi-line content
-        this.lastFieldRef = null; // Pointer to the last created field object
+        this.buffer = [];
+        this.lastFieldRef = null;
         this.currentModifierTarget = null;
+
+        // Track current line for buffer flushing
+        this.bufferStartLine = 0;
     }
 
     run(rawText) {
-        // Normalize line endings and split
         const lines = rawText.replace(/\r\n/g, '\n').split('\n');
 
         for (let i = 0; i < lines.length; i++) {
             this._processLine(lines[i], i + 1);
         }
 
-        // Flush final buffer
         this._flushBuffer();
-
-        // Post-Processing
         this._postProcess();
-
-        // Post-Parse Validation (Section 8.3)
         this._validateGraph();
 
         return {
@@ -74,30 +88,25 @@ class ParseSession {
     }
 
     // =========================================================================
-    // 1. Line Processing Logic
+    // 1. Line Processing
     // =========================================================================
 
     _processLine(line, lineNum) {
-        // 1. Comment Check
         if (line.startsWith('#')) return;
 
-        // 2. Visual Separator Check (Block Terminator)
         if (line.startsWith('---')) {
             this._flushBuffer();
             this.currentRecordId = null;
             return;
         }
 
-        // 3. Indentation Check (Continuation)
+        // Indentation Check
         if (line.startsWith('  ')) {
             if (!this.currentKey) {
-                this._error(`Line ${lineNum}: Indented content without a preceding key.`);
+                this._error('SYNTAX_INDENT', 'Indented content without a preceding key.', lineNum);
                 return;
             }
-
             const content = line.substring(2);
-
-            // Space Folding Rule
             if (this.buffer.length > 0 && this.buffer[this.buffer.length - 1] !== '\n') {
                 this.buffer.push(' ');
             }
@@ -105,7 +114,7 @@ class ParseSession {
             return;
         }
 
-        // 4. Blank Line Check (Paragraph Break)
+        // Blank Line Check
         if (!line.trim()) {
             if (this.currentKey) {
                 this.buffer.push('\n');
@@ -113,32 +122,33 @@ class ParseSession {
             return;
         }
 
-        // 5. New Key Detection (Column 0)
+        // New Key Detection
         const keyMatch = line.match(KEY_PATTERN);
         if (keyMatch) {
-            this._flushBuffer(); // Terminate previous block
+            this._flushBuffer();
             this._handleNewKey(keyMatch[1], keyMatch[2] || '', lineNum);
             return;
         }
 
-        // 6. Fall-through (Syntax Error)
-        this._error(`Line ${lineNum}: Invalid syntax at Column 0. Expected Key or Indentation.`);
+        this._error('SYNTAX_INVALID', 'Invalid syntax at Column 0. Expected Key or Indentation.', lineNum);
     }
 
     // =========================================================================
-    // 2. Key Handling & Modifier Logic
+    // 2. Key Handling
     // =========================================================================
 
     _handleNewKey(key, inlineValue, lineNum) {
         this.currentKey = key;
+        this.bufferStartLine = lineNum; // Track where this block started
+
         if (inlineValue) this.buffer.push(inlineValue);
 
         // Global Headers
         if (key.startsWith('HEAD_')) {
             if (this.currentRecordId) {
-                this._error(`Line ${lineNum}: Header ${key} found inside a record block.`);
+                this._error('CTX_HEADER', `Header ${key} found inside a record block.`, lineNum);
             }
-            this.headers[key] = inlineValue.trim().normalize('NFC');
+            // Note: We don't commit to headers object until flush
             return;
         }
 
@@ -148,7 +158,7 @@ class ParseSession {
             this._validateID(id, lineNum);
 
             if (this.records.has(id)) {
-                this._error(`Line ${lineNum}: Duplicate Record ID "${id}". Ignoring definition.`);
+                this._error('DUPLICATE_ID', `Duplicate Record ID "${id}". Ignoring definition.`, lineNum);
                 this.currentRecordId = null;
                 return;
             }
@@ -157,6 +167,7 @@ class ParseSession {
             this.records.set(id, {
                 id: id,
                 type: this._determineRecordType(id),
+                line: lineNum, // Store definition line for later validation
                 data: {}
             });
             this.ids.add(id);
@@ -171,14 +182,14 @@ class ParseSession {
             if (key.endsWith('_SRC') || key.endsWith('_NOTE')) {
                 this._attachModifier(record, key, lineNum);
             } else {
-                this._createField(record, key);
+                this._createField(record, key, lineNum);
             }
         } else {
-            this._error(`Line ${lineNum}: Key ${key} found outside of a record block.`);
+            this._error('CTX_ORPHAN', `Key ${key} found outside of a record block.`, lineNum);
         }
     }
 
-    _createField(record, key) {
+    _createField(record, key, lineNum) {
         if (!record.data[key]) {
             record.data[key] = [];
         }
@@ -186,12 +197,13 @@ class ParseSession {
         const newFieldObj = {
             raw: '',
             parsed: [],
-            modifiers: {}
+            modifiers: {},
+            line: lineNum // Critical for validation reporting
         };
 
         record.data[key].push(newFieldObj);
         this.lastFieldRef = {
-            key: key,
+            key,
             obj: newFieldObj
         };
     }
@@ -200,7 +212,7 @@ class ParseSession {
         const baseKey = modKey.replace(/_(SRC|NOTE)$/, '');
 
         if (!this.lastFieldRef || this.lastFieldRef.key !== baseKey) {
-            this._error(`Line ${lineNum}: Modifier ${modKey} does not immediately follow a ${baseKey} field.`);
+            this._error('CTX_MODIFIER', `Modifier ${modKey} does not immediately follow a ${baseKey} field.`, lineNum);
             return;
         }
 
@@ -209,14 +221,15 @@ class ParseSession {
         }
 
         const modObj = {
-            raw: ''
+            raw: '',
+            line: lineNum
         };
         this.lastFieldRef.obj.modifiers[modKey].push(modObj);
         this.currentModifierTarget = modObj;
     }
 
     // =========================================================================
-    // 3. Buffer Flushing & Parsing
+    // 3. Buffer Flushing
     // =========================================================================
 
     _flushBuffer() {
@@ -251,7 +264,6 @@ class ParseSession {
 
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
-
             if (isEscaped) {
                 currentVal += char;
                 isEscaped = false;
@@ -300,21 +312,22 @@ class ParseSession {
                         const valA = (unionField.parsed[i] || '').trim();
                         const valB = (reciprocalField.parsed[i] || '').trim();
                         if (valA !== valB) {
-                            this._warning(`Consistency Warning: Union between ${id} and ${partnerId} conflict at index ${i} ("${valA}" vs "${valB}").`);
+                            this._warning('DATA_CONSISTENCY', `Union mismatch between ${id} and ${partnerId} at index ${i} ("${valA}" vs "${valB}").`, unionField.line);
                         }
                     }
                 } else {
-                    // Inject implicit union
-                    if (!partnerRecord.data['UNION']) {
-                        partnerRecord.data['UNION'] = [];
-                    }
+                    // Inject implicit
+                    if (!partnerRecord.data['UNION']) partnerRecord.data['UNION'] = [];
+
                     const implicitParsed = [...unionField.parsed];
-                    implicitParsed[0] = id;
+                    implicitParsed[0] = id; // Swap ID
 
                     partnerRecord.data['UNION'].push({
                         raw: `(Implicit Reciprocal of ${id})`,
                         parsed: implicitParsed,
-                        modifiers: {}
+                        modifiers: {},
+                        line: partnerRecord.line, // Attribute to record start since it's implicit
+                        isImplicit: true
                     });
                 }
             }
@@ -378,7 +391,7 @@ class ParseSession {
     }
 
     // =========================================================================
-    // 5. Validation & Types
+    // 5. Validation
     // =========================================================================
 
     _determineRecordType(id) {
@@ -390,26 +403,26 @@ class ParseSession {
 
     _validateID(id, lineNum) {
         if (/[\s|;\p{C}]/u.test(id)) {
-            this._error(`Line ${lineNum}: ID "${id}" contains forbidden characters.`);
+            this._error('ID_FORMAT', `ID "${id}" contains forbidden characters.`, lineNum);
             return;
         }
-
         const firstChar = id.charAt(0);
         if (!['^', '&', '?'].includes(firstChar)) {
             if (!STANDARD_ID_PATTERN.test(id)) {
-                this._error(`Line ${lineNum}: Invalid Standard ID "${id}".`);
+                this._error('ID_FORMAT', `Invalid Standard ID "${id}".`, lineNum);
             }
         }
     }
 
     _validateGraph() {
+        // Version Check
         const formatHeader = this.headers['HEAD_FORMAT'];
         if (!formatHeader) {
-            this._error('Missing Header: HEAD_FORMAT');
+            this._error('MISSING_HEADER', 'Missing Header: HEAD_FORMAT', 1);
         } else {
             const match = formatHeader.match(/v(\d+(\.\d+)?)/);
             if (match && parseFloat(match[1]) > this.SUPPORTED_VERSION) {
-                this._error(`Version Error: File (v${match[1]}) > Supported (v${this.SUPPORTED_VERSION}).`);
+                this._error('VERSION_MISMATCH', `File (v${match[1]}) > Supported (v${this.SUPPORTED_VERSION}).`, 1);
             }
         }
 
@@ -428,7 +441,7 @@ class ParseSession {
 
                     const pointsBack = childRecord.data['PARENT']?.some(p => p.parsed[0] === parentId);
                     if (!pointsBack) {
-                        this._error(`Ghost Child Error: ${parentId} -> ${childId} (Missing PARENT link).`);
+                        this._error('GHOST_CHILD', `${parentId} -> ${childId} (Child does not reciprocate PARENT link).`, childField.line);
                     }
                 });
             }
@@ -437,33 +450,35 @@ class ParseSession {
         // 3. Cycle Detection
         const visited = new Set();
         const recursionStack = new Set();
-
-        const detectCycle = (currId) => {
-            if (recursionStack.has(currId)) return true;
+        const detectCycle = (currId, path) => {
+            if (recursionStack.has(currId)) {
+                this._error('CIRCULAR_LINEAGE', `Circular Lineage Detected: ${path.join(' -> ')} -> ${currId}`, this.records.get(currId)?.line || 0);
+                return true;
+            }
             if (visited.has(currId)) return false;
 
             visited.add(currId);
             recursionStack.add(currId);
+            path.push(currId);
 
             const record = this.records.get(currId);
             if (record && record.data['PARENT']) {
                 for (const pField of record.data['PARENT']) {
                     const parentId = pField.parsed[0];
                     if (parentId && !parentId.startsWith('?') && this.records.has(parentId)) {
-                        if (detectCycle(parentId)) {
-                            this._error(`Circular Lineage: ${currId} <-> ${parentId}`);
-                            return true;
-                        }
+                        if (detectCycle(parentId, path)) return true;
                     }
                 }
             }
+
+            path.pop();
             recursionStack.delete(currId);
             return false;
         };
 
         for (const id of this.ids) {
             if (this._determineRecordType(id) === 'INDIVIDUAL') {
-                if (!visited.has(id)) detectCycle(id);
+                if (!visited.has(id)) detectCycle(id, []);
             }
         }
 
@@ -472,65 +487,68 @@ class ParseSession {
         this._validateDates();
     }
 
+    _checkReferences(record) {
+        const refKeys = ['PARENT', 'CHILD', 'UNION', 'ASSOC', 'SRC', 'EVENT_REF'];
+        refKeys.forEach(key => {
+            record.data[key]?.forEach(field => {
+                const targetId = field.parsed[0];
+                if (targetId && !this._idExists(targetId)) {
+                    this._error('DANGLING_REF', `Reference to missing ID: ${targetId}`, field.line);
+                }
+            });
+        });
+
+        // Check Citation modifiers
+        Object.values(record.data).forEach(fieldList => {
+            fieldList.forEach(field => {
+                for (const modKey in field.modifiers) {
+                    if (modKey.endsWith('_SRC')) {
+                        field.modifiers[modKey].forEach(mod => {
+                            const srcId = mod.parsed[0];
+                            if (srcId && !this._idExists(srcId)) {
+                                this._error('DANGLING_SRC', `Citation of missing Source: ${srcId}`, mod.line);
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    }
+
     _validateVocabulary() {
-        // 1. Parent/Child Types
-        const VALID_PARENT_TYPES = new Set(['BIO', 'ADO', 'STE', 'FOS', 'UNK']);
-
-        // 2. Union Types
-        const VALID_UNION_TYPES = new Set(['MARR', 'PART', 'UNK']);
-        const VALID_UNION_REASONS = new Set(['DIV', 'SEP', 'WID', 'ANN']);
-
-        // 3. Name Types & Status
-        const VALID_NAME_TYPES = new Set(['BIRTH', 'MARR', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']);
-        const VALID_NAME_STATUS = new Set(['PREF']);
-
-        // 4. Associate Roles
-        const VALID_ASSOC_ROLES = new Set([
-            'GODP', 'GODC', 'SPON', 'OFFI', // Religious
-            'WITN', 'EXEC', 'GUAR', 'WARD', 'INFO', // Legal
-            'MAST', 'APPR', 'SERV', 'NEIG', 'ENSL', 'OWNR' // Social
-        ]);
+        const VALID = {
+            PARENT_TYPES: new Set(['BIO', 'ADO', 'STE', 'FOS', 'UNK']),
+            UNION_TYPES: new Set(['MARR', 'PART', 'UNK']),
+            UNION_REASONS: new Set(['DIV', 'SEP', 'WID', 'ANN']),
+            NAME_TYPES: new Set(['BIRTH', 'MARR', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']),
+            NAME_STATUS: new Set(['PREF']),
+            ASSOC_ROLES: new Set(['GODP', 'GODC', 'SPON', 'OFFI', 'WITN', 'EXEC', 'GUAR', 'WARD', 'INFO', 'MAST', 'APPR', 'SERV', 'NEIG', 'ENSL', 'OWNR'])
+        };
 
         for (const record of this.records.values()) {
-            // Parent Checks
             record.data['PARENT']?.forEach(f => {
                 const type = (f.parsed[1] || '').trim();
-                if (type && !VALID_PARENT_TYPES.has(type)) {
-                    this._error(`Invalid PARENT Type "${type}" in ${record.id}`);
-                }
+                if (type && !VALID.PARENT_TYPES.has(type)) this._error('INVALID_VOCAB', `Invalid PARENT Type "${type}"`, f.line);
             });
 
-            // Union Checks
             record.data['UNION']?.forEach(f => {
+                if (f.isImplicit) return; // Don't validate generated implicit records
                 const type = (f.parsed[1] || '').trim();
                 const reason = (f.parsed[4] || '').trim();
-                if (type && !VALID_UNION_TYPES.has(type)) {
-                    this._error(`Invalid UNION Type "${type}" in ${record.id}`);
-                }
-                if (reason && !VALID_UNION_REASONS.has(reason)) {
-                    this._error(`Invalid UNION Reason "${reason}" in ${record.id}`);
-                }
+                if (type && !VALID.UNION_TYPES.has(type)) this._error('INVALID_VOCAB', `Invalid UNION Type "${type}"`, f.line);
+                if (reason && !VALID.UNION_REASONS.has(reason)) this._error('INVALID_VOCAB', `Invalid UNION Reason "${reason}"`, f.line);
             });
 
-            // Name Checks (Advisory)
             record.data['NAME']?.forEach(f => {
                 const type = (f.parsed[2] || '').trim();
                 const status = (f.parsed[3] || '').trim();
-
-                if (type && !VALID_NAME_TYPES.has(type)) {
-                    this._warning(`Vocabulary Notice: Non-standard NAME Type "${type}" in record ${record.id}.`);
-                }
-                if (status && !VALID_NAME_STATUS.has(status)) {
-                    this._error(`Vocabulary Error: Invalid NAME Status "${status}" in record ${record.id}.`);
-                }
+                if (type && !VALID.NAME_TYPES.has(type)) this._warning('NONSTD_VOCAB', `Non-standard NAME Type "${type}"`, f.line);
+                if (status && !VALID.NAME_STATUS.has(status)) this._error('INVALID_VOCAB', `Invalid NAME Status "${status}"`, f.line);
             });
 
-            // Assoc Checks (Advisory)
             record.data['ASSOC']?.forEach(f => {
                 const role = (f.parsed[1] || '').trim();
-                if (role && !VALID_ASSOC_ROLES.has(role)) {
-                    this._warning(`Vocabulary Notice: Non-standard ASSOC Role "${role}" in record ${record.id}.`);
-                }
+                if (role && !VALID.ASSOC_ROLES.has(role)) this._warning('NONSTD_VOCAB', `Non-standard ASSOC Role "${role}"`, f.line);
             });
         }
     }
@@ -547,10 +565,6 @@ class ParseSession {
             'END_DATE': [0]
         };
 
-        if (this.headers['HEAD_DATE'] && !DATE_PATTERN.test(this.headers['HEAD_DATE'])) {
-            this._error(`Invalid HEAD_DATE: "${this.headers['HEAD_DATE']}"`);
-        }
-
         for (const record of this.records.values()) {
             for (const [key, fields] of Object.entries(record.data)) {
                 if (DATE_KEYS[key]) {
@@ -560,7 +574,7 @@ class ParseSession {
                             if (field.parsed.length > idx) {
                                 const dateVal = field.parsed[idx];
                                 if (dateVal && !DATE_PATTERN.test(dateVal)) {
-                                    this._error(`Invalid Date "${dateVal}" in ${record.id} (${key})`);
+                                    this._error('INVALID_DATE', `Invalid ISO 8601/EDTF Date "${dateVal}"`, field.line);
                                 }
                             }
                         });
@@ -570,42 +584,20 @@ class ParseSession {
         }
     }
 
-    _checkReferences(record) {
-        const refKeys = ['PARENT', 'CHILD', 'UNION', 'ASSOC', 'SRC', 'EVENT_REF'];
-        refKeys.forEach(key => {
-            record.data[key]?.forEach(field => {
-                const targetId = field.parsed[0];
-                if (targetId && !this._idExists(targetId)) {
-                    this._error(`Dangling Reference: ${record.id} -> ${targetId} (${key})`);
-                }
-            });
-        });
-
-        Object.values(record.data).forEach(fieldList => {
-            fieldList.forEach(field => {
-                for (const modKey in field.modifiers) {
-                    if (modKey.endsWith('_SRC')) {
-                        field.modifiers[modKey].forEach(mod => {
-                            const srcId = mod.parsed[0];
-                            if (srcId && !this._idExists(srcId)) {
-                                this._error(`Dangling Citation: ${record.id} -> ${srcId} (${modKey})`);
-                            }
-                        });
-                    }
-                }
-            });
-        });
-    }
-
     _idExists(id) {
         if (id.startsWith('?')) return true;
         return this.ids.has(id);
     }
 
-    _error(msg) {
-        this.errors.push(msg);
+    // =========================================================================
+    // 6. Logging Helpers
+    // =========================================================================
+
+    _error(code, msg, line) {
+        this.errors.push(new FTTError(code, msg, line, 'ERROR'));
     }
-    _warning(msg) {
-        this.warnings.push(msg);
+
+    _warning(code, msg, line) {
+        this.warnings.push(new FTTError(code, msg, line, 'WARNING'));
     }
 }
