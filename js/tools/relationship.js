@@ -329,7 +329,7 @@ function renderResult(rel, records, idA, idB) {
     resultBox.appendChild(div1);
 
     const textGen = new RelationText(records);
-    const { term, detail } = textGen.describe(rel, idA, idB, genderA, nameB);
+    const { term, detail } = textGen.describe(rel, idA, idB, genderA, nameB, nameA);
 
     const spanTerm = document.createElement('span');
     spanTerm.className = 'relationship-term';
@@ -356,7 +356,7 @@ class RelationText {
         this.records = records;
     }
 
-    describe(rel, idA, idB, genderA, nameB) {
+    describe(rel, idA, idB, genderA, nameB, nameA) {
         if (rel.type === 'IDENTITY') {
             return { term: "Same Person", detail: "IDs match." };
         }
@@ -371,7 +371,7 @@ class RelationText {
             const role = rel.direction === 'FORWARD' ? rel.role : "Associate";
             const det = rel.direction === 'FORWARD' 
                 ? `Defined as ${rel.role} of ${nameB}.` 
-                : `${nameB} is defined as ${rel.role} of Subject.`;
+                : `${nameB} is defined as ${rel.role} of ${nameA}.`;
             return { term: role, detail: det };
         }
         if (rel.type === 'BLOOD') {
@@ -383,12 +383,12 @@ class RelationText {
             };
         }
         if (rel.type === 'AFFINAL') {
-            return this.describeAffinal(rel, genderA, nameB);
+            return this.describeAffinal(rel, genderA, nameB, nameA);
         }
         return { term: "Unknown", detail: "" };
     }
 
-    describeAffinal(rel, genderA, nameB) {
+    describeAffinal(rel, genderA, nameB, nameA) {
         // 1. VIA_SPOUSE_BLOOD: A -> Spouse -> Relative -> B
         // A is the Spouse of B's Relative.
         if (rel.subType === 'VIA_SPOUSE_BLOOD') {
@@ -424,7 +424,7 @@ class RelationText {
 
             return {
                 term: term,
-                detail: `Through spouse: ${spouseName} (${spouseToTargetTerm} of ${nameB})`
+                detail: `Through spouse: ${spouseName}, who is the ${spouseToTargetTerm} of ${nameB}.`
             };
         }
 
@@ -460,7 +460,7 @@ class RelationText {
 
             return {
                 term: term,
-                detail: `${nameB} is the spouse of ${targetSpouseName} (${subjectToSpouseTerm} of Subject)`
+                detail: `${nameB} is the spouse of ${targetSpouseName} (${subjectToSpouseTerm} of ${nameA})`
             };
         }
 
