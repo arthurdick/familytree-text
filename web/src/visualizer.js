@@ -1,13 +1,10 @@
 import cytoscape from 'cytoscape';
 import elk from 'cytoscape-elk';
-import FTTParser from '../../implementations/js/FTTParser.js';
 
+// Register the ELK layout extension
 cytoscape.use(elk);
 
-const parser = new FTTParser();
 const STORAGE_KEY = 'ftt_autosave_data';
-
-// Default template if no local storage is found
 const DEFAULT_TEMPLATE = `HEAD_FORMAT: FTT v0.1
 HEAD_TITLE: Topology Test
 
@@ -23,7 +20,6 @@ BORN: 1922
 ID: DAD-01
 NAME: John Smith
 BORN: 1950
-# Note: Dad links to parents, but graph draws from Union Node
 PARENT: GRANDPA-01 | BIO ||
 PARENT: GRANDMA-01 | BIO ||
 UNION: MOM-01 | MARR | 1975 ||
@@ -39,253 +35,13 @@ PARENT: DAD-01 | BIO ||
 PARENT: MOM-01 | BIO ||
 EVENT: OCC | 2005 || Engineer`;
 
-/**
- * Advanced Generation Calculation
- */
-function calculateGenerations(records) {
-    const idToRank = {};
-    const parent = new Map();
-    const rank = new Map();
-
-    Object.keys(records).forEach(id => {
-        parent.set(id, id);
-        rank.set(id, 0);
-    });
-
-    function find(i) {
-        if (parent.get(i) !== i) {
-            parent.set(i, find(parent.get(i)));
-        }
-        return parent.get(i);
-    }
-
-    function union(i, j) {
-        const rootI = find(i);
-        const rootJ = find(j);
-        if (rootI !== rootJ) {
-            const rankI = rank.get(rootI);
-            const rankJ = rank.get(rootJ);
-            if (rankI < rankJ) {
-                parent.set(rootI, rootJ);
-            } else if (rankI > rankJ) {
-                parent.set(rootJ, rootI);
-            } else {
-                parent.set(rootJ, rootI);
-                rank.set(rootI, rankI + 1);
-            }
-        }
-    }
-
-    Object.values(records).forEach(rec => {
-        if (rec.data.UNION) {
-            rec.data.UNION.forEach(u => {
-                const partner = u.parsed[0];
-                if (records[partner]) union(rec.id, partner);
-            });
-        }
-    });
-
-    const clusterMap = new Map();
-    Object.keys(records).forEach(id => clusterMap.set(id, find(id)));
-
-    const uniqueClusters = new Set(clusterMap.values());
-    const clusterGraph = new Map();
-
-    uniqueClusters.forEach(cId => {
-        clusterGraph.set(cId, { parents: new Set(), rank: 0 });
-    });
-
-    Object.values(records).forEach(child => {
-        if (child.data.PARENT) {
-            const childCluster = clusterMap.get(child.id);
-            child.data.PARENT.forEach(p => {
-                const parentId = p.parsed[0];
-                if (records[parentId]) {
-                    const parentCluster = clusterMap.get(parentId);
-                    if (parentCluster !== childCluster) {
-                        clusterGraph.get(childCluster).parents.add(parentCluster);
-                    }
-                }
-            });
-        }
-    });
-
-    const memo = new Map();
-    const visiting = new Set();
-
-    function getRank(cId) {
-        if (memo.has(cId)) return memo.get(cId);
-        if (visiting.has(cId)) return 0;
-
-        visiting.add(cId);
-        let maxParentRank = -1;
-        const node = clusterGraph.get(cId);
-        if (node && node.parents.size > 0) {
-            node.parents.forEach(pId => {
-                const pRank = getRank(pId);
-                if (pRank > maxParentRank) maxParentRank = pRank;
-            });
-        }
-
-        visiting.delete(cId);
-        const myRank = maxParentRank + 2; 
-        memo.set(cId, myRank);
-        return myRank;
-    }
-
-    uniqueClusters.forEach(cId => getRank(cId));
-
-    Object.keys(records).forEach(id => {
-        const cId = clusterMap.get(id);
-        idToRank[id] = memo.get(cId) || 0;
-    });
-
-    return idToRank;
-}
-
-function convertToCytoscape(parsedData) {
-    const elements = [];
-    const records = parsedData.records;
-    const ranks = calculateGenerations(records);
-    const createdNodeIds = new Set();
-    let unionCounter = 0;
-    const pairToHubId = {};
-    const soloToHubId = {};
-
-    function addNode(id, label, subLabel, type) {
-        if (createdNodeIds.has(id)) return;
-        const rank = ranks[id] !== undefined ? ranks[id] : 0;
-        elements.push({
-            data: {
-                id, label, subLabel, type,
-                elk: { 'org.eclipse.elk.layered.layerIndex': rank }
-            }
-        });
-        createdNodeIds.add(id);
-    }
-
-    function ensurePlaceholderNode(id) {
-        if (id && id.startsWith('?') && !createdNodeIds.has(id)) {
-            addNode(id, id, '(Placeholder)', 'PLACEHOLDER');
-        }
-    }
-
-    for (const [id, rec] of Object.entries(records)) {
-        if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
-        let label = id;
-        let subLabel = "";
-        if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
-            if (rec.data.NAME && rec.data.NAME.length > 0) {
-                label = rec.data.NAME[0].parsed[0] || id;
-                const prefName = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
-                if (prefName) label = prefName.parsed[0];
-            }
-            if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
-                subLabel = rec.data.BORN[0].parsed[0];
-            }
-        }
-        addNode(id, label, subLabel, rec.type);
-    }
-
-    function getHub(p1, p2) {
-        const isPair = !!p2;
-        const key = isPair ? `${p1}+${p2}` : `${p1}+BIO`;
-        if (isPair && pairToHubId[key]) return pairToHubId[key];
-        if (!isPair && soloToHubId[key]) return soloToHubId[key];
-
-        const hubId = isPair ? `union_${unionCounter++}` : `solo_${unionCounter++}`;
-        const type = isPair ? (records[p1]?.data.UNION ? 'UNION_NODE' : 'IMPLICIT_NODE') : 'SOLO_NODE';
-
-        if (isPair) pairToHubId[key] = hubId;
-        else soloToHubId[key] = hubId;
-
-        const p1Rank = ranks[p1] || 0;
-        const hubRank = p1Rank + 1;
-
-        elements.push({
-            data: {
-                id: hubId, type: type,
-                elk: { 'org.eclipse.elk.layered.layerIndex': hubRank }
-            }
-        });
-        elements.push({ data: { source: p1, target: hubId }, classes: 'spouse-edge' });
-        if (isPair) {
-            elements.push({ data: { source: p2, target: hubId }, classes: 'spouse-edge' });
-        }
-        return hubId;
-    }
-
-    for (const [id, rec] of Object.entries(records)) {
-        if (rec.data.UNION) {
-            rec.data.UNION.forEach(u => {
-                const partnerId = u.parsed[0];
-                if (!partnerId) return;
-                ensurePlaceholderNode(partnerId);
-                const [p1, p2] = [id, partnerId].sort();
-                getHub(p1, p2);
-            });
-        }
-    }
-
-    for (const [childId, rec] of Object.entries(records)) {
-        if (!rec.data.PARENT) continue;
-        const relationshipGroups = new Map();
-        rec.data.PARENT.forEach(p => {
-            const pId = p.parsed[0];
-            const pType = (p.parsed[1] || 'BIO').toUpperCase();
-            if (!pId) return;
-            ensurePlaceholderNode(pId);
-            let partnerId = null;
-            const parentRec = records[pId];
-            if (parentRec && parentRec.data.UNION) {
-                partnerId = parentRec.data.UNION.find(u => 
-                    rec.data.PARENT.some(p2 => p2.parsed[0] === u.parsed[0])
-                )?.parsed[0];
-            }
-            const groupKey = partnerId ? [pId, partnerId].sort().join('+') : pId;
-            if (!relationshipGroups.has(groupKey)) {
-                relationshipGroups.set(groupKey, { 
-                    parents: partnerId ? [pId, partnerId].sort() : [pId], 
-                    types: new Set() 
-                });
-            }
-            relationshipGroups.get(groupKey).types.add(pType);
-        });
-
-        relationshipGroups.forEach((group) => {
-            const isPair = group.parents.length === 2;
-            const hubId = isPair ? 
-                getHub(group.parents[0], group.parents[1]) : 
-                getHub(group.parents[0], null);
-            const isBio = group.types.has('BIO');
-            const primaryType = isBio ? 'BIO' : [...group.types][0];
-            elements.push({
-                data: { source: hubId, target: childId, edgeType: primaryType },
-                classes: isBio ? 'lineage-edge' : 'non-bio-edge'
-            });
-        });
-    }
-
-    for (const [id, rec] of Object.entries(records)) {
-        if (rec.data.ASSOC) {
-            rec.data.ASSOC.forEach(assoc => {
-                const targetId = assoc.parsed[0];
-                const role = assoc.parsed[1] || 'ASSOC';
-                if (!targetId) return;
-                ensurePlaceholderNode(targetId);
-                elements.push({
-                    data: { source: id, target: targetId, label: role },
-                    classes: 'assoc-edge'
-                });
-            });
-        }
-    }
-    return elements;
-}
+// --- Worker Setup ---
+// Initialize the Web Worker to handle parsing and graph generation off the main thread
+const worker = new Worker(new URL('../src/worker.js', import.meta.url), { type: 'module' });
 
 // Helper: Escape Regex special characters
 function escapeRegExp(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -422,14 +178,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Jump to Line Helper ---
     function jumpToLine(lineNum) {
         if (!lineNum || lineNum < 1) return;
-        
         const text = editor.value;
         const lines = text.split('\n');
         
         let charIndex = 0;
         for (let i = 0; i < lineNum - 1; i++) {
             if (i < lines.length) {
-                charIndex += lines[i].length + 1; // +1 for newline character
+                charIndex += lines[i].length + 1;
+                // +1 for newline character
             }
         }
 
@@ -437,88 +193,95 @@ document.addEventListener('DOMContentLoaded', () => {
         editor.setSelectionRange(charIndex, charIndex);
         
         // Center the line in view
-        const scrollPos = (lineNum - 5) * cachedLineHeight; 
+        const scrollPos = (lineNum - 5) * cachedLineHeight;
         editor.scrollTop = scrollPos > 0 ? scrollPos : 0;
     }
 
-    // --- Rendering Logic ---
-    function render() {
-        const result = parser.parse(editor.value);
+    // --- Worker Response Handler ---
+    worker.onmessage = (e) => {
+        const { type, payload } = e.data;
 
-        // 1. Update Error/Warning Box FIRST (So parser errors are visible even if graph crashes)
-        const hasErrors = result.errors && result.errors.length > 0;
-        const hasWarnings = result.warnings && result.warnings.length > 0;
-
-        if (hasErrors || hasWarnings) {
+        if (type === 'CRITICAL_ERROR') {
+            const div = document.createElement('div');
+            div.className = 'msg-critical';
+            div.textContent = `Critical Render Error: ${payload.message}`;
+            errorBox.appendChild(div);
             errorBox.style.display = 'block';
-            errorBox.innerHTML = ''; 
-
-            const createMessageRow = (item, type) => {
-                const div = document.createElement('div');
-                div.className = `msg-row ${type === 'ERROR' ? 'error' : 'warning'}`;
-
-                const spanLine = document.createElement('span');
-                spanLine.className = 'msg-line';
-                spanLine.textContent = `L${item.line}`;
-
-                const spanCode = document.createElement('span');
-                spanCode.className = 'msg-code';
-                spanCode.textContent = `[${item.code}]`;
-
-                const spanText = document.createElement('span');
-                spanText.className = 'msg-text';
-                spanText.textContent = item.message;
-
-                div.appendChild(spanLine);
-                div.appendChild(spanCode);
-                div.appendChild(spanText);
-                div.addEventListener('click', () => jumpToLine(item.line));
-
-                return div;
-            };
-
-            // Add Header
-            const header = document.createElement('div');
-            header.className = 'msg-header';
-            header.textContent = `Analysis: ${result.errors.length} Error(s), ${result.warnings.length} Warning(s)`;
-            errorBox.appendChild(header);
-
-            // Append Messages (Errors first, then Warnings)
-            if (result.errors) result.errors.forEach(err => errorBox.appendChild(createMessageRow(err, 'ERROR')));
-            if (result.warnings) result.warnings.forEach(warn => errorBox.appendChild(createMessageRow(warn, 'WARNING')));
-            
-        } else {
-            errorBox.style.display = 'none';
-            errorBox.innerHTML = '';
+            return;
         }
 
-        // 2. Update Graph
-        try {
-            const cyElements = convertToCytoscape(result);
-            cy.elements().remove();
-            cy.add(cyElements);
-            cy.layout({
-                name: 'elk',
-                elk: {
-                    algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': 50,
-                    'elk.layered.spacing.nodeNodeBetweenLayers': 80,
-                    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.edgeRouting': 'ORTHOGONAL',
-                }
-            }).run();
-        } catch (e) {
-            console.error("Graph Render Error:", e);
+        if (type === 'SUCCESS') {
+            const { elements, errors, warnings } = payload;
             
-            // If the error box is hidden (because parser succeeded), show it for the runtime error
-            if (errorBox.style.display === 'none') {
+            // 1. Update UI Validation
+            const hasErrors = errors && errors.length > 0;
+            const hasWarnings = warnings && warnings.length > 0;
+
+            if (hasErrors || hasWarnings) {
                 errorBox.style.display = 'block';
+                errorBox.innerHTML = ''; 
+
+                const createMessageRow = (item, type) => {
+                    const div = document.createElement('div');
+                    div.className = `msg-row ${type === 'ERROR' ? 'error' : 'warning'}`;
+
+                    const spanLine = document.createElement('span');
+                    spanLine.className = 'msg-line';
+                    spanLine.textContent = `L${item.line}`;
+
+                    const spanCode = document.createElement('span');
+                    spanCode.className = 'msg-code';
+                    spanCode.textContent = `[${item.code}]`;
+
+                    const spanText = document.createElement('span');
+                    spanText.className = 'msg-text';
+                    spanText.textContent = item.message;
+
+                    div.appendChild(spanLine);
+                    div.appendChild(spanCode);
+                    div.appendChild(spanText);
+                    div.addEventListener('click', () => jumpToLine(item.line));
+                    return div;
+                };
+
+                // Add Header
+                const header = document.createElement('div');
+                header.className = 'msg-header';
+                header.textContent = `Analysis: ${errors.length} Error(s), ${warnings.length} Warning(s)`;
+                errorBox.appendChild(header);
+
+                // Append Messages (Errors first, then Warnings)
+                if (errors) errors.forEach(err => errorBox.appendChild(createMessageRow(err, 'ERROR')));
+                if (warnings) warnings.forEach(warn => errorBox.appendChild(createMessageRow(warn, 'WARNING')));
+                
+            } else {
+                errorBox.style.display = 'none';
                 errorBox.innerHTML = '';
             }
 
-            const div = document.createElement('div');
-            div.className = 'msg-critical';
-            div.textContent = `Critical Render Error: ${e.message}`;
-            errorBox.appendChild(div);
+            // 2. Load Elements into Cytoscape & Run Layout
+            try {
+                cy.elements().remove();
+                cy.add(elements);
+                cy.layout({
+                    name: 'elk',
+                    elk: {
+                        algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': 50,
+                        'elk.layered.spacing.nodeNodeBetweenLayers': 80,
+                        'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.edgeRouting': 'ORTHOGONAL',
+                    }
+                }).run();
+            } catch (err) {
+                console.error("Layout Error:", err);
+            }
         }
+    };
+
+    // --- Async Render Trigger ---
+    function render() {
+        // Post the editor content to the worker. 
+        // The worker will parse, calc ranks, generate graph elements, and return them.
+        worker.postMessage({ fttContent: editor.value });
     }
 
     // --- File Handlers ---
@@ -608,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => btnRender.style.transform = "", 100);
         }
     });
-    
+
     // Sync: Graph -> Editor
     cy.on('tap', 'node', (evt) => {
         const node = evt.target;
@@ -650,7 +413,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Iterate backwards from current line to find the nearest ID
         for (let i = lineCount - 1; i >= 0; i--) {
             const line = allLines[i];
-            
             // If we hit a block separator, we stop looking up.
             if (line.startsWith('---')) {
                 break;
@@ -679,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saveContent(); // Save on keyup
         }, 200);
     });
-    
+
     // Also sync/save on click
     editor.addEventListener('mouseup', () => {
         syncGraphToCursor();
@@ -699,8 +461,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRender.addEventListener('click', render);
 
     // Initial Load
-    if (typeof FTTParser !== 'undefined') {
-        loadInitialContent();
-        render();
-    }
+    loadInitialContent();
+    render();
 });
