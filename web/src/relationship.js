@@ -1,4 +1,4 @@
-import FTTParser from '../FTTParser.js';
+import FTTParser from '../../implementations/js/FTTParser.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const btnCalc = document.getElementById('btn-calc');

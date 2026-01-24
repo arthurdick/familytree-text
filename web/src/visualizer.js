@@ -1,6 +1,6 @@
 import cytoscape from 'cytoscape';
 import elk from 'cytoscape-elk';
-import FTTParser from '../FTTParser.js';
+import FTTParser from '../../implementations/js/FTTParser.js';
 
 cytoscape.use(elk);
 

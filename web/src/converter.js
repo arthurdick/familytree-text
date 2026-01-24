@@ -1,5 +1,5 @@
-import GedcomImporter from '../GedcomImporter.js';
-import GedcomExporter from '../GedcomExporter.js';
+import GedcomImporter from '../../implementations/js/GedcomImporter.js';
+import GedcomExporter from '../../implementations/js/GedcomExporter.js';
 
 const inputArea = document.getElementById('input-area');
 const outputArea = document.getElementById('output-area');
