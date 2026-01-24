@@ -419,34 +419,106 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(STORAGE_KEY, editor.value);
     }
 
+    // --- Jump to Line Helper ---
+    function jumpToLine(lineNum) {
+        if (!lineNum || lineNum < 1) return;
+        
+        const text = editor.value;
+        const lines = text.split('\n');
+        
+        let charIndex = 0;
+        for (let i = 0; i < lineNum - 1; i++) {
+            if (i < lines.length) {
+                charIndex += lines[i].length + 1; // +1 for newline character
+            }
+        }
+
+        editor.focus();
+        editor.setSelectionRange(charIndex, charIndex);
+        
+        // Center the line in view
+        const scrollPos = (lineNum - 5) * cachedLineHeight; 
+        editor.scrollTop = scrollPos > 0 ? scrollPos : 0;
+    }
+
     // --- Rendering Logic ---
     function render() {
         const result = parser.parse(editor.value);
-        if (result.errors.length > 0) {
+
+        // 1. Update Error/Warning Box FIRST (So parser errors are visible even if graph crashes)
+        const hasErrors = result.errors && result.errors.length > 0;
+        const hasWarnings = result.warnings && result.warnings.length > 0;
+
+        if (hasErrors || hasWarnings) {
             errorBox.style.display = 'block';
-            errorBox.textContent = ''; 
-            const strong = document.createElement('strong');
-            strong.textContent = 'Errors:';
-            errorBox.appendChild(strong);
-            result.errors.forEach(err => {
-                errorBox.appendChild(document.createElement('br'));
-                errorBox.appendChild(document.createTextNode(err));
-            });
+            errorBox.innerHTML = ''; 
+
+            const createMessageRow = (item, type) => {
+                const div = document.createElement('div');
+                div.className = `msg-row ${type === 'ERROR' ? 'error' : 'warning'}`;
+
+                const spanLine = document.createElement('span');
+                spanLine.className = 'msg-line';
+                spanLine.textContent = `L${item.line}`;
+
+                const spanCode = document.createElement('span');
+                spanCode.className = 'msg-code';
+                spanCode.textContent = `[${item.code}]`;
+
+                const spanText = document.createElement('span');
+                spanText.className = 'msg-text';
+                spanText.textContent = item.message;
+
+                div.appendChild(spanLine);
+                div.appendChild(spanCode);
+                div.appendChild(spanText);
+                div.addEventListener('click', () => jumpToLine(item.line));
+
+                return div;
+            };
+
+            // Add Header
+            const header = document.createElement('div');
+            header.className = 'msg-header';
+            header.textContent = `Analysis: ${result.errors.length} Error(s), ${result.warnings.length} Warning(s)`;
+            errorBox.appendChild(header);
+
+            // Append Messages (Errors first, then Warnings)
+            if (result.errors) result.errors.forEach(err => errorBox.appendChild(createMessageRow(err, 'ERROR')));
+            if (result.warnings) result.warnings.forEach(warn => errorBox.appendChild(createMessageRow(warn, 'WARNING')));
+            
         } else {
             errorBox.style.display = 'none';
-            errorBox.textContent = '';
+            errorBox.innerHTML = '';
         }
-        const cyElements = convertToCytoscape(result);
-        cy.elements().remove();
-        cy.add(cyElements);
-        cy.layout({
-            name: 'elk',
-            elk: {
-                algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': 50,
-                'elk.layered.spacing.nodeNodeBetweenLayers': 80,
-                'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.edgeRouting': 'ORTHOGONAL',
+
+        // 2. Update Graph
+        try {
+            const cyElements = convertToCytoscape(result);
+            cy.elements().remove();
+            cy.add(cyElements);
+            cy.layout({
+                name: 'elk',
+                elk: {
+                    algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': 50,
+                    'elk.layered.spacing.nodeNodeBetweenLayers': 80,
+                    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.edgeRouting': 'ORTHOGONAL',
+                }
+            }).run();
+        } catch (e) {
+            console.error("Graph Render Error:", e);
+            
+            // If the error box is hidden (because parser succeeded), show it for the runtime error
+            if (errorBox.style.display === 'none') {
+                errorBox.style.display = 'block';
+                errorBox.innerHTML = '';
             }
-        }).run();
+
+            const div = document.createElement('div');
+            div.className = 'msg-critical';
+            div.textContent = `Critical Render Error: ${e.message}`;
+            errorBox.appendChild(div);
+        }
     }
 
     // --- File Handlers ---

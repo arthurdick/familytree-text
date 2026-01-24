@@ -80,6 +80,41 @@
         }
         
         #error-box { display: none; max-height: 120px; overflow-y: auto; border-radius: 0; border-top: 1px solid #f5c6cb; border-left: 0; border-right: 0; border-bottom: 0; margin-top: 0; }
+        
+        /* Error/Warning Row Styles */
+        .msg-header {
+            padding: 6px 8px;
+            font-weight: bold;
+            border-bottom: 1px solid #ccc;
+            background-color: #f8f9fa;
+            font-size: 0.85rem;
+        }
+        .msg-row {
+            padding: 6px 8px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            font-size: 0.85rem;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        .msg-row.error:hover { background-color: #fff5f5; }
+        .msg-row.warning:hover { background-color: #fff9db; }
+
+        .msg-line { font-weight: bold; font-family: monospace; min-width: 30px; }
+        .msg-row.error .msg-line { color: #dc3545; }
+        .msg-row.warning .msg-line { color: #d68b00; }
+
+        .msg-code { color: #666; font-size: 0.8em; font-weight: bold; }
+        .msg-text { color: #333; flex: 1; }
+
+        .msg-critical {
+            padding: 8px;
+            color: #dc3545;
+            font-weight: bold;
+            border-top: 2px solid #dc3545;
+            background-color: #fff5f5;
+        }
   </style>
 </head>
 <body>
