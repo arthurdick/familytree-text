@@ -430,6 +430,7 @@ class ParseSession {
         this.records.forEach((record) => this._checkReferences(record));
 
         // 2. Ghost Child Check
+        // Ensures that if A lists B as a child, B actually lists A as a parent.
         this.records.forEach((record, parentId) => {
             if (record.data['CHILD']) {
                 record.data['CHILD'].forEach(childField => {
@@ -447,38 +448,49 @@ class ParseSession {
             }
         });
 
-        // 3. Cycle Detection
+        // 3. Cycle Detection (Iterative DFS)
         const visited = new Set();
-        const recursionStack = new Set();
-        const detectCycle = (currId, path) => {
-            if (recursionStack.has(currId)) {
-                this._error('CIRCULAR_LINEAGE', `Circular Lineage Detected: ${path.join(' -> ')} -> ${currId}`, this.records.get(currId)?.line || 0);
-                return true;
-            }
-            if (visited.has(currId)) return false;
 
-            visited.add(currId);
-            recursionStack.add(currId);
-            path.push(currId);
+        for (const rootId of this.ids) {
+            // Only process Individuals for lineage cycles
+            if (this._determineRecordType(rootId) !== 'INDIVIDUAL') continue;
+            
+            // Optimization: If we have already verified this node's ancestry in a previous pass, skip it.
+            if (visited.has(rootId)) continue;
 
-            const record = this.records.get(currId);
-            if (record && record.data['PARENT']) {
-                for (const pField of record.data['PARENT']) {
-                    const parentId = pField.parsed[0];
-                    if (parentId && !parentId.startsWith('?') && this.records.has(parentId)) {
-                        if (detectCycle(parentId, path)) return true;
+            // Stack stores: { id: string, path: Array<string> }
+            const stack = [{ id: rootId, path: [] }];
+
+            while (stack.length > 0) {
+                const { id, path } = stack.pop();
+
+                // Cycle Check: Is the current ID already in the path we took to get here?
+                if (path.includes(id)) {
+                    const cyclePath = [...path, id].join(' -> ');
+                    this._error(
+                        'CIRCULAR_LINEAGE', 
+                        `Circular Lineage Detected: ${cyclePath}`, 
+                        this.records.get(id)?.line || 0
+                    );
+                    continue; // Stop processing this specific branch
+                }
+
+                // Optimization: Mark as visited globally
+                if (visited.has(id)) continue;
+                visited.add(id);
+
+                // Add parents to stack
+                const record = this.records.get(id);
+                if (record && record.data['PARENT']) {
+                    const nextPath = [...path, id]; // Create history for the next level
+
+                    for (const pField of record.data['PARENT']) {
+                        const parentId = pField.parsed[0];
+                        if (parentId && !parentId.startsWith('?') && this.records.has(parentId)) {
+                            stack.push({ id: parentId, path: nextPath });
+                        }
                     }
                 }
-            }
-
-            path.pop();
-            recursionStack.delete(currId);
-            return false;
-        };
-
-        for (const id of this.ids) {
-            if (this._determineRecordType(id) === 'INDIVIDUAL') {
-                if (!visited.has(id)) detectCycle(id, []);
             }
         }
 
