@@ -71,241 +71,235 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Core Logic Class
- * Encapsulates the graph traversal and type detection.
+ * Relationship Calculator
+ * Uses Breadth-First Search (BFS) to find the shortest path in the graph.
+ * Capable of solving Blood, Affinal (In-Laws), and Step relationships of arbitrary depth.
  */
 class RelationshipCalculator {
     constructor(records) {
         this.records = records;
-    }
-
-    calculate(idA, idB) {
-        if (idA === idB) return { type: 'IDENTITY' };
-
-        // 1. Direct Union (Spouse/Partner)
-        const directUnion = this.checkDirectUnion(idA, idB);
-        if (directUnion) return directUnion;
-
-        // 2. Direct Association
-        const directAssoc = this.checkDirectAssoc(idA, idB);
-        if (directAssoc) return directAssoc;
-
-        // 3. Blood Relationship (Common Ancestor)
-        // Handles Full/Half Siblings, Cousins, etc.
-        const blood = this.calculateBlood(idA, idB);
-        if (blood) return blood;
-
-        // 4. Affinal (In-Laws)
-        // Checks Spouse's Blood, Blood's Spouse, and Spouse's Blood's Spouse
-        const affinal = this.calculateAffinal(idA, idB);
-        if (affinal) return affinal;
-
-        return { type: 'NONE' };
-    }
-
-    // --- Checkers ---
-
-    checkDirectUnion(idA, idB) {
-        const recA = this.records[idA];
-        if (recA.data.UNION) {
-            const union = recA.data.UNION.find(u => u.parsed[0] === idB);
-            if (union) {
-                return { type: 'UNION', subType: union.parsed[1] || 'MARR' };
-            }
-        }
-        return null;
-    }
-
-    checkDirectAssoc(idA, idB) {
-        const recA = this.records[idA];
-        const recB = this.records[idB];
-
-        if (recA.data.ASSOC) {
-            const assoc = recA.data.ASSOC.find(a => a.parsed[0] === idB);
-            if (assoc) return { type: 'ASSOC', role: assoc.parsed[1] || 'ASSOCIATE', direction: 'FORWARD' };
-        }
-        if (recB.data.ASSOC) {
-            const assoc = recB.data.ASSOC.find(a => a.parsed[0] === idA);
-            if (assoc) return { type: 'ASSOC', role: assoc.parsed[1] || 'ASSOCIATE', direction: 'REVERSE' };
-        }
-        return null;
-    }
-
-    calculateBlood(idA, idB) {
-        const ancA = this.getAncestors(idA);
-        const ancB = this.getAncestors(idB);
-
-        // Find intersections
-        const commonIds = [...ancA.keys()].filter(id => ancB.has(id));
-        if (commonIds.length === 0) return null;
-
-        // Find the "Most Recent" Common Ancestor(s) (Lowest Distance sum)
-        let minTotalDist = Infinity;
-        let mrcas = [];
-
-        commonIds.forEach(id => {
-            const distA = ancA.get(id);
-            const distB = ancB.get(id);
-            const total = distA + distB;
-
-            if (total < minTotalDist) {
-                minTotalDist = total;
-                mrcas = [{ id, distA, distB }];
-            } else if (total === minTotalDist) {
-                mrcas.push({ id, distA, distB });
-            }
-        });
-
-        if (mrcas.length === 0) return null;
-
-        const mrca = mrcas[0];
-        let isHalf = false;
-
-        // Determine if Half or Full
-        // We only flag as "Half" if we find exactly 1 MRCA,
-        // AND we can verify that the branches diverge via *different* second parents.
-        // If second parents are missing (incomplete data), we assume Full.
-        if (mrcas.length === 1 && mrca.distA > 0 && mrca.distB > 0) {
-            isHalf = this.isHalfSiblingOrCousin(mrca.id, ancA, ancB);
-        }
-
-        return {
-            type: 'BLOOD',
-            ancestorId: mrca.id,
-            distA: mrca.distA,
-            distB: mrca.distB,
-            isHalf: isHalf
-        };
+        this.graph = this._buildAdjacencyGraph(records);
     }
 
     /**
-     * Helper to verify if a relationship is "Half" by checking for conflicting second parents.
-     * Returns true ONLY if both sides have a second parent defined and they are different.
+     * Main Entry Point
      */
-    isHalfSiblingOrCousin(mrcaId, ancMapA, ancMapB) {
-        // 1. Find the direct child of MRCA that leads to A
-        const childA = this.findChildOfAncestorInPath(mrcaId, ancMapA);
-        // 2. Find the direct child of MRCA that leads to B
-        const childB = this.findChildOfAncestorInPath(mrcaId, ancMapB);
+    calculate(idA, idB) {
+        if (idA === idB) return { type: 'IDENTITY' };
 
-        if (!childA || !childB) return false; 
-        if (childA === childB) return false; // Same lineage branching lower down
+        // 1. Find the shortest path (Node sequence + Edge types)
+        const path = this._findShortestPath(idA, idB);
+        
+        console.log( path );
 
-        // 3. Get other parents of childA
-        const parentsA = this.getOtherParents(childA, mrcaId);
-        // 4. Get other parents of childB
-        const parentsB = this.getOtherParents(childB, mrcaId);
+        if (!path) return { type: 'NONE' };
 
-        // 5. If either side has NO other parents listed, assume FULL (incomplete data)
-        if (parentsA.length === 0 || parentsB.length === 0) return false;
-
-        // 6. If they have other parents, but share NONE of them, it's HALF
-        const sharesOtherParent = parentsA.some(p => parentsB.includes(p));
-        return !sharesOtherParent;
+        // 2. Analyze the path to classify the relationship
+        return this._classifyPath(path, idA, idB);
     }
 
-    findChildOfAncestorInPath(ancestorId, descendantAncestorsMap) {
-        // Find the node in the descendant's ancestor set that lists 'ancestorId' as a parent
-        for (const [id, dist] of descendantAncestorsMap) {
-             const rec = this.records[id];
-             if (rec && rec.data.PARENT) {
-                 if (rec.data.PARENT.some(p => p.parsed[0] === ancestorId)) {
-                     return id;
-                 }
-             }
-        }
-        return null;
-    }
+    // =========================================================================
+    // 1. Graph Construction (Pre-calculation)
+    // =========================================================================
+    _buildAdjacencyGraph(records) {
+        const graph = new Map();
 
-    getOtherParents(childId, excludeParentId) {
-        const rec = this.records[childId];
-        if (!rec || !rec.data.PARENT) return [];
-        return rec.data.PARENT
-            .map(p => p.parsed[0])
-            .filter(pid => pid !== excludeParentId);
-    }
+        // Initialize nodes
+        Object.keys(records).forEach(id => graph.set(id, []));
 
-    calculateAffinal(idA, idB) {
-        const spousesA = this.getSpouseIDs(idA);
-        const spousesB = this.getSpouseIDs(idB);
+        // Build Edges
+        Object.values(records).forEach(rec => {
+            const childId = rec.id;
 
-        // Path 1: A -> Spouse -> Blood Relative -> B (My Spouse's Family)
-        for (const sA of spousesA) {
-            const rel = this.calculateBlood(sA, idB);
-            if (rel) {
-                return {
-                    type: 'AFFINAL',
-                    subType: 'VIA_SPOUSE_BLOOD',
-                    spouseId: sA,
-                    bloodRel: rel
-                };
-            }
-        }
-
-        // Path 2: A -> Blood Relative -> Spouse -> B (My Relative's Spouse)
-        for (const sB of spousesB) {
-            const rel = this.calculateBlood(idA, sB);
-            if (rel) {
-                return {
-                    type: 'AFFINAL',
-                    subType: 'VIA_BLOOD_SPOUSE',
-                    targetSpouseId: sB,
-                    bloodRel: rel
-                };
-            }
-        }
-
-        // Path 3: A -> Spouse -> Blood Relative -> Spouse -> B (Joint Affinal)
-        // e.g. "My Wife's Brother's Wife"
-        for (const sA of spousesA) {
-            for (const sB of spousesB) {
-                // Don't loop back
-                if (sA === sB) continue; 
-                
-                const rel = this.calculateBlood(sA, sB);
-                if (rel) {
-                    return {
-                        type: 'AFFINAL',
-                        subType: 'JOINT_AFFINAL',
-                        spouseAId: sA,
-                        spouseBId: sB,
-                        bloodRel: rel
-                    };
-                }
-            }
-        }
-
-        return null;
-    }
-
-    // --- Helpers ---
-
-    getAncestors(startId) {
-        const ancestors = new Map(); // ID -> Distance
-        const queue = [{ id: startId, dist: 0 }];
-        ancestors.set(startId, 0);
-
-        let head = 0;
-        while(head < queue.length) {
-            const { id, dist } = queue[head++];
-            const rec = this.records[id];
-            if (rec && rec.data.PARENT) {
+            // PARENT Edges (Child -> Parent)
+            if (rec.data.PARENT) {
                 rec.data.PARENT.forEach(p => {
-                    const pId = p.parsed[0];
-                    if (pId && !ancestors.has(pId)) {
-                        ancestors.set(pId, dist + 1);
-                        queue.push({ id: pId, dist: dist + 1 });
+                    const parentId = p.parsed[0];
+                    if (records[parentId]) {
+                        // Edge: Child -> Parent (UP)
+                        this._addEdge(graph, childId, parentId, 'PARENT');
+                        // Edge: Parent -> Child (DOWN)
+                        this._addEdge(graph, parentId, childId, 'CHILD');
                     }
                 });
             }
-        }
-        return ancestors;
+
+            // UNION Edges (Spouse <-> Spouse)
+            if (rec.data.UNION) {
+                rec.data.UNION.forEach(u => {
+                    const spouseId = u.parsed[0];
+                    if (records[spouseId]) {
+                        // Bidirectional Union
+                        this._addEdge(graph, childId, spouseId, 'UNION');
+                        this._addEdge(graph, spouseId, childId, 'UNION');
+                    }
+                });
+            }
+        });
+        return graph;
     }
 
-    getSpouseIDs(id) {
-        const rec = this.records[id];
-        if (!rec || !rec.data.UNION) return [];
-        return rec.data.UNION.map(u => u.parsed[0]).filter(pid => this.records[pid]);
+    _addEdge(graph, from, to, type) {
+        if (!graph.has(from)) graph.set(from, []);
+        // Avoid duplicate edges
+        const existing = graph.get(from).find(e => e.target === to && e.type === type);
+        if (!existing) {
+            graph.get(from).push({ target: to, type });
+        }
+    }
+
+    // =========================================================================
+    // 2. Breadth-First Search (BFS)
+    // =========================================================================
+    _findShortestPath(startId, endId) {
+        // Queue item: { id, path: [{ edgeType, targetId }] }
+        const queue = [{ id: startId, path: [] }];
+        const visited = new Set([startId]);
+
+        while (queue.length > 0) {
+            const current = queue.shift();
+
+            if (current.id === endId) {
+                return current.path;
+            }
+
+            const neighbors = this.graph.get(current.id) || [];
+            
+            for (const edge of neighbors) {
+                if (!visited.has(edge.target)) {
+                    visited.add(edge.target);
+                    const newPath = [...current.path, { type: edge.type, target: edge.target }];
+                    queue.push({ id: edge.target, path: newPath });
+                }
+            }
+        }
+        return null; // No path found
+    }
+
+    // =========================================================================
+    // 3. Path Classification (The "Math" of Kinship)
+    // =========================================================================
+    _classifyPath(path, startId, endId) {
+        // Count edge types
+        let ups = 0;   // Steps up to common ancestor
+        let downs = 0; // Steps down from common ancestor
+        let unions = 0;
+        let unionIndices = [];
+
+        // Analyze direction flow
+        // Standard Blood Path looks like: UP... UP (Apex) DOWN... DOWN
+        let isBloodLike = true;
+        let hasTurnedDown = false;
+
+        path.forEach((step, index) => {
+            if (step.type === 'UNION') {
+                unions++;
+                unionIndices.push(index);
+                // Unions break the "Blood" flow unless handled specifically
+            } else if (step.type === 'PARENT') {
+                if (hasTurnedDown) isBloodLike = false; // Going up after going down (Zigzag)
+                ups++;
+            } else if (step.type === 'CHILD') {
+                hasTurnedDown = true;
+                downs++;
+            }
+        });
+
+        // --- CASE A: Direct Union (Spouse) ---
+        if (unions === 1 && path.length === 1) {
+            return { type: 'UNION', subType: 'MARR' }; // Defaulting to MARR for simplicity
+        }
+
+        // --- CASE B: Blood Relatives (0 Unions) ---
+        if (unions === 0 && isBloodLike) {
+            // Find common ancestor ID (The node at the "Apex" of the path)
+            const ancestorIndex = ups - 1; 
+            const ancestorId = ancestorIndex >= 0 ? path[ancestorIndex].target : startId;
+
+            return {
+                type: 'BLOOD',
+                ancestorId: ancestorId,
+                distA: ups,    // Steps from Start -> Ancestor
+                distB: downs,  // Steps from End -> Ancestor
+                isHalf: false  // BFS assumes full; logic for half-sibling requires deeper graph analysis
+            };
+        }
+
+        // --- CASE C: Affinal (In-Laws) ---
+        // Logic: Try to split the path at the Union to reuse Blood Logic
+        if (unions > 0) {
+            
+            // 1. Spouse's Blood Relative (E.g. Wife's Father)
+            // Path: UNION -> UP/DOWN
+            if (path[0].type === 'UNION' && unions === 1) {
+                const spouseId = path[0].target;
+                // Treat the rest of the path as a blood path from the Spouse
+                const remainderPath = path.slice(1);
+                const { ups: rUps, downs: rDowns } = this._countUD(remainderPath);
+                
+                return {
+                    type: 'AFFINAL',
+                    subType: 'VIA_SPOUSE_BLOOD',
+                    spouseId: spouseId,
+                    bloodRel: { distA: rUps, distB: rDowns, isHalf: false }
+                };
+            }
+
+            // 2. Blood Relative's Spouse (E.g. Brother's Wife)
+            // Path: UP/DOWN -> UNION
+            if (path[path.length - 1].type === 'UNION' && unions === 1) {
+                const targetSpouseId = path[path.length - 1].target; // This is endId
+                const relativeId = path[path.length - 2].target;     // Person before endId
+                
+                // Analyze path from Start to Relative
+                const bloodPath = path.slice(0, path.length - 1);
+                const { ups: bUps, downs: bDowns } = this._countUD(bloodPath);
+
+                return {
+                    type: 'AFFINAL',
+                    subType: 'VIA_BLOOD_SPOUSE',
+                    targetSpouseId: targetSpouseId, // The end user
+                    bloodRel: { distA: bUps, distB: bDowns, isHalf: false }
+                };
+            }
+
+            // 3. Joint Affinal (Spouse's Sibling's Spouse)
+            // Path: UNION -> UP/DOWN -> UNION
+            if (path[0].type === 'UNION' && path[path.length - 1].type === 'UNION' && unions === 2) {
+                const spouseA = path[0].target;
+                const spouseB = endId;
+                
+                // Path between spouses
+                const midPath = path.slice(1, path.length - 1);
+                const { ups: mUps, downs: mDowns } = this._countUD(midPath);
+
+                return {
+                    type: 'AFFINAL',
+                    subType: 'JOINT_AFFINAL',
+                    spouseAId: spouseA,
+                    spouseBId: spouseB,
+                    bloodRel: { distA: mUps, distB: mDowns, isHalf: false }
+                };
+            }
+        }
+
+        // Fallback for complex zig-zags (e.g., "Cousin's Step-Father")
+        // We return a generic "Step/Complex" type that the renderer can handle simply
+        return { 
+            type: 'COMPLEX', 
+            detail: `Path Length: ${path.length} steps. Unions crossed: ${unions}.` 
+        };
+    }
+
+    // Helper to count ups/downs in a sub-path
+    _countUD(path) {
+        let ups = 0;
+        let downs = 0;
+        path.forEach(step => {
+            if (step.type === 'PARENT') ups++;
+            if (step.type === 'CHILD') downs++;
+        });
+        return { ups, downs };
     }
 }
 
