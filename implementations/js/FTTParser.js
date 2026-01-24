@@ -1,5 +1,5 @@
 /**
- * FamilyTree-Text (FTT) Reference Parser v0.1.1
+ * FamilyTree-Text (FTT) Reference Parser v0.1.2
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
  */
@@ -20,7 +20,41 @@ export default class FTTParser {
      */
     parse(rawText) {
         const session = new ParseSession(this.SUPPORTED_VERSION);
-        return session.run(rawText);
+        // Optimization: Pass an iterator instead of splitting the entire string into an array.
+        // This reduces memory pressure on large files.
+        return session.run(this._createLineIterator(rawText));
+    }
+
+    /**
+     * Generator to yield lines one by one without creating a massive array.
+     * @param {string} text 
+     */
+    * _createLineIterator(text) {
+        let start = 0;
+        let lineNum = 1;
+        const length = text.length;
+
+        while (start <= length) {
+            let end = text.indexOf('\n', start);
+            if (end === -1) {
+                end = length;
+            }
+
+            let line = text.slice(start, end);
+            if (line.endsWith('\r')) {
+                line = line.slice(0, -1);
+            }
+
+            // If we are at the end of the file and the text didn't end with a newline,
+            // we yield the last chunk. If it did end with a newline, we yield an empty string
+            // (mimicking split behavior), though FTT logic largely ignores trailing blank lines.
+            if (start <= length) {
+                yield { line, lineNum: lineNum++ };
+            }
+
+            if (end === length) break;
+            start = end + 1;
+        }
     }
 }
 
@@ -54,7 +88,7 @@ class ParseSession {
         this.ids = new Set();
 
         // Structured Logs
-        this.errors = []; // Array<FTTError>
+        this.errors = [];   // Array<FTTError>
         this.warnings = []; // Array<FTTError>
 
         // State
@@ -63,14 +97,15 @@ class ParseSession {
         this.buffer = [];
         this.lastFieldRef = null;
         this.currentModifierTarget = null;
+        
         // Track current line for buffer flushing
         this.bufferStartLine = 0;
     }
 
-    run(rawText) {
-        const lines = rawText.replace(/\r\n/g, '\n').split('\n');
-        for (let i = 0; i < lines.length; i++) {
-            this._processLine(lines[i], i + 1);
+    run(lineIterator) {
+        // Iterate via generator (Memory Optimization)
+        for (const { line, lineNum } of lineIterator) {
+            this._processLine(line, lineNum);
         }
 
         this._flushBuffer();
@@ -105,6 +140,7 @@ class ParseSession {
                 return;
             }
             const content = line.substring(2);
+            // Append space if buffer doesn't end with newline
             if (this.buffer.length > 0 && this.buffer[this.buffer.length - 1] !== '\n') {
                 this.buffer.push(' ');
             }
@@ -176,7 +212,7 @@ class ParseSession {
         // Data Keys
         if (this.currentRecordId) {
             const record = this.records.get(this.currentRecordId);
-
+            
             if (key.endsWith('_SRC') || key.endsWith('_NOTE')) {
                 this._attachModifier(record, key, lineNum);
             } else {
@@ -208,6 +244,7 @@ class ParseSession {
 
     _attachModifier(record, modKey, lineNum) {
         const baseKey = modKey.replace(/_(SRC|NOTE)$/, '');
+
         if (!this.lastFieldRef || this.lastFieldRef.key !== baseKey) {
             this._error('CTX_MODIFIER', `Modifier ${modKey} does not immediately follow a ${baseKey} field.`, lineNum);
             return;
@@ -262,7 +299,7 @@ class ParseSession {
 
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
-
+            
             if (isEscaped) {
                 currentVal += char;
                 isEscaped = false;
@@ -317,6 +354,7 @@ class ParseSession {
                 } else {
                     // Inject implicit
                     if (!partnerRecord.data['UNION']) partnerRecord.data['UNION'] = [];
+
                     const implicitParsed = [...unionField.parsed];
                     implicitParsed[0] = id; // Swap ID
 
@@ -348,13 +386,14 @@ class ParseSession {
                 for (const field of fields) {
                     if (field.parsed.length > placeIdx) {
                         const rawPlace = field.parsed[placeIdx];
+                        
                         if (rawPlace && (rawPlace.includes('{=') || rawPlace.includes('<'))) {
                             const {
                                 display,
                                 geo,
                                 coords
                             } = this._parsePlaceString(rawPlace);
-
+                            
                             field.parsed[placeIdx] = display;
                             if (!field.metadata) field.metadata = {};
                             if (geo) field.metadata.geo = geo;
@@ -461,7 +500,7 @@ class ParseSession {
             const stack = [{ id: rootId, path: [], processed: false }];
 
             while (stack.length > 0) {
-                const frame = stack[stack.length - 1]; // Peek
+                const frame = stack[stack.length - 1];
 
                 if (frame.processed) {
                     // Post-order: We are done with this node
@@ -472,7 +511,6 @@ class ParseSession {
 
                 // Mark as processed so next time we see this frame, we pop it (Post-order)
                 frame.processed = true;
-
                 const { id, path } = frame;
 
                 // Cycle Check (Gray Set Logic via Path)
@@ -497,7 +535,6 @@ class ParseSession {
                 const record = this.records.get(id);
                 if (record && record.data['PARENT']) {
                     const nextPath = [...path, id];
-                    // Create history for the next level
 
                     for (const pField of record.data['PARENT']) {
                         const parentId = pField.parsed[0];
