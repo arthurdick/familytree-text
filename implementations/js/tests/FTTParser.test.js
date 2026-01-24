@@ -155,7 +155,6 @@ BORN: 1980 | City <51.5, -0.1>
 `;
       const result = parser.parse(input);
       const field = result.records['A'].data.BORN[0];
-      
       expect(field.parsed[1]).toBe('City');
       expect(field.metadata.coords).toBe('51.5, -0.1');
     });
@@ -244,6 +243,26 @@ ID: A
 PARENT: B | BIO
 
 ID: B
+PARENT: A | BIO
+`;
+      const result = parser.parse(input);
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'CIRCULAR_LINEAGE' })
+        ])
+      );
+    });
+
+    it('should detect Circular Lineage involving Placeholder records', () => {
+      // Regression test: Placeholders (?) should not block cycle detection
+      const input = `
+ID: A
+PARENT: B | BIO
+
+ID: B
+PARENT: ?C | BIO
+
+ID: ?C
 PARENT: A | BIO
 `;
       const result = parser.parse(input);
