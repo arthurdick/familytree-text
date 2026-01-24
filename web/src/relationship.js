@@ -78,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
 class RelationshipCalculator {
     constructor(records) {
         this.records = records;
-        // Build efficient lookups
         this.parents = new Map(); // ID -> [ParentIDs]
         this.spouses = new Map(); // ID -> [SpouseIDs]
 
@@ -150,13 +149,33 @@ class RelationshipCalculator {
             });
         });
 
+        // 4. Step-Siblings
+        // Check if a parent of A is married to a parent of B, but they share no blood parents.
+        if (bloodRels.length === 0) {
+            const parentsA = this.parents.get(idA) || [];
+            const parentsB = this.parents.get(idB) || [];
+            
+            for (const pA of parentsA) {
+                for (const pB of parentsB) {
+                    // If parents are married to each other
+                    if (this._isSpouse(pA, pB)) {
+                        results.push({
+                            type: 'STEP_SIBLING',
+                            parentA: pA,
+                            parentB: pB
+                        });
+                    }
+                }
+            }
+        }
+
         // Fallback
         if (results.length === 0) return [{ type: 'NONE' }];
 
-        // 4. Clean Up and Deduplicate
+        // 5. Clean Up and Deduplicate
         results = this._deduplicateResults(results);
         
-        // 5. Filter Redundant Step-Relationships
+        // 6. Filter Redundant Step-Relationships
         // If A is the Parent of B (Blood), remove "Step-Parent" (Affinal via Spouse)
         const isParent = results.some(r => r.type === 'BLOOD' && r.distA === 0);
         if (isParent) {
@@ -176,11 +195,14 @@ class RelationshipCalculator {
     // Core Algorithms
     // =========================================================================
 
+    /**
+     * Finds blood relationships using LCA.
+     * Identifies Half-Siblings by counting LCAs per generation.
+     */
     _findBloodRelationships(idA, idB) {
         const ancA = this._getAllAncestors(idA);
         const ancB = this._getAllAncestors(idB);
 
-        // Include Self
         ancA.set(idA, 0);
         ancB.set(idB, 0);
 
@@ -197,22 +219,44 @@ class RelationshipCalculator {
 
         if (commonAncestors.length === 0) return [];
 
-        // Filter for LCA
-        const lcas = commonAncestors.filter(candidate => {
-            const isRedundant = commonAncestors.some(other => {
+        // Filter for Lowest Common Ancestors (LCA)
+        let lcas = commonAncestors.filter(candidate => {
+            return !commonAncestors.some(other => {
                 if (other.id === candidate.id) return false;
                 return this._isAncestor(candidate.id, other.id);
             });
-            return !isRedundant;
         });
 
-        return lcas.map(lca => ({
-            type: 'BLOOD',
-            ancestorId: lca.id,
-            distA: lca.distA,
-            distB: lca.distB,
-            isHalf: false 
-        }));
+        // --- Half-Sibling / Full-Sibling Logic ---
+        // Group LCAs by their distances (tier-based grouping)
+        const tiers = new Map();
+        lcas.forEach(lca => {
+            const tierKey = `${lca.distA}-${lca.distB}`;
+            if (!tiers.has(tierKey)) tiers.set(tierKey, []);
+            tiers.get(tierKey).push(lca);
+        });
+
+        const finalRels = [];
+        tiers.forEach((group, tierKey) => {
+            const [distA, distB] = tierKey.split('-').map(Number);
+            
+            // If there is only 1 LCA in this generational tier, it is a "Half" relationship
+            // e.g., only 1 shared parent (dist 1-1) or 1 shared grandparent (dist 2-2)
+            const isHalf = group.length === 1;
+
+            // To avoid repeating the same term for every shared person in a tier 
+            // (e.g., listing "1st Cousin" twice for Grandma and Grandpa),
+            // we consolidate the tier into a single relationship entry.
+            finalRels.push({
+                type: 'BLOOD',
+                ancestorIds: group.map(g => g.id), // Store all ancestors for this tier
+                distA,
+                distB,
+                isHalf
+            });
+        });
+
+        return finalRels;
     }
 
     _getAllAncestors(startId) {
@@ -259,6 +303,7 @@ class RelationshipCalculator {
             if (res.type === 'BLOOD') key += `-${res.distA}-${res.distB}`;
             if (res.type === 'UNION') key += `-${res.target}`;
             if (res.type === 'AFFINAL') key += `-${res.subType}-${res.bloodRel.distA}-${res.bloodRel.distB}`;
+            if (res.type === 'STEP_SIBLING') key += `-${res.parentA}-${res.parentB}`;
             
             if (!unique.has(key)) {
                 unique.set(key, res);
@@ -290,7 +335,6 @@ function renderResult(relationships, records, idA, idB) {
     const textGen = new RelationText(records);
     
     if (relationships.length === 1 && relationships[0].type === 'NONE') {
-         // ... [No change] ...
          const spanTerm = document.createElement('span');
          spanTerm.className = 'relationship-term';
          spanTerm.textContent = "No Relation Found";
@@ -345,12 +389,25 @@ class RelationText {
             const t = genderA === 'M' ? "Husband" : genderA === 'F' ? "Wife" : "Spouse";
             return { term: t, detail: "Direct Union record found." };
         }
+        if (rel.type === 'STEP_SIBLING') {
+            const t = genderA === 'M' ? "Step-Brother" : genderA === 'F' ? "Step-Sister" : "Step-Sibling";
+            const pAName = getDisplayName(this.records[rel.parentA]);
+            const pBName = getDisplayName(this.records[rel.parentB]);
+            return { 
+                term: t, 
+                detail: `Parents are married: ${pAName} and ${pBName}.` 
+            };
+        }
         if (rel.type === 'BLOOD') {
             const term = this.getBloodTerm(rel.distA, rel.distB, genderA, rel.isHalf);
-            const commonName = getDisplayName(this.records[rel.ancestorId]);
+            const commonName = getDisplayName(this.records[rel.ancestorIds[0]]);
+            
+            const sA = rel.distA === 1 ? "step" : "steps";
+            const sB = rel.distB === 1 ? "step" : "steps";
+
             return {
                 term: term,
-                detail: `Common Ancestor: ${commonName} (${rel.distA} steps up from ${nameA}, ${rel.distB} steps up from ${nameB}).`
+                detail: `Common Ancestor: ${commonName} (${rel.distA} ${sA} up from ${nameA}, ${rel.distB} ${sB} up from ${nameB}).`
             };
         }
         if (rel.type === 'AFFINAL') {
@@ -403,7 +460,6 @@ class RelationText {
                 term = `${aToRelTerm}-in-law`;
             }
 
-            // No "you" used here previously, but consistent naming is good.
             return {
                 term: term,
                 detail: `${nameB} is the spouse of ${nameA}'s relative, ${relativeName} (${this.getBloodTerm(dAtoCA, dRelToCA, 'U', false)}).`
