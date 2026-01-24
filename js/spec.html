@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTT Specification v0.1</title>
+    
+    <script type="module">
+      import 'github-markdown-css/github-markdown-light.css';
+    </script>
+    
+    <link rel="stylesheet" href="./css/shared.css">
+
+    <style>
+        /* Page background overrides */
+        body {
+            background-color: #f6f8fa;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Container styling */
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            
+            margin: 0 auto 40px !important;
+            
+            padding: 45px;
+            background-color: white;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+        }
+
+        /* Header styling */
+        .app-header {
+            background: #24292f;
+            color: white;
+            border-bottom: none;
+            padding: 16px 32px;
+            margin-bottom: 2rem;
+        }
+        
+        /* Ensure the header content aligns with the document body */
+        .header-content {
+            max-width: 980px; 
+            margin: 0 auto; /* Center the header content too */
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+
+        .app-header h1 { 
+            color: white; 
+            font-size: 1.25rem; 
+            margin: 0; 
+        }
+        
+        .app-header p { 
+            color: #8c959f; 
+            margin: 0; 
+            font-size: 0.9rem; 
+        }
+
+        .btn-header { 
+            border: 1px solid rgba(255,255,255,0.4); 
+            color: white; 
+            background: transparent;
+            padding: 5px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .btn-header:hover {
+            border-color: #fff;
+            background-color: rgba(255,255,255,0.1);
+        }
+
+        @media (max-width: 767px) {
+            .markdown-body {
+                padding: 15px;
+                margin-top: 0;
+                border-radius: 0;
+                border-left: none;
+                border-right: none;
+            }
+            .app-header {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="app-header">
+        <div class="header-content">
+            <div>
+                <h1>FTT Specification</h1>
+                <p>Reference Documentation v0.1</p>
+            </div>
+            <a href="index.html" class="btn-header">← Back to Tools</a>
+        </div>
+    </header>
+
+    <article class="markdown-body">
+        __MARKDOWN_CONTENT__
+    </article>
+
+    <footer style="text-align:center; padding-bottom: 40px; color: #666; font-size: 0.85rem;">
+        <p>Generated from <code>spec/ftt_spec_v0.1.md</code></p>
+    </footer>
+
+</body>
+</html>
