@@ -557,20 +557,43 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Scroll so the line is roughly vertically centered (minus 3 lines padding)
             editor.scrollTop = (lineNum - 3) * cachedLineHeight;
+            
+            // Force sync immediately so highlight appears even if editor was blurred
+            syncGraphToCursor();
         }
     });
 
     // Sync: Editor -> Graph
     function syncGraphToCursor() {
-        const text = editor.value;
         const cursorIndex = editor.selectionStart;
-        const textBefore = text.substring(0, cursorIndex);
-        const lastIdMatch = [...textBefore.matchAll(/^ID:\s*([^\s]+)/gm)].pop();
+        const text = editor.value;
+        const textBeforeCursor = text.substring(0, cursorIndex);
+        
+        // Find current line index (0-based)
+        const lineCount = textBeforeCursor.split('\n').length;
+        const allLines = text.split('\n');
+        
+        let foundId = null;
 
-        if (lastIdMatch) {
-            const currentId = lastIdMatch[1];
-            cy.nodes().removeClass('current-record');
-            const targetNode = cy.getElementById(currentId);
+        // Iterate backwards from current line to find the nearest ID
+        for (let i = lineCount - 1; i >= 0; i--) {
+            const line = allLines[i];
+            
+            // If we hit a block separator, we stop looking up.
+            if (line.startsWith('---')) {
+                break;
+            }
+
+            const match = line.match(/^ID:\s*([^\s]+)/);
+            if (match) {
+                foundId = match[1];
+                break;
+            }
+        }
+
+        cy.nodes().removeClass('current-record');
+        if (foundId) {
+            const targetNode = cy.getElementById(foundId);
             if (targetNode.length > 0) targetNode.addClass('current-record');
         }
     }
@@ -589,6 +612,16 @@ document.addEventListener('DOMContentLoaded', () => {
     editor.addEventListener('mouseup', () => {
         syncGraphToCursor();
         saveContent();
+    });
+
+    // Clear highlight when focus is lost (clicking outside)
+    editor.addEventListener('blur', () => {
+        cy.nodes().removeClass('current-record');
+    });
+
+    // Restore highlight when focus is regained
+    editor.addEventListener('focus', () => {
+        syncGraphToCursor();
     });
 
     btnRender.addEventListener('click', render);
