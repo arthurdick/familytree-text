@@ -588,6 +588,9 @@ To ensure interoperability, the `[TYPE]` field in `PARENT` keys and the `[TYPE]`
 | `ADO` | **Adopted** | Legal adoption. |
 | `STE` | **Step** | Parent is the spouse of a biological parent. |
 | `FOS` | **Foster** | Temporary legal guardianship. |
+| `DONR` | **Donor** | Genetic contributor (sperm/egg) without social or legal parentage roles. |
+| `SURR` | **Surrogate** | Gestational carrier for the subject. |
+| `LEGL` | **Legal** | Parentage established by court order or legal presumption not covered above. |
 | `UNK` | **Unknown** | Nature of the relationship is unspecified. |
 
 ### **A.2 Union Types ([TYPE])**
@@ -597,6 +600,7 @@ These codes define the **nature** of the union.
 | Type | Meaning | Description |
 | --- | --- | --- |
 | `MARR` | **Married** | Legal marriage. |
+| `CIVL` | **Civil Union** | Legally recognized domestic partnership or civil union. |
 | `PART` | **Partner** | Unmarried romantic partner, common law, or domestic partnership. |
 | `UNK` | **Unknown** | Relationship nature is unspecified. |
 
@@ -609,7 +613,8 @@ These codes define **why** a union ended.
 | `DIV` | **Divorced** | Marriage ended by legal decree. |
 | `SEP` | **Separated** | Couple is living apart; legal bond may still exist. |
 | `WID` | **Widowed** | Relationship ended due to the death of the partner. |
-| `ANN` | **Annulled** | Legal declaration that the marriage never existed. |
+| `ANN` | **Annulled** | Legal declaration that the marriage was invalid from the start. |
+| `VOID` | **Void** | Declaration that a marriage was legally non-existent from its inception. |
 
 ---
 

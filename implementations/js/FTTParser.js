@@ -517,9 +517,9 @@ class ParseSession {
 
     _validateVocabulary() {
         const VALID = {
-            PARENT_TYPES: new Set(['BIO', 'ADO', 'STE', 'FOS', 'UNK']),
-            UNION_TYPES: new Set(['MARR', 'PART', 'UNK']),
-            UNION_REASONS: new Set(['DIV', 'SEP', 'WID', 'ANN']),
+            PARENT_TYPES: new Set(['BIO', 'ADO', 'STE', 'FOS', 'DONR', 'SURR', 'LEGL', 'UNK']),
+            UNION_TYPES: new Set(['MARR', 'CIVL', 'PART', 'UNK']),
+            UNION_REASONS: new Set(['DIV', 'SEP', 'WID', 'ANN', 'VOID']),
             NAME_TYPES: new Set(['BIRTH', 'MARR', 'ADO', 'IMM', 'TRAN', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']),
             NAME_STATUS: new Set(['PREF']),
             ASSOC_ROLES: new Set(['GODP', 'GODC', 'SPON', 'OFFI', 'WITN', 'EXEC', 'GUAR', 'WARD', 'INFO', 'MAST', 'APPR', 'SERV', 'NEIG', 'ENSL', 'OWNR'])
