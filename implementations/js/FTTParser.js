@@ -63,14 +63,12 @@ class ParseSession {
         this.buffer = [];
         this.lastFieldRef = null;
         this.currentModifierTarget = null;
-
         // Track current line for buffer flushing
         this.bufferStartLine = 0;
     }
 
     run(rawText) {
         const lines = rawText.replace(/\r\n/g, '\n').split('\n');
-
         for (let i = 0; i < lines.length; i++) {
             this._processLine(lines[i], i + 1);
         }
@@ -210,7 +208,6 @@ class ParseSession {
 
     _attachModifier(record, modKey, lineNum) {
         const baseKey = modKey.replace(/_(SRC|NOTE)$/, '');
-
         if (!this.lastFieldRef || this.lastFieldRef.key !== baseKey) {
             this._error('CTX_MODIFIER', `Modifier ${modKey} does not immediately follow a ${baseKey} field.`, lineNum);
             return;
@@ -224,6 +221,7 @@ class ParseSession {
             raw: '',
             line: lineNum
         };
+
         this.lastFieldRef.obj.modifiers[modKey].push(modObj);
         this.currentModifierTarget = modObj;
     }
@@ -264,6 +262,7 @@ class ParseSession {
 
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
+
             if (isEscaped) {
                 currentVal += char;
                 isEscaped = false;
@@ -318,7 +317,6 @@ class ParseSession {
                 } else {
                     // Inject implicit
                     if (!partnerRecord.data['UNION']) partnerRecord.data['UNION'] = [];
-
                     const implicitParsed = [...unionField.parsed];
                     implicitParsed[0] = id; // Swap ID
 
@@ -356,6 +354,7 @@ class ParseSession {
                                 geo,
                                 coords
                             } = this._parsePlaceString(rawPlace);
+
                             field.parsed[placeIdx] = display;
                             if (!field.metadata) field.metadata = {};
                             if (geo) field.metadata.geo = geo;
@@ -448,46 +447,62 @@ class ParseSession {
             }
         });
 
-        // 3. Cycle Detection (Iterative DFS)
+        // 3. Cycle Detection (Iterative DFS with Post-Order Visited)
+        // 'visited' must only track nodes that are fully processed (Black set), 
+        // not just discovered (Gray set), to prevent premature skipping.
         const visited = new Set();
-
         for (const rootId of this.ids) {
             // Only process Individuals for lineage cycles
             if (this._determineRecordType(rootId) !== 'INDIVIDUAL') continue;
-            
-            // Optimization: If we have already verified this node's ancestry in a previous pass, skip it.
             if (visited.has(rootId)) continue;
 
-            // Stack stores: { id: string, path: Array<string> }
-            const stack = [{ id: rootId, path: [] }];
+            // Stack stores: { id, path, processed }
+            // processed = false (Expand/Visit), true (Post-visit/Mark Safe)
+            const stack = [{ id: rootId, path: [], processed: false }];
 
             while (stack.length > 0) {
-                const { id, path } = stack.pop();
+                const frame = stack[stack.length - 1]; // Peek
 
-                // Cycle Check: Is the current ID already in the path we took to get here?
+                if (frame.processed) {
+                    // Post-order: We are done with this node
+                    visited.add(frame.id);
+                    stack.pop();
+                    continue;
+                }
+
+                // Mark as processed so next time we see this frame, we pop it (Post-order)
+                frame.processed = true;
+
+                const { id, path } = frame;
+
+                // Cycle Check (Gray Set Logic via Path)
                 if (path.includes(id)) {
                     const cyclePath = [...path, id].join(' -> ');
                     this._error(
-                        'CIRCULAR_LINEAGE', 
-                        `Circular Lineage Detected: ${cyclePath}`, 
+                        'CIRCULAR_LINEAGE',
+                        `Circular Lineage Detected: ${cyclePath}`,
                         this.records.get(id)?.line || 0
                     );
-                    continue; // Stop processing this specific branch
+                    stack.pop(); // Remove faulty node to continue processing stack
+                    continue;
                 }
 
-                // Optimization: Mark as visited globally
-                if (visited.has(id)) continue;
-                visited.add(id);
+                // If globally visited (Black Set), we know it's safe
+                if (visited.has(id)) {
+                    stack.pop();
+                    continue;
+                }
 
-                // Add parents to stack
+                // Expand Parents (Add to stack)
                 const record = this.records.get(id);
                 if (record && record.data['PARENT']) {
-                    const nextPath = [...path, id]; // Create history for the next level
+                    const nextPath = [...path, id];
+                    // Create history for the next level
 
                     for (const pField of record.data['PARENT']) {
                         const parentId = pField.parsed[0];
-                        if (parentId && !parentId.startsWith('?') && this.records.has(parentId)) {
-                            stack.push({ id: parentId, path: nextPath });
+                        if (parentId && this.records.has(parentId)) {
+                            stack.push({ id: parentId, path: nextPath, processed: false });
                         }
                     }
                 }
