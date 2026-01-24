@@ -623,6 +623,9 @@ To ensure consistent sorting and filtering of names, the `[Type]` and `[Status]`
 | --- | --- | --- |
 | `BIRTH` | **Birth Name** | The name given to the individual at birth (Maiden Name). |
 | `MARR` | **Married Name** | A name assumed upon marriage. |
+| `ADO` | **Adopted Name** | Name acquired through legal adoption. |
+| `IMM` | **Immigrant Name** | Name assumed during or after immigration. |
+| `TRAN` | **Transliterated** | Transliteration of a name. |
 | `AKA` | **Also Known As** | An alias or alternate spelling found in records. |
 | `NICK` | **Nickname** | A diminutive or familiar name (e.g., "Bob" for Robert). |
 | `PROF` | **Professional** | A stage name, pen name, or professional title. |

@@ -164,7 +164,7 @@ BORN_NOTE: Date is calculated from age listed in certificate.
 
 ### **Name Types**
 
-`BIRTH` (Maiden), `MARR` (Married), `AKA` (Alias), `NICK` (Nickname), `PROF` (Professional), `REL` (Religious).
+`BIRTH` (Maiden), `MARR` (Married), `ADO` (Adopted), `IMM` (Immigrant), `TRAN` (Transliterated), `AKA` (Alias), `NICK` (Nickname), `PROF` (Professional), `REL` (Religious).
 
 ### **Associate Roles**
 

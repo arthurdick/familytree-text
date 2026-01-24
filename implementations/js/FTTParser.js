@@ -520,7 +520,7 @@ class ParseSession {
             PARENT_TYPES: new Set(['BIO', 'ADO', 'STE', 'FOS', 'UNK']),
             UNION_TYPES: new Set(['MARR', 'PART', 'UNK']),
             UNION_REASONS: new Set(['DIV', 'SEP', 'WID', 'ANN']),
-            NAME_TYPES: new Set(['BIRTH', 'MARR', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']),
+            NAME_TYPES: new Set(['BIRTH', 'MARR', 'ADO', 'IMM', 'TRAN', 'AKA', 'NICK', 'PROF', 'REL', 'UNK']),
             NAME_STATUS: new Set(['PREF']),
             ASSOC_ROLES: new Set(['GODP', 'GODC', 'SPON', 'OFFI', 'WITN', 'EXEC', 'GUAR', 'WARD', 'INFO', 'MAST', 'APPR', 'SERV', 'NEIG', 'ENSL', 'OWNR'])
         };
