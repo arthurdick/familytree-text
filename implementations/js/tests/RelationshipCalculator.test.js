@@ -604,4 +604,184 @@ PARENT: MOM | BIO
             expect(rels[0].parentsDivorced).toBe(true);
         });
     });
+    
+    // ==========================================
+    // 13. Complex Double Cousins (Half-Sibling Parents)
+    // ==========================================
+    describe('Complex Double Cousins', () => {
+        // Scenario: Two brothers marry two half-sisters.
+        // The children share 3 grandparents (2 from father's side, 1 from mother's side).
+        // Previous logic failed because it strictly looked for 2 couples (4 ancestors).
+        const data = `
+ID: GP1
+UNION: GP2 | MARR
+
+ID: GP2
+UNION: GP1 | MARR
+
+ID: GP3
+UNION: GP4 | MARR
+UNION: GP5 | MARR
+
+ID: GP4
+UNION: GP3 | MARR
+ID: GP5
+UNION: GP3 | MARR
+
+# Brothers (Share GP1 & GP2)
+ID: BRO1
+PARENT: GP1 | BIO
+PARENT: GP2 | BIO
+UNION: HALF-SIS1 | MARR
+CHILD: ME
+
+ID: BRO2
+PARENT: GP1 | BIO
+PARENT: GP2 | BIO
+UNION: HALF-SIS2 | MARR
+CHILD: COUSIN
+
+# Half-Sisters (Share GP3)
+ID: HALF-SIS1
+PARENT: GP3 | BIO
+PARENT: GP4 | BIO
+UNION: BRO1 | MARR
+
+ID: HALF-SIS2
+PARENT: GP3 | BIO
+PARENT: GP5 | BIO
+UNION: BRO2 | MARR
+
+ID: ME
+PARENT: BRO1 | BIO
+PARENT: HALF-SIS1 | BIO
+
+ID: COUSIN
+PARENT: BRO2 | BIO
+PARENT: HALF-SIS2 | BIO
+`;
+        it('should identify Double Cousins sharing 3 grandparents', () => {
+            const rels = calc(data, 'ME', 'COUSIN');
+            
+            // They share 3 ancestors: GP1, GP2, GP3.
+            // distA=2, distB=2. 
+            // The new logic checks if ancestors form enough pairs.
+            // 3 ancestors -> floor(1.5) = 1 pair required.
+            // GP1+GP2 is a pair. GP3 is solo. Should pass as Double.
+            
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(2);
+            expect(rels[0].ancestorIds.length).toBe(3); 
+            expect(rels[0].isDouble).toBe(true);
+        });
+    });
+
+    // ==========================================
+    // 14. Widowhood vs Divorce (Step-Siblings)
+    // ==========================================
+    describe('Widowhood Step-Siblings', () => {
+        const data = `
+ID: DAD
+UNION: MOM | MARR | 1990 | 2000 | WID
+CHILD: SON
+
+ID: MOM
+UNION: DAD | MARR | 1990 | 2000 | WID
+CHILD: DAUGHTER
+
+ID: SON
+PARENT: DAD | BIO
+# Mom is step-parent
+
+ID: DAUGHTER
+PARENT: MOM | BIO
+# Dad is step-parent
+`;
+        it('should correctly identify Widowhood instead of Divorce', () => {
+            const rels = calc(data, 'SON', 'DAUGHTER');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('STEP_SIBLING');
+            
+            // Should NOT be flagged as divorced
+            expect(rels[0].parentsDivorced).toBe(false);
+            // Should capture the specific reason
+            expect(rels[0].unionReason).toBe('WID');
+        });
+    });
+
+    // ==========================================
+    // 15. Co-Affinal Relationships
+    // ==========================================
+    describe('Co-Affinal (Co-In-Laws)', () => {
+        const data = `
+ID: HUSB1
+UNION: WIFE1 | MARR
+
+ID: WIFE1
+UNION: HUSB1 | MARR
+PARENT: GP1 | BIO
+
+ID: WIFE2
+UNION: HUSB2 | MARR
+PARENT: GP1 | BIO
+
+ID: HUSB2
+UNION: WIFE2 | MARR
+
+ID: GP1
+CHILD: WIFE1
+CHILD: WIFE2
+`;
+        it('should identify Co-Brothers-in-Law (Spouses of Sisters)', () => {
+            // HUSB1 is married to WIFE1. HUSB2 is married to WIFE2.
+            // WIFE1 and WIFE2 are sisters.
+            const rels = calc(data, 'HUSB1', 'HUSB2');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('CO_AFFINAL');
+            expect(rels[0].subType).toBe('SPOUSES_ARE_SIBLINGS');
+            expect(rels[0].spouseA).toBe('WIFE1');
+            expect(rels[0].spouseB).toBe('WIFE2');
+        });
+    });
+
+    // ==========================================
+    // 16. Multi-Path Lineage (Bio + Adoptive)
+    // ==========================================
+    describe('Multi-Path Lineage', () => {
+        const data = `
+ID: CHILD
+PARENT: BIO-MOM | BIO
+PARENT: ADO-DAD | ADO
+
+ID: BIO-MOM
+PARENT: GRANDMA | BIO
+UNION: ADO-DAD | MARR
+
+ID: ADO-DAD
+PARENT: GRANDMA | BIO
+UNION: BIO-MOM | MARR
+# Scenario: Child adopted by Uncle (Mother's Brother)
+
+ID: GRANDMA
+CHILD: BIO-MOM
+CHILD: ADO-DAD
+`;
+        it('should distinguish Biological and Adoptive paths to ancestor', () => {
+            const rels = calc(data, 'GRANDMA', 'CHILD');
+            
+            const bioPath = rels.find(r => r.lineageB === 'BIO');
+            const adoPath = rels.find(r => r.lineageB === 'ADO');
+            
+            expect(bioPath).toBeDefined();
+            expect(bioPath.distA).toBe(0);
+            expect(bioPath.distB).toBe(2);
+            
+            expect(adoPath).toBeDefined();
+            expect(adoPath.distA).toBe(0);
+            expect(adoPath.distB).toBe(2);
+            expect(adoPath.isAdoptive).toBe(true);
+        });
+    });
 });
