@@ -896,4 +896,49 @@ PARENT: DAD | BIO
             expect(desc.term).toBe('Half-Uncle');
         });
     });
+    
+    // ==========================================
+    // 20. REGRESSION TEST: The "Half-Mother" Bug
+    // ==========================================
+    describe('Direct Lineage vs Half-Blood', () => {
+        const data = `
+ID: POLY-DAD
+SEX: M
+UNION: WIFE-1 | MARR | 1990 | 1992 | DIV
+UNION: WIFE-2 | MARR | 1993 | 1995 | DIV
+UNION: BIO-MOM | MARR | 2000 | .. |
+
+ID: BIO-MOM
+SEX: F
+
+ID: POOR-KID
+SEX: M
+PARENT: POLY-DAD | BIO
+PARENT: BIO-MOM | BIO
+
+ID: WIFE-1
+SEX: F
+ID: WIFE-2
+SEX: F
+`;
+        it('should NOT flag direct parents as Half, even with multiple step-parents', () => {
+            const rels = calc(data, 'BIO-MOM', 'POOR-KID');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(0); // Ancestor
+            expect(rels[0].distB).toBe(1); // Descendant
+            
+            // CRITICAL CHECK: Must be false
+            expect(rels[0].isHalf).toBe(false); 
+        });
+
+        it('should generate correct text "Mother"', () => {
+            const rels = calc(data, 'BIO-MOM', 'POOR-KID');
+            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
+            const desc = textGen.describe(rels[0], 'F', 'POOR-KID', 'BIO-MOM');
+            
+            expect(desc.term).toBe('Mother');
+        });
+    });
 });
