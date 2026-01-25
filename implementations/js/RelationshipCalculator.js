@@ -281,7 +281,7 @@ export class RelationshipCalculator {
                     if (distA === 1 && distB === 1) {
                         const parentsA = this.lineageParents.get(idA) || [];
                         const parentsB = this.lineageParents.get(idB) || [];
-                        if (parentsA.length === 2 || parentsB.length === 2) {
+                        if (parentsA.length >= 2 || parentsB.length >= 2) {
                             isHalf = true;
                         }
                     } 
@@ -289,7 +289,7 @@ export class RelationshipCalculator {
                     else if (distA === 1 || distB === 1) {
                         const uncleId = distA === 1 ? idA : idB;
                         const parents = this.lineageParents.get(uncleId) || [];
-                        if (parents.length === 2) {
+                        if (parents.length >= 2) {
                             isHalf = true;
                         }
                     }
