@@ -272,28 +272,44 @@ export class RelationshipCalculator {
             let isHalf = false;
             let isDouble = false;
 
+            // BLOOD RELATIONSHIP CHECKS
             if (!isStep && !isExStep) {
-                // Sibling Logic
-                if (distA === 1 && distB === 1) {
-                    const parentsA = this.lineageParents.get(idA) || [];
-                    const parentsB = this.lineageParents.get(idB) || [];
-                    
-                    if (lcaCount === 1 && (parentsA.length === 2 || parentsB.length === 2)) {
+                // 1. Half-Blood Logic (Single Common Ancestor)
+                if (lcaCount === 1) {
+                    // Sibling Case (1-1): Check if either party has 2 known parents
+                    if (distA === 1 && distB === 1) {
+                        const parentsA = this.lineageParents.get(idA) || [];
+                        const parentsB = this.lineageParents.get(idB) || [];
+                        if (parentsA.length === 2 || parentsB.length === 2) {
+                            isHalf = true;
+                        }
+                    } 
+                    // Avuncular Case (1-N): Check if the 'Uncle' (dist=1) has 2 known parents
+                    else if (distA === 1 || distB === 1) {
+                        const uncleId = distA === 1 ? idA : idB;
+                        const parents = this.lineageParents.get(uncleId) || [];
+                        if (parents.length === 2) {
+                            isHalf = true;
+                        }
+                    }
+                    // Cousin Case (N-N): Default to Half if only 1 ancestor
+                    else {
                         isHalf = true;
                     }
                 } 
-                // Cousin Logic
-                else if (distA > 1 && distB > 1) {
-                    if (lcaCount === 1) {
-                        isHalf = true;
-                    } else if (lcaCount === 2) {
-                        // Check if these two are a couple. If NOT, it's double.
+                
+                // 2. Double Logic (Restricted to Cousins)
+                // We only check Double for dist > 1, because lcaCount=2 for Siblings/Uncles usually implies Full blood.
+                else if (lcaCount >= 2 && distA > 1 && distB > 1) {
+                    if (lcaCount === 2) {
+                        // If the 2 ancestors are NOT partners, it's Double (distinct lineages)
                         const p1 = group[0].id;
                         const p2 = group[1].id;
                         if (!this._arePartners(p1, p2)) {
                             isDouble = true;
                         }
-                    } else if (lcaCount > 2) {
+                    } else {
+                        // 3+ ancestors implies Double (or Triple)
                         isDouble = true;
                     }
                 }
@@ -494,9 +510,16 @@ export class RelationshipCalculator {
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distA === 1 && r.distB === 1));
         }
 
+        // Check if a pure blood link exists
         const isBlood = results.some(r => r.type === 'LINEAGE' && !r.isStep && !r.isExStep);
+        
         if (isBlood) {
+            // Rule 1: Blood trumps Affinal (In-Laws)
             results = results.filter(r => r.type !== 'AFFINAL');
+
+            // Rule 2: Blood trumps Step-Lineage
+            // If I am your Half-Uncle, ignore that I might also be your Step-Uncle via a different marriage.
+            results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep)));
         }
 
         return results;

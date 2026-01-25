@@ -835,4 +835,65 @@ SEX: F
             expect(rels[0].ancestorIds).toContain('GP-MATERNAL');
         });
     });
+    
+    // ==========================================
+    // 19. Half-Avuncular (Half-Uncle)
+    // ==========================================
+    describe('Half-Avuncular (Half-Uncle)', () => {
+        const data = `
+ID: GRANDPA
+SEX: M
+UNION: GRANDMA-1 | MARR
+UNION: GRANDMA-2 | MARR
+
+ID: GRANDMA-1
+SEX: F
+UNION: GRANDPA | MARR
+
+ID: GRANDMA-2
+SEX: F
+UNION: GRANDPA | MARR
+
+ID: UNCLE-HALF
+SEX: M
+PARENT: GRANDPA | BIO
+PARENT: GRANDMA-1 | BIO
+
+ID: DAD
+SEX: M
+PARENT: GRANDPA | BIO
+PARENT: GRANDMA-2 | BIO
+
+ID: ME
+SEX: M
+PARENT: DAD | BIO
+`;
+        it('should identify Half-Uncle correctly', () => {
+            // Path: ME -> DAD -> GRANDPA -> UNCLE-HALF
+            // They share GRANDPA, but have different grandmothers (GRANDMA-1 vs GRANDMA-2)
+            const rels = calc(data, 'UNCLE-HALF', 'ME');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('LINEAGE');
+            // Uncle is 1 generation down from Grandpa
+            expect(rels[0].distA).toBe(1); 
+            // Me is 2 generations down from Grandpa
+            expect(rels[0].distB).toBe(2); 
+            
+            // CRITICAL CHECK: Must be identified as Half-Uncle
+            expect(rels[0].isHalf).toBe(true);
+            
+            // Ensure we identified only the single common ancestor
+            expect(rels[0].ancestorIds).toHaveLength(1);
+            expect(rels[0].ancestorIds[0]).toBe('GRANDPA');
+        });
+
+        it('should generate correct text for Half-Uncle', () => {
+            const rels = calc(data, 'UNCLE-HALF', 'ME');
+            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
+            const desc = textGen.describe(rels[0], 'M', 'ME', 'UNCLE-HALF');
+            
+            expect(desc.term).toBe('Half-Uncle');
+        });
+    });
 });
