@@ -777,4 +777,62 @@ SEX: M
             expect(desc.term).toBe('Adopted Son');
         });
     });
+    
+    // ==========================================
+    // 18. REGRESSION TEST: Uncoupled Ancestor Bug
+    // ==========================================
+    describe('Double Cousins (Uncoupled Ancestors)', () => {
+        const data = `
+ID: TEST-ME
+NAME: Test Subject
+SEX: M
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+
+ID: COUSIN-X
+NAME: Double Cousin X
+SEX: F
+PARENT: UNCLE-PAT | BIO
+PARENT: AUNT-MAT | BIO
+
+# --- The Parents ---
+ID: DAD
+SEX: M
+PARENT: GP-PATERNAL | BIO
+
+ID: UNCLE-PAT
+SEX: M
+PARENT: GP-PATERNAL | BIO
+
+ID: MOM
+SEX: F
+PARENT: GP-MATERNAL | BIO
+
+ID: AUNT-MAT
+SEX: F
+PARENT: GP-MATERNAL | BIO
+
+# --- The Uncoupled Grandparents ---
+# They share grandchildren (me & cousin) but are NOT partners.
+ID: GP-PATERNAL
+SEX: M
+
+ID: GP-MATERNAL
+SEX: F
+`;
+        it('should identify Double Cousins when ancestors are NOT partners', () => {
+            const rels = calc(data, 'TEST-ME', 'COUSIN-X');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(2); // Grandchild
+            expect(rels[0].distB).toBe(2); // Grandchild
+            expect(rels[0].isDouble).toBe(true); 
+            
+            // Ensure we captured both ancestors
+            expect(rels[0].ancestorIds).toHaveLength(2);
+            expect(rels[0].ancestorIds).toContain('GP-PATERNAL');
+            expect(rels[0].ancestorIds).toContain('GP-MATERNAL');
+        });
+    });
 });

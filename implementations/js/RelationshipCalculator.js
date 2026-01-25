@@ -1,7 +1,6 @@
 /**
  * RelationshipCalculator.js
  * Core logic for kinship determination and text generation.
- * Updated to include robust Step/Affinal logic and Multipath Lineage.
  */
 
 export class RelationshipCalculator {
@@ -220,6 +219,7 @@ export class RelationshipCalculator {
         ancB.get(idB).push({ dist: 0, isStep: false, isExStep: false, type: 'SELF', lineageType: 'SELF' });
 
         const commonAncestors = [];
+
         // Cross-reference all paths
         for (const [id, pathsA] of ancA) {
             if (ancB.has(id)) {
@@ -244,11 +244,10 @@ export class RelationshipCalculator {
         }
 
         if (commonAncestors.length === 0) return [];
-        
-        // Filter LCAs
+
+        // Filter LCAs (Remove ancestors of ancestors)
         let lcas = commonAncestors.filter(candidate => {
             return !commonAncestors.some(other => {
-                // If 'other' is strictly a descendant of 'candidate' on same lineage path
                 if (other.id === candidate.id) return false; 
                 return this._isAncestor(candidate.id, other.id) && 
                        (candidate.distA > other.distA) && 
@@ -278,17 +277,24 @@ export class RelationshipCalculator {
                 if (distA === 1 && distB === 1) {
                     const parentsA = this.lineageParents.get(idA) || [];
                     const parentsB = this.lineageParents.get(idB) || [];
+                    
                     if (lcaCount === 1 && (parentsA.length === 2 || parentsB.length === 2)) {
                         isHalf = true;
                     }
                 } 
                 // Cousin Logic
                 else if (distA > 1 && distB > 1) {
-                    if (lcaCount >= 3 && this._areAncestralPartners(group)) {
-                        isDouble = true;
-                    }
-                    else if (lcaCount === 1) {
+                    if (lcaCount === 1) {
                         isHalf = true;
+                    } else if (lcaCount === 2) {
+                        // Check if these two are a couple. If NOT, it's double.
+                        const p1 = group[0].id;
+                        const p2 = group[1].id;
+                        if (!this._arePartners(p1, p2)) {
+                            isDouble = true;
+                        }
+                    } else if (lcaCount > 2) {
+                        isDouble = true;
                     }
                 }
             }
@@ -323,12 +329,28 @@ export class RelationshipCalculator {
         return finalRels;
     }
 
+    _arePartners(idA, idB) {
+        // 1. Explicit Union
+        if (this._getUnionStatus(idA, idB)) return true;
+
+        // 2. Shared Children (Implicit Union)
+        const childrenA = this.childrenMap.get(idA);
+        const childrenB = this.childrenMap.get(idB);
+        if (childrenA && childrenB) {
+            for (const c of childrenA) {
+                if (childrenB.has(c)) return true;
+            }
+        }
+        return false;
+    }
+
     _getAllAncestors(startId) {
         const visited = new Map();
         const queue = [{ id: startId, dist: 0, isStep: false, isExStep: false, lineageType: 'BIO' }];
-        
+
         while (queue.length > 0) {
             const { id, dist, isStep, isExStep, lineageType } = queue.shift();
+
             const parents = this.allParents.get(id) || [];
             const types = this.parentTypes.get(id);
 
@@ -425,35 +447,6 @@ export class RelationshipCalculator {
                 });
             });
         });
-    }
-
-    _areAncestralPartners(ancestors) {
-        const ids = ancestors.map(a => a.id);
-        const pairs = new Set();
-
-        for (let i = 0; i < ids.length; i++) {
-            for (let j = i + 1; j < ids.length; j++) {
-                const p1 = ids[i];
-                const p2 = ids[j];
-
-                if (this._getUnionStatus(p1, p2)) {
-                    pairs.add([p1, p2].sort().join('+'));
-                    continue;
-                }
-
-                const children1 = this.childrenMap.get(p1);
-                const children2 = this.childrenMap.get(p2);
-                if (children1 && children2) {
-                    for (const c of children1) {
-                        if (children2.has(c)) {
-                            pairs.add([p1, p2].sort().join('+'));
-                            break; 
-                        }
-                    }
-                }
-            }
-        }
-        return pairs.size >= Math.floor(ids.length / 2);
     }
 
     _isAncestor(ancestorId, descendantId) {
