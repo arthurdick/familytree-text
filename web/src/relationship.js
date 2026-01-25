@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const relationships = calculator.calculate(id1, id2);
             
             renderResult(relationships, records, id1, id2);
+
         } catch (e) {
             showError(e.message);
             console.error(e);
@@ -80,7 +81,7 @@ class RelationshipCalculator {
         this.lineageParents = new Map(); // BIO, ADO, LEGL
         this.allParents = new Map();     // All types (for Step detection)
         this.spouses = new Map();        // ID -> [SpouseIDs]
-        this.parentTypes = new Map();    // Helper: ID -> Map<ParentID, Type>
+        this.parentTypes = new Map();    // ID -> Map<ParentID, Type>
 
         Object.values(records).forEach(rec => {
             const lList = [];
@@ -98,7 +99,7 @@ class RelationshipCalculator {
                     typeMap.set(pId, pType);
 
                     // Filter Lineage Parents: 
-                    // We accept BIO, ADO, LEGL, SURR, DONR, IV.
+                    // We accept BIO, ADO, LEGL, SURR, DONR.
                     // We REJECT STE (Step) and FOS (Foster) for blood/lineage traversal.
                     const VALID_LINEAGE = ['BIO', 'ADO', 'LEGL', 'SURR', 'DONR'];
                     if (VALID_LINEAGE.includes(pType) || !pType) {
@@ -137,12 +138,18 @@ class RelationshipCalculator {
         const bloodRels = this._findLineageRelationships(idA, idB);
         bloodRels.forEach(rel => results.push(rel));
 
-        // 3. Check Affinal (In-Laws)
-        // A -> Spouse -> Lineage -> B
+        // 3. Check Step-Parent / Step-Child (Recursive/Direct)
+        const stepRels = this._findStepRelationships(idA, idB);
+        stepRels.forEach(rel => results.push(rel));
+
+        // 4. Check Affinal (In-Laws)
+        
+        // A -> Spouse -> B (Spouse's Lineage or Step)
         const spousesA = this.spouses.get(idA) || [];
         spousesA.forEach(spouseId => {
             if (spouseId === idB) return; 
             
+            // Spouse's Blood Relations (e.g. Spouse's Father)
             const rels = this._findLineageRelationships(spouseId, idB);
             rels.forEach(rel => {
                 results.push({
@@ -152,9 +159,20 @@ class RelationshipCalculator {
                     bloodRel: rel
                 });
             });
+
+            // Extended Affinal Chain (Spouse's Step-Parent)
+            const stepRelsViaSpouse = this._findStepRelationships(spouseId, idB);
+            stepRelsViaSpouse.forEach(stepRel => {
+                 results.push({
+                    type: 'AFFINAL',
+                    subType: 'VIA_SPOUSE_STEP',
+                    spouseId: spouseId,
+                    stepRel: stepRel
+                });
+            });
         });
 
-        // A -> Lineage -> Spouse -> B
+        // A -> Lineage -> Spouse -> B (Relative's Spouse)
         const spousesB = this.spouses.get(idB) || [];
         spousesB.forEach(spouseId => {
             if (spouseId === idA) return;
@@ -170,16 +188,19 @@ class RelationshipCalculator {
             });
         });
 
-        // 4. Step-Siblings (Strict)
-        // Check if a parent of A is married to a parent of B, but they share NO lineage parents.
-        if (bloodRels.length === 0) {
-            const parentsA = this.allParents.get(idA) || [];
-            const parentsB = this.allParents.get(idB) || [];
-            
-            for (const pA of parentsA) {
-                for (const pB of parentsB) {
-                    // If parents are married to each other
-                    if (this._isSpouse(pA, pB)) {
+        // 5. Step-Siblings (Strict)
+        const parentsA = this.allParents.get(idA) || [];
+        const parentsB = this.allParents.get(idB) || [];
+        
+        for (const pA of parentsA) {
+            for (const pB of parentsB) {
+                if (this._isSpouse(pA, pB)) {
+                    const isBioPair = this.lineageParents.get(idA)?.includes(pA) && 
+                                      this.lineageParents.get(idA)?.includes(pB) &&
+                                      this.lineageParents.get(idB)?.includes(pA) && 
+                                      this.lineageParents.get(idB)?.includes(pB);
+
+                    if (!isBioPair) {
                         results.push({
                             type: 'STEP_SIBLING',
                             parentA: pA,
@@ -193,15 +214,19 @@ class RelationshipCalculator {
         // Fallback
         if (results.length === 0) return [{ type: 'NONE' }];
 
-        // 5. Clean Up and Deduplicate
+        // 6. Clean Up and Deduplicate
         results = this._deduplicateResults(results);
 
-        // 6. Filter Redundant Step-Relationships
+        // 7. Filter Redundant Relationships
+        const isStep = results.some(r => r.type === 'STEP_PARENT' || r.type === 'STEP_CHILD');
+        if (isStep) {
+            results = results.filter(r => !(r.type === 'AFFINAL' && r.subType === 'VIA_BLOOD_SPOUSE' && r.bloodRel.distA === 0));
+        }
+
         const isParent = results.some(r => r.type === 'LINEAGE' && r.distA === 0);
         if (isParent) {
             results = results.filter(r => !(r.type === 'AFFINAL' && r.subType === 'VIA_SPOUSE'));
         }
-        
         const isChild = results.some(r => r.type === 'LINEAGE' && r.distB === 0);
         if (isChild) {
              results = results.filter(r => !(r.type === 'AFFINAL' && r.subType === 'VIA_BLOOD_SPOUSE'));
@@ -214,10 +239,27 @@ class RelationshipCalculator {
     // Core Algorithms
     // =========================================================================
 
-    /**
-     * Finds relationships using LCA on the Lineage Graph.
-     * Handles Double Cousins and Robust Half-Sibling logic.
-     */
+    _findStepRelationships(idA, idB) {
+        const results = [];
+        const parentsB = this.lineageParents.get(idB) || [];
+        for (const pB of parentsB) {
+            if (this._isSpouse(idA, pB)) {
+                if (!parentsB.includes(idA)) {
+                    results.push({ type: 'STEP_PARENT', parentId: pB });
+                }
+            }
+        }
+        const parentsA = this.lineageParents.get(idA) || [];
+        for (const pA of parentsA) {
+            if (this._isSpouse(idB, pA)) {
+                if (!parentsA.includes(idB)) {
+                    results.push({ type: 'STEP_CHILD', parentId: pA });
+                }
+            }
+        }
+        return results;
+    }
+
     _findLineageRelationships(idA, idB) {
         const ancA = this._getAllAncestors(idA);
         const ancB = this._getAllAncestors(idB);
@@ -238,16 +280,13 @@ class RelationshipCalculator {
 
         if (commonAncestors.length === 0) return [];
 
-        // Filter for Lowest Common Ancestors (LCA)
         let lcas = commonAncestors.filter(candidate => {
             return !commonAncestors.some(other => {
                 if (other.id === candidate.id) return false;
-                // Use strict lineage ancestry for LCA check
                 return this._isAncestor(candidate.id, other.id);
             });
         });
 
-        // Group LCAs by their distances (Generational Tier)
         const tiers = new Map();
         lcas.forEach(lca => {
             const tierKey = `${lca.distA}-${lca.distB}`;
@@ -258,44 +297,31 @@ class RelationshipCalculator {
         const finalRels = [];
         tiers.forEach((group, tierKey) => {
             const [distA, distB] = tierKey.split('-').map(Number);
-            
-            // --- Logic for Half / Double / Adoptive ---
-            
-            // 1. Ancestor Count Logic
             const lcaCount = group.length;
-            
             let isHalf = false;
             let isDouble = false;
 
-            // Sibling Logic (Distance 1-1)
             if (distA === 1 && distB === 1) {
                 if (lcaCount >= 2) {
-                    // Shares 2 (or more) parents -> Full Sibling
                     isHalf = false;
                 } else {
-                    // Shares only 1 parent.
-                    // CHECK: Is this "Half" or just "Missing Data"?
-                    const pA = this.lineageParents.get(idA);
-                    const pB = this.lineageParents.get(idB);
-                    
-                    // If either side has < 2 known parents, we assume Missing Data -> Full
-                    // Only flag Half if we have data to prove disparate parents.
-                    if (pA.length >= 2 && pB.length >= 2) {
+                    const pA = this.lineageParents.get(idA) || [];
+                    const pB = this.lineageParents.get(idB) || [];
+                    const shared = pA.filter(p => pB.includes(p));
+                    const uniqueA = pA.filter(p => !pB.includes(p));
+                    const uniqueB = pB.filter(p => !pA.includes(p));
+                    if (shared.length === 1 && uniqueA.length > 0 && uniqueB.length > 0) {
                         isHalf = true;
                     } else {
-                        isHalf = false; // "Assumed Full"
+                        isHalf = false; 
                     }
                 }
             } 
-            // Cousin Logic (Distance > 1)
             else if (distA > 1 && distB > 1) {
-                // If you share 2 grandparents (count=2), you are Double Cousins.
-                if (lcaCount >= 2) isDouble = true;
+                if (lcaCount >= 4) isDouble = true;
+                if (lcaCount === 1) isHalf = true;
             }
 
-            // 2. Adoptive Path Detection
-            // If the path from A->LCA or B->LCA traverses an 'ADO' link, flag it.
-            // Since we merged the group, we check if ANY LCA in the group relies on adoption.
             let isAdoptive = false;
             group.forEach(lca => {
                 if (this._pathHasType(idA, lca.id, 'ADO') || this._pathHasType(idB, lca.id, 'ADO')) {
@@ -313,17 +339,14 @@ class RelationshipCalculator {
                 isAdoptive
             });
         });
-
         return finalRels;
     }
 
     _getAllAncestors(startId) {
-        const visited = new Map(); // ID -> Distance
+        const visited = new Map();
         const queue = [{ id: startId, dist: 0 }];
-        
         while (queue.length > 0) {
             const { id, dist } = queue.shift();
-            // Use lineageParents (BIO/ADO) only
             const parents = this.lineageParents.get(id) || [];
             parents.forEach(pId => {
                 if (!visited.has(pId)) {
@@ -336,7 +359,6 @@ class RelationshipCalculator {
     }
 
     _isAncestor(ancestorId, descendantId) {
-        // BFS check using lineage parents
         const queue = [descendantId];
         const visited = new Set();
         while(queue.length > 0) {
@@ -344,7 +366,6 @@ class RelationshipCalculator {
             if (curr === ancestorId) return true;
             if (visited.has(curr)) continue;
             visited.add(curr);
-            
             const parents = this.lineageParents.get(curr) || [];
             parents.forEach(p => queue.push(p));
         }
@@ -352,22 +373,16 @@ class RelationshipCalculator {
     }
 
     _pathHasType(startId, endId, targetType) {
-        // DFS to find if path involves specific relationship type
         if (startId === endId) return false;
-        
         const stack = [{ id: startId, found: false }];
         const visited = new Set();
-
         while(stack.length > 0) {
             const { id, found } = stack.pop();
-            
-            if (id === endId) return found; // Path complete
+            if (id === endId) return found; 
             if (visited.has(id)) continue;
             visited.add(id);
-
             const parents = this.lineageParents.get(id) || [];
             const types = this.parentTypes.get(id);
-
             parents.forEach(pId => {
                 const type = types.get(pId);
                 const isTarget = (type === targetType);
@@ -386,17 +401,16 @@ class RelationshipCalculator {
         const unique = new Map();
         results.forEach(res => {
             let key = `${res.type}`;
-            if (res.type === 'LINEAGE') key += `-${res.distA}-${res.distB}-${res.isDouble}`;
+            if (res.type === 'LINEAGE') key += `-${res.distA}-${res.distB}-${res.isDouble}-${res.isHalf}`;
             if (res.type === 'UNION') key += `-${res.target}`;
-            if (res.type === 'AFFINAL') key += `-${res.subType}-${res.bloodRel.distA}-${res.bloodRel.distB}`;
+            if (res.type === 'AFFINAL') key += `-${res.subType}-${res.spouseId}`;
+            if (res.type === 'STEP_PARENT') key += `-${res.parentId}`;
+            if (res.type === 'STEP_CHILD') key += `-${res.parentId}`;
             if (res.type === 'STEP_SIBLING') {
                 const parents = [res.parentA, res.parentB].sort().join('-');
                 key += `-${parents}`;
             }
-            
-            if (!unique.has(key)) {
-                unique.set(key, res);
-            }
+            if (!unique.has(key)) unique.set(key, res);
         });
         return Array.from(unique.values());
     }
@@ -433,7 +447,7 @@ function renderResult(relationships, records, idA, idB) {
     } else {
         const terms = [];
         const details = [];
-
+        
         relationships.forEach(rel => {
             const { term, detail } = textGen.describe(rel, genderA, nameB, nameA);
             terms.push(term);
@@ -478,6 +492,24 @@ class RelationText {
             const t = genderA === 'M' ? "Husband" : genderA === 'F' ? "Wife" : "Spouse";
             return { term: t, detail: "Direct Union record found." };
         }
+        
+        if (rel.type === 'STEP_PARENT') {
+            const t = genderA === 'M' ? "Step-Father" : genderA === 'F' ? "Step-Mother" : "Step-Parent";
+            const spouseName = getDisplayName(this.records[rel.parentId]);
+            return {
+                term: t,
+                detail: `${nameA} is the spouse of ${nameB}'s parent, ${spouseName}.`
+            };
+        }
+        if (rel.type === 'STEP_CHILD') {
+            const t = genderA === 'M' ? "Step-Son" : genderA === 'F' ? "Step-Daughter" : "Step-Child";
+            const parentName = getDisplayName(this.records[rel.parentId]);
+            return {
+                term: t,
+                detail: `${nameA} is the child of ${nameB}'s spouse, ${parentName}.`
+            };
+        }
+
         if (rel.type === 'STEP_SIBLING') {
             const t = genderA === 'M' ? "Step-Brother" : genderA === 'F' ? "Step-Sister" : "Step-Sibling";
             const pAName = getDisplayName(this.records[rel.parentA]);
@@ -487,8 +519,8 @@ class RelationText {
                 detail: `Parents are married: ${pAName} and ${pBName}.` 
             };
         }
+
         if (rel.type === 'LINEAGE') {
-            // Standard Blood/Adoptive Logic
             const term = this.getBloodTerm(rel.distA, rel.distB, genderA, rel.isHalf, rel.isDouble, rel.isAdoptive);
             const commonName = getDisplayName(this.records[rel.ancestorIds[0]]);
             const lcaCount = rel.ancestorIds.length;
@@ -499,7 +531,6 @@ class RelationText {
             let det = `Common Ancestor: ${commonName}`;
             if (lcaCount > 1) det += ` (+ ${lcaCount - 1} other${lcaCount > 2 ? 's' : ''})`;
             det += ` (${rel.distA} ${sA} up from ${nameA}, ${rel.distB} ${sB} up from ${nameB}).`;
-            
             if (rel.isAdoptive) det += ` [Includes Adoptive Link]`;
 
             return { term: term, detail: det };
@@ -511,27 +542,43 @@ class RelationText {
     }
 
     describeAffinal(rel, genderA, nameB, nameA) {
-        // Case 1: Relationship via "My Spouse" (e.g. My Spouse's Sister)
-        if (rel.subType === 'VIA_SPOUSE') {
+        // Case 1: Relationship via "My Spouse"
+        if (rel.subType === 'VIA_SPOUSE' || rel.subType === 'VIA_SPOUSE_STEP') {
+            const spouseName = getDisplayName(this.records[rel.spouseId]);
+            const spouseGender = getGender(this.records[rel.spouseId]);
+
+            // Handling VIA_SPOUSE_STEP (Spouse's Step-Parent or Step-Child)
+            if (rel.subType === 'VIA_SPOUSE_STEP') {
+                let term = "Step-In-Law";
+                // If the Spouse is a Step-Child of B, then B is a Step-Parent.
+                // A is Step-Son/Daughter-in-law.
+                if (rel.stepRel.type === 'STEP_CHILD') {
+                    const core = (genderA === 'M' ? "Step-Son" : genderA === 'F' ? "Step-Daughter" : "Step-Child");
+                    term = core + "-in-law";
+                }
+                // If Spouse is Step-Parent of B, then A is Step-Father/Mother-in-law.
+                else if (rel.stepRel.type === 'STEP_PARENT') {
+                     term = (genderA === 'M' ? "Step-Father" : genderA === 'F' ? "Step-Mother" : "Step-Parent") + "-in-law";
+                }
+                
+                return {
+                    term: term,
+                    detail: `${nameA} is the spouse of ${spouseName}, who is the Step-Relation of ${nameB}.`
+                };
+            }
+
+            // Standard VIA_SPOUSE
             const dSpouseToCA = rel.bloodRel.distA;
             const dBToCA = rel.bloodRel.distB;
-            const spouseName = getDisplayName(this.records[rel.spouseId]);
-            
-            const spouseGender = getGender(this.records[rel.spouseId]);
             
             let term = "In-Law";
             if (dSpouseToCA === 0 && dBToCA > 0) {
                 // Spouse's Parent -> Father/Mother-in-law
-                term = "Step-" + this.getAncestorTerm(dBToCA, genderA);
-            } else if (dBToCA === 0 && dSpouseToCA > 0) {
-                 // Spouse's Child (not mine) -> Step-Son/Daughter
-                 const descTerm = this.getDescendantTerm(dSpouseToCA, genderA);
-                 term = descTerm + "-in-law"; // Conventionally treated as Step-Child
+                term = this.getAncestorTerm(dBToCA, genderA) + "-in-law";
             } else if (dSpouseToCA === 1 && dBToCA === 1) {
                 // Spouse's Sibling -> Brother/Sister-in-law
                 term = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling") + "-in-law";
             } else {
-                // Extended: Spouse of [Relation]
                 const spouseToBTerm = this.getBloodTerm(dSpouseToCA, dBToCA, spouseGender, false, false, false);
                 term = `Spouse of ${spouseToBTerm}`;
             }
@@ -542,18 +589,22 @@ class RelationText {
             };
         }
 
-        // Case 2: Relationship via "My Relative's Spouse" (e.g. My Brother's Wife)
+        // Case 2: Relationship via "My Relative's Spouse"
         if (rel.subType === 'VIA_BLOOD_SPOUSE') {
             const dAtoCA = rel.bloodRel.distA;
             const dRelToCA = rel.bloodRel.distB;
             const relativeName = getDisplayName(this.records[rel.spouseId]);
-            
             const relativeGender = getGender(this.records[rel.spouseId]);
             
             let term = "In-Law";
+
             if (dAtoCA === 0 && dRelToCA > 0) {
-                term = this.getAncestorTerm(dRelToCA, genderA) + "-in-law";
+                // Relative is my Descendant -> Son/Daughter-in-law
+                term = this.getDescendantTerm(dAtoCA, genderA) + "-in-law";
+            
             } else if (dRelToCA === 0 && dAtoCA > 0) {
+                // Relative is my Ancestor. B is Spouse of Ancestor.
+                // This means B is my Step-Parent/Grandparent.
                 term = "Step-" + this.getDescendantTerm(dAtoCA, genderA);
             } else if (dAtoCA === 1 && dRelToCA === 1) {
                 // Sibling's Spouse -> Brother/Sister-in-law
@@ -579,16 +630,13 @@ class RelationText {
         let suffix = "";
         if (isAdoptive) suffix = " (Adoptive)";
 
-        // Direct Line (Parent/Child/Grand...)
         if (distA === 0) return this.getAncestorTerm(distB, sex) + suffix;
         if (distB === 0) return this.getDescendantTerm(distA, sex) + suffix;
 
-        // Sibling
         if (distA === 1 && distB === 1) {
             return prefix + (sex === 'M' ? "Brother" : sex === 'F' ? "Sister" : "Sibling") + suffix;
         }
 
-        // Avuncular
         if (distA === 1 && distB > 1) { 
             const core = this.getNiblingTerm(distB - 1, sex, true);
             return prefix + core + suffix;
@@ -598,7 +646,6 @@ class RelationText {
             return prefix + core + suffix;
         }
 
-        // Cousins
         const degree = Math.min(distA, distB) - 1;
         const removed = Math.abs(distA - distB);
         const core = this.getCousinTerm(degree, removed);
