@@ -306,4 +306,192 @@ PARENT: MOM | BIO
             expect(rels[0].type).toBe('STEP_SIBLING');
         });
     });
+    
+    // ==========================================
+    // 1. Temporal Logic (Ex-Spouses)
+    // ==========================================
+    describe('Temporal Logic', () => {
+        const data = `
+ID: HUSB
+SEX: M
+UNION: EX-WIFE | MARR | 1990 | 2000 | DIV
+UNION: WIFE | MARR | 2005 | .. |
+
+ID: EX-WIFE
+SEX: F
+UNION: HUSB | MARR | 1990 | 2000 | DIV
+
+ID: WIFE
+SEX: F
+UNION: HUSB | MARR | 2005 | .. |
+`;
+
+        it('should identify Current Spouse correctly', () => {
+            const rels = calc(data, 'HUSB', 'WIFE');
+            expect(rels[0].type).toBe('UNION');
+            expect(rels[0].target).toBe('WIFE');
+        });
+
+        it('should identify Former Spouse correctly', () => {
+            const rels = calc(data, 'HUSB', 'EX-WIFE');
+            expect(rels[0].type).toBe('FORMER_UNION');
+            expect(rels[0].target).toBe('EX-WIFE');
+            expect(rels[0].reason).toBe('DIV');
+        });
+    });
+
+    // ==========================================
+    // 2. Deep Step-Relationships
+    // ==========================================
+    describe('Deep Step-Traversal', () => {
+        const data = `
+ID: ME
+PARENT: MOM | BIO
+
+ID: MOM
+UNION: STEP-DAD | MARR
+
+ID: STEP-DAD
+PARENT: STEP-GRANDPA | BIO
+
+ID: STEP-GRANDPA
+SEX: M
+CHILD: STEP-DAD
+`;
+
+        it('should identify Step-Grandfather', () => {
+            // Path: ME -> MOM -> (Spouse) STEP-DAD -> (Bio) STEP-GRANDPA
+            const rels = calc(data, 'STEP-GRANDPA', 'ME');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].isStep).toBe(true);
+            expect(rels[0].distA).toBe(0); // Ancestor
+            expect(rels[0].distB).toBe(2); // 2 generations down (Grandparent level)
+        });
+    });
+
+    // ==========================================
+    // 3. Topology-Based Double Cousins
+    // ==========================================
+    describe('Double Cousins (Topology Check)', () => {
+        const data = `
+# Two brothers marrying two sisters
+ID: BRO1
+PARENT: GP1 | BIO
+PARENT: GP2 | BIO
+UNION: SIS1 | MARR
+CHILD: ME
+
+ID: BRO2
+PARENT: GP1 | BIO
+PARENT: GP2 | BIO
+UNION: SIS2 | MARR
+CHILD: COUSIN
+
+ID: SIS1
+PARENT: GP3 | BIO
+PARENT: GP4 | BIO
+UNION: BRO1 | MARR
+
+ID: SIS2
+PARENT: GP3 | BIO
+PARENT: GP4 | BIO
+UNION: BRO2 | MARR
+
+ID: ME
+PARENT: BRO1 | BIO
+PARENT: SIS1 | BIO
+
+ID: COUSIN
+PARENT: BRO2 | BIO
+PARENT: SIS2 | BIO
+
+# Ancestors
+ID: GP1
+UNION: GP2 | MARR
+ID: GP2
+UNION: GP1 | MARR
+
+ID: GP3
+UNION: GP4 | MARR
+ID: GP4
+UNION: GP3 | MARR
+`;
+
+        it('should identify Double First Cousins', () => {
+            const rels = calc(data, 'ME', 'COUSIN');
+            
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(2);
+            expect(rels[0].distB).toBe(2);
+            expect(rels[0].isDouble).toBe(true);
+        });
+    });
+
+    // ==========================================
+    // 4. Robust Half-Sibling Logic
+    // ==========================================
+    describe('Half-Siblings (Missing Parent)', () => {
+        const data = `
+ID: DAD
+CHILD: ME
+CHILD: HALF-SIB
+
+ID: ME
+PARENT: DAD | BIO
+# Mom is unknown/missing
+
+ID: HALF-SIB
+PARENT: DAD | BIO
+PARENT: OTHER-MOM | BIO
+
+ID: OTHER-MOM
+CHILD: HALF-SIB
+`;
+
+        it('should identify Half-Sibling even with missing data', () => {
+            // They share DAD. ME has no other parent listed.
+            // Old logic required finding a UNIQUE parent for both.
+            // New logic accepts "Shared Count < 2".
+            const rels = calc(data, 'ME', 'HALF-SIB');
+            
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(1);
+            expect(rels[0].distB).toBe(1);
+            expect(rels[0].isHalf).toBe(true);
+        });
+    });
+
+    // ==========================================
+    // 5. Step-Siblings (Divorced Parents)
+    // ==========================================
+    describe('Step-Siblings (Divorced Parents)', () => {
+        const data = `
+ID: DAD
+UNION: MOM | MARR | 1990 | 1995 | DIV
+CHILD: SON
+
+ID: MOM
+UNION: DAD | MARR | 1990 | 1995 | DIV
+CHILD: DAUGHTER
+
+ID: SON
+PARENT: DAD | BIO
+# No relation to MOM
+
+ID: DAUGHTER
+PARENT: MOM | BIO
+# No relation to DAD
+`;
+
+        it('should identify Step-Siblings via Former Union', () => {
+            const rels = calc(data, 'SON', 'DAUGHTER');
+            
+            // Should still return STEP_SIBLING because parents *were* married
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('STEP_SIBLING');
+            expect(rels[0].parentsDivorced).toBe(true);
+        });
+    });
 });
