@@ -8,10 +8,10 @@ export class RelationshipCalculator {
     constructor(records) {
         this.records = records;
         this.lineageParents = new Map(); // BIO, ADO, LEGL, SURR, DONR
-        this.allParents = new Map();     // All types including STE, FOS + Inferred
-        this.spouses = new Map();        // ID -> Map<SpouseID, { active, reason, type }>
-        this.parentTypes = new Map();    // ID -> Map<ParentID, Type>
-        this.childrenMap = new Map();    // ID -> Set<ChildID> (Helper for topology)
+        this.allParents = new Map(); // All types including STE, FOS + Inferred
+        this.spouses = new Map(); // ID -> Map<SpouseID, { active, reason, type }>
+        this.parentTypes = new Map(); // ID -> Map<ParentID, Type>
+        this.childrenMap = new Map(); // ID -> Set<ChildID> (Helper for topology)
 
         // 1. First Pass: Build basic maps
         Object.values(records).forEach(rec => {
@@ -73,6 +73,7 @@ export class RelationshipCalculator {
     _injectInferredStepParents() {
         for (const [childId, bioParents] of this.lineageParents) {
             if (!bioParents || bioParents.length === 0) continue;
+
             bioParents.forEach(bioPId => {
                 const spouses = this.spouses.get(bioPId);
                 if (!spouses) return;
@@ -95,6 +96,7 @@ export class RelationshipCalculator {
 
     calculate(idA, idB) {
         if (idA === idB) return [{ type: 'IDENTITY' }];
+
         let results = [];
 
         // 1. Check Direct Union
@@ -119,7 +121,7 @@ export class RelationshipCalculator {
         // 4. Check Affinal (In-Laws)
         this._findAffinalRelationships(idA, idB, results);
 
-        // 5. Check Co-Affinal (Spouses of Siblings) - NEW
+        // 5. Check Co-Affinal (Spouses of Siblings)
         this._findCoAffinalRelationships(idA, idB, results);
 
         // 6. Check Step-Siblings
@@ -197,7 +199,7 @@ export class RelationshipCalculator {
                             parentB: pB,
                             unionActive: uStatus.active,
                             unionReason: uStatus.reason,
-                            parentsDivorced: !uStatus.active && uStatus.reason !== 'WID' // Legacy support
+                            parentsDivorced: !uStatus.active && uStatus.reason !== 'WID'
                         };
                     }
                 }
@@ -207,7 +209,6 @@ export class RelationshipCalculator {
     }
 
     _findLineageRelationships(idA, idB) {
-        // FIX: _getAllAncestors now returns Map<ID, Array<PathMeta>> to separate Bio/Ado paths
         const ancA = this._getAllAncestors(idA);
         const ancB = this._getAllAncestors(idB);
 
@@ -219,7 +220,6 @@ export class RelationshipCalculator {
         ancB.get(idB).push({ dist: 0, isStep: false, isExStep: false, type: 'SELF', lineageType: 'SELF' });
 
         const commonAncestors = [];
-        
         // Cross-reference all paths
         for (const [id, pathsA] of ancA) {
             if (ancB.has(id)) {
@@ -235,7 +235,6 @@ export class RelationshipCalculator {
                             isExStep: metaA.isExStep || metaB.isExStep,
                             typeA: metaA.type,
                             typeB: metaB.type,
-                            // Track if this is a Bio or Adoptive connection
                             lineageA: metaA.lineageType,
                             lineageB: metaB.lineageType
                         });
@@ -245,7 +244,7 @@ export class RelationshipCalculator {
         }
 
         if (commonAncestors.length === 0) return [];
-
+        
         // Filter LCAs
         let lcas = commonAncestors.filter(candidate => {
             return !commonAncestors.some(other => {
@@ -285,8 +284,6 @@ export class RelationshipCalculator {
                 } 
                 // Cousin Logic
                 else if (distA > 1 && distB > 1) {
-                    // FIX: Robust check for Double Cousins (Sharing 2 ancestral lines)
-                    // CHANGED: >= 3 to allow "Half-Double" cousins (3 grandparents)
                     if (lcaCount >= 3 && this._areAncestralPartners(group)) {
                         isDouble = true;
                     }
@@ -300,12 +297,10 @@ export class RelationshipCalculator {
             let isFoster = false;
             
             group.forEach(lca => {
-                // Check immediate types
                 if (['ADO', 'FOS', 'LEGL'].includes(lca.typeA) || ['ADO', 'FOS', 'LEGL'].includes(lca.typeB)) {
                     if (lca.typeA === 'ADO' || lca.typeB === 'ADO') isAdoptive = true;
                     if (lca.typeA === 'FOS' || lca.typeB === 'FOS') isFoster = true; 
                 }
-                // FIX: Check deep/accumulated lineage type
                 if (lca.lineageA === 'ADO' || lca.lineageB === 'ADO') isAdoptive = true;
             });
 
@@ -320,7 +315,6 @@ export class RelationshipCalculator {
                 isFoster,
                 isStep,
                 isExStep,
-                // Pass path info for text generation
                 lineageA: sample.lineageA,
                 lineageB: sample.lineageB
             });
@@ -329,15 +323,12 @@ export class RelationshipCalculator {
         return finalRels;
     }
 
-    // FIX: Multi-path Ancestry Traversal (Bio vs Ado)
     _getAllAncestors(startId) {
-        const visited = new Map(); // ID -> Array<{ dist, isStep, type, lineageType }>
-        // Queue: { id, dist, isStep, isExStep, lineageType }
+        const visited = new Map();
         const queue = [{ id: startId, dist: 0, isStep: false, isExStep: false, lineageType: 'BIO' }];
-
+        
         while (queue.length > 0) {
             const { id, dist, isStep, isExStep, lineageType } = queue.shift();
-            
             const parents = this.allParents.get(id) || [];
             const types = this.parentTypes.get(id);
 
@@ -346,7 +337,6 @@ export class RelationshipCalculator {
                 const nextIsStep = isStep || (pType === 'STE' || pType === 'STE_EX');
                 const nextIsExStep = isExStep || (pType === 'STE_EX');
                 
-                // Track lineage type: Once 'ADO', strictly 'ADO'. 'BIO' stays 'BIO'.
                 let nextLineageType = lineageType;
                 if (pType === 'ADO') nextLineageType = 'ADO';
                 else if (pType === 'BIO') nextLineageType = lineageType; 
@@ -363,7 +353,6 @@ export class RelationshipCalculator {
                 if (!visited.has(pId)) visited.set(pId, []);
                 
                 const existing = visited.get(pId);
-                // Prevent infinite loops or redundant identical paths
                 const isRedundant = existing.some(e => 
                     e.dist === newEntry.dist && 
                     e.lineageType === newEntry.lineageType &&
@@ -411,7 +400,6 @@ export class RelationshipCalculator {
         });
     }
 
-    // FIX: New deep affinal search (Spouse of Sibling of Spouse)
     _findCoAffinalRelationships(idA, idB, results) {
         const spousesA = this.spouses.get(idA) || new Map();
         const spousesB = this.spouses.get(idB) || new Map();
@@ -421,7 +409,7 @@ export class RelationshipCalculator {
             
             spousesB.forEach((statusB, spouseIdB) => {
                 if (!statusB.active) return;
-                if (spouseIdA === spouseIdB) return; // Same spouse handled by 'VIA_BLOOD_SPOUSE'
+                if (spouseIdA === spouseIdB) return;
 
                 // Check if the two spouses are siblings
                 const rels = this._findLineageRelationships(spouseIdA, spouseIdB);
@@ -439,7 +427,6 @@ export class RelationshipCalculator {
         });
     }
 
-    // FIX: Robust check for Double Ancestry (Half-Sibling Grandparents etc.)
     _areAncestralPartners(ancestors) {
         const ids = ancestors.map(a => a.id);
         const pairs = new Set();
@@ -449,13 +436,11 @@ export class RelationshipCalculator {
                 const p1 = ids[i];
                 const p2 = ids[j];
 
-                // Check 1: Direct Union
                 if (this._getUnionStatus(p1, p2)) {
                     pairs.add([p1, p2].sort().join('+'));
                     continue;
                 }
 
-                // Check 2: Shared Children (implies reproductive partnership)
                 const children1 = this.childrenMap.get(p1);
                 const children2 = this.childrenMap.get(p2);
                 if (children1 && children2) {
@@ -468,8 +453,6 @@ export class RelationshipCalculator {
                 }
             }
         }
-        // If we found at least 2 distinct pairs/linkages among the 4+ ancestors, it's double
-        // Or if we found 1 pair among 3 ancestors (Half-Double)
         return pairs.size >= Math.floor(ids.length / 2);
     }
 
@@ -527,7 +510,6 @@ export class RelationshipCalculator {
     }
 }
 
-// Re-export helper text generator and utils (kept for completeness)
 export class RelationText {
     constructor(records) {
         this.records = records;
@@ -535,6 +517,7 @@ export class RelationText {
 
     describe(rel, genderA, nameB, nameA) {
         if (rel.type === 'IDENTITY') return { term: "Same Person", detail: "" };
+
         if (rel.type === 'UNION') {
             const isMarr = rel.unionType === 'MARR' || rel.unionType === 'CIVL';
             const t = genderA === 'M' ? (isMarr ? "Husband" : "Partner") : 
@@ -569,7 +552,6 @@ export class RelationText {
         if (rel.type === 'STEP_SIBLING') {
             const t = genderA === 'M' ? "Step-Brother" : genderA === 'F' ? "Step-Sister" : "Step-Sibling";
             
-            // FIX: Use captured union status
             let status = "";
             if (rel.unionReason === 'WID') status = " (Widowed)";
             else if (rel.unionReason === 'DIV' || (rel.parentsDivorced)) status = " (Divorced)";
@@ -589,13 +571,30 @@ export class RelationText {
 
         if (rel.type === 'LINEAGE') {
             let specialPrefix = "";
-            if (rel.distB === 1 && !rel.isStep && !rel.isExStep) {
-                 if (rel.isFoster) specialPrefix = "Foster ";
-                 if (rel.isAdoptive) specialPrefix = "Adopted "; 
+            let handledAdoptive = false;
+
+            if (!rel.isStep && !rel.isExStep) {
+                 if (rel.distB === 1) {
+                     // B is Child of LCA (Common Ancestor)
+                     if (rel.distA === 0) {
+                         // A is the LCA. A is Parent of B.
+                         if (rel.isFoster) { specialPrefix = "Foster "; handledAdoptive = true; }
+                         else if (rel.isAdoptive) { specialPrefix = "Adoptive "; handledAdoptive = true; }
+                     } else {
+                         // A is Descendant of LCA. A is Sibling (distA=1) or Nibling (distA=2) of B.
+                         if (rel.isFoster) { specialPrefix = "Foster "; handledAdoptive = true; }
+                         else if (rel.isAdoptive) { specialPrefix = "Adopted "; handledAdoptive = true; }
+                     }
+                 }
+                 // Handle direct Child Case (A is Child of B -> distA=1, distB=0)
+                 else if (rel.distB === 0 && rel.distA === 1) {
+                     if (rel.isFoster) { specialPrefix = "Foster "; handledAdoptive = true; }
+                     else if (rel.isAdoptive) { specialPrefix = "Adopted "; handledAdoptive = true; }
+                 }
             }
 
-            // Append specific lineage type if mixed/adoptive path
-            if (rel.lineageA === 'ADO' || rel.lineageB === 'ADO') {
+            // Append specific lineage type if mixed/adoptive path AND not already handled by specific prefix
+            if (!handledAdoptive && (rel.lineageA === 'ADO' || rel.lineageB === 'ADO')) {
                 specialPrefix += "(Adoptive) ";
             }
 
@@ -670,9 +669,10 @@ export class RelationText {
         else if (isDouble) prefix = "Double ";
 
         let suffix = "";
-        
+
         if (distA === 0) return prefix + this.getAncestorTerm(distB, sex) + suffix;
         if (distB === 0) return prefix + this.getDescendantTerm(distA, sex) + suffix;
+        
         if (distA === 1 && distB === 1) {
             return prefix + (sex === 'M' ? "Brother" : sex === 'F' ? "Sister" : "Sibling") + suffix;
         }
