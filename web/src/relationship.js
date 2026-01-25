@@ -488,6 +488,7 @@ class RelationText {
             };
         }
         if (rel.type === 'LINEAGE') {
+            // Standard Blood/Adoptive Logic
             const term = this.getBloodTerm(rel.distA, rel.distB, genderA, rel.isHalf, rel.isDouble, rel.isAdoptive);
             const commonName = getDisplayName(this.records[rel.ancestorIds[0]]);
             const lcaCount = rel.ancestorIds.length;
@@ -510,34 +511,44 @@ class RelationText {
     }
 
     describeAffinal(rel, genderA, nameB, nameA) {
+        // Case 1: Relationship via "My Spouse" (e.g. My Spouse's Sister)
         if (rel.subType === 'VIA_SPOUSE') {
             const dSpouseToCA = rel.bloodRel.distA;
             const dBToCA = rel.bloodRel.distB;
             const spouseName = getDisplayName(this.records[rel.spouseId]);
             
+            const spouseGender = getGender(this.records[rel.spouseId]);
+            
             let term = "In-Law";
             if (dSpouseToCA === 0 && dBToCA > 0) {
+                // Spouse's Parent -> Father/Mother-in-law
                 term = "Step-" + this.getAncestorTerm(dBToCA, genderA);
             } else if (dBToCA === 0 && dSpouseToCA > 0) {
+                 // Spouse's Child (not mine) -> Step-Son/Daughter
                  const descTerm = this.getDescendantTerm(dSpouseToCA, genderA);
-                 term = descTerm + "-in-law";
+                 term = descTerm + "-in-law"; // Conventionally treated as Step-Child
             } else if (dSpouseToCA === 1 && dBToCA === 1) {
+                // Spouse's Sibling -> Brother/Sister-in-law
                 term = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling") + "-in-law";
             } else {
-                const spouseToBTerm = this.getBloodTerm(dSpouseToCA, dBToCA, 'U', false, false, false);
+                // Extended: Spouse of [Relation]
+                const spouseToBTerm = this.getBloodTerm(dSpouseToCA, dBToCA, spouseGender, false, false, false);
                 term = `Spouse of ${spouseToBTerm}`;
             }
 
             return {
                 term: term,
-                detail: `${nameA} is the spouse of ${spouseName}, who is the ${this.getBloodTerm(dSpouseToCA, dBToCA, 'U', false, false, false)} of ${nameB}.`
+                detail: `${nameA} is the spouse of ${spouseName}, who is the ${this.getBloodTerm(dSpouseToCA, dBToCA, spouseGender, false, false, false)} of ${nameB}.`
             };
         }
 
+        // Case 2: Relationship via "My Relative's Spouse" (e.g. My Brother's Wife)
         if (rel.subType === 'VIA_BLOOD_SPOUSE') {
             const dAtoCA = rel.bloodRel.distA;
             const dRelToCA = rel.bloodRel.distB;
             const relativeName = getDisplayName(this.records[rel.spouseId]);
+            
+            const relativeGender = getGender(this.records[rel.spouseId]);
             
             let term = "In-Law";
             if (dAtoCA === 0 && dRelToCA > 0) {
@@ -545,6 +556,7 @@ class RelationText {
             } else if (dRelToCA === 0 && dAtoCA > 0) {
                 term = "Step-" + this.getDescendantTerm(dAtoCA, genderA);
             } else if (dAtoCA === 1 && dRelToCA === 1) {
+                // Sibling's Spouse -> Brother/Sister-in-law
                 term = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling") + "-in-law";
             } else {
                 const aToRelTerm = this.getBloodTerm(dAtoCA, dRelToCA, genderA, false, false, false);
@@ -553,7 +565,7 @@ class RelationText {
 
             return {
                 term: term,
-                detail: `${nameB} is the spouse of ${nameA}'s relative, ${relativeName} (${this.getBloodTerm(dAtoCA, dRelToCA, 'U', false, false, false)}).`
+                detail: `${nameB} is the spouse of ${nameA}'s relative, ${relativeName} (${this.getBloodTerm(dAtoCA, dRelToCA, relativeGender, false, false, false)}).`
             };
         }
         return { term: "Affinal", detail: "Complex in-law relationship." };
@@ -579,7 +591,6 @@ class RelationText {
         // Avuncular
         if (distA === 1 && distB > 1) { 
             const core = this.getNiblingTerm(distB - 1, sex, true);
-            // "Half-Uncle" is valid, Double Uncle is rare (incestuous) but logic holds
             return prefix + core + suffix;
         }
         if (distB === 1 && distA > 1) { 
