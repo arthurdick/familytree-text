@@ -306,9 +306,9 @@ PARENT: MOM | BIO
             expect(rels[0].type).toBe('STEP_SIBLING');
         });
     });
-    
+
     // ==========================================
-    // 1. Temporal Logic (Ex-Spouses)
+    // 8. Temporal Logic (Ex-Spouses)
     // ==========================================
     describe('Temporal Logic', () => {
         const data = `
@@ -341,7 +341,7 @@ UNION: HUSB | MARR | 2005 | .. |
     });
 
     // ==========================================
-    // 2. Deep Step-Relationships
+    // 9. Deep Step-Relationships
     // ==========================================
     describe('Deep Step-Traversal', () => {
         const data = `
@@ -372,11 +372,123 @@ CHILD: STEP-DAD
     });
 
     // ==========================================
-    // 3. Topology-Based Double Cousins
+    // 10. Topology-Based Double Cousins
     // ==========================================
     describe('Double Cousins (Topology Check)', () => {
-        const data = `
-# Two brothers marrying two sisters
+        
+        it('should NOT identify as Double for standard 2nd Cousin 1x Removed', () => {
+            const data = `
+ID: GG-PA
+UNION: GG-MA | MARR
+CHILD: G-PA-1
+CHILD: G-PA-2
+
+ID: GG-MA
+UNION: GG-PA | MARR
+
+ID: G-PA-1
+PARENT: GG-PA | BIO
+PARENT: GG-MA | BIO
+CHILD: PARENT-1
+
+ID: G-PA-2
+PARENT: GG-PA | BIO
+PARENT: GG-MA | BIO
+CHILD: PARENT-2
+
+ID: PARENT-1
+PARENT: G-PA-1 | BIO
+CHILD: ME
+
+ID: PARENT-2
+PARENT: G-PA-2 | BIO
+CHILD: COUSIN
+# Removed 'CHILD: COUSIN-KID' to avoid ghost child error.
+# COUSIN-KID is listed under COUSIN below.
+
+ID: ME
+PARENT: PARENT-1 | BIO
+
+ID: COUSIN
+PARENT: PARENT-2 | BIO
+CHILD: COUSIN-KID
+
+ID: COUSIN-KID
+PARENT: COUSIN | BIO
+            `;
+            // ME is G-Grandchild of GG-PA (Dist 3)
+            // COUSIN-KID is GG-Grandchild of GG-PA (Dist 4)
+            // They share 2 ancestors (GG-PA, GG-MA).
+            // Should NOT be double (requires 4 ancestors).
+            
+            const rels = calc(data, 'ME', 'COUSIN-KID');
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(3); 
+            expect(rels[0].distB).toBe(4);
+            expect(rels[0].isDouble).toBe(false); 
+        });
+
+        it('should identify Double 1st Cousins (4 shared ancestors)', () => {
+             const data = `
+# Family A Grandparents
+ID: GP1
+UNION: GP2 | MARR
+CHILD: DAD
+CHILD: UNCLE
+
+ID: GP2
+UNION: GP1 | MARR
+
+# Family B Grandparents
+ID: GP3
+UNION: GP4 | MARR
+CHILD: MOM
+CHILD: AUNT
+
+ID: GP4
+UNION: GP3 | MARR
+
+# DAD (Fam A) marries MOM (Fam B)
+ID: DAD
+PARENT: GP1 | BIO
+PARENT: GP2 | BIO
+UNION: MOM | MARR
+CHILD: ME
+
+ID: MOM
+PARENT: GP3 | BIO
+PARENT: GP4 | BIO
+UNION: DAD | MARR
+
+# UNCLE (Fam A) marries AUNT (Fam B)
+ID: UNCLE
+PARENT: GP1 | BIO
+PARENT: GP2 | BIO
+UNION: AUNT | MARR
+CHILD: DOUBLE-COZ
+
+ID: AUNT
+PARENT: GP3 | BIO
+PARENT: GP4 | BIO
+UNION: UNCLE | MARR
+
+ID: ME
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+
+ID: DOUBLE-COZ
+PARENT: UNCLE | BIO
+PARENT: AUNT | BIO
+             `;
+             
+             // ME and DOUBLE-COZ share GP1, GP2, GP3, GP4 (4 Ancestors)
+             const rels = calc(data, 'ME', 'DOUBLE-COZ');
+             expect(rels[0].type).toBe('LINEAGE');
+             expect(rels[0].isDouble).toBe(true);
+        });
+
+        const topologyData = `
+# Two brothers marrying two sisters (Legacy test format)
 ID: BRO1
 PARENT: GP1 | BIO
 PARENT: GP2 | BIO
@@ -419,8 +531,8 @@ ID: GP4
 UNION: GP3 | MARR
 `;
 
-        it('should identify Double First Cousins', () => {
-            const rels = calc(data, 'ME', 'COUSIN');
+        it('should identify Double First Cousins (Legacy Test)', () => {
+            const rels = calc(topologyData, 'ME', 'COUSIN');
             
             expect(rels[0].type).toBe('LINEAGE');
             expect(rels[0].distA).toBe(2);
@@ -430,7 +542,7 @@ UNION: GP3 | MARR
     });
 
     // ==========================================
-    // 4. Robust Half-Sibling Logic
+    // 11. Robust Half-Sibling Logic
     // ==========================================
     describe('Half-Siblings (Missing Parent)', () => {
         const data = `
@@ -451,9 +563,7 @@ CHILD: HALF-SIB
 `;
 
         it('should identify Half-Sibling even with missing data', () => {
-            // They share DAD. ME has no other parent listed.
-            // Old logic required finding a UNIQUE parent for both.
-            // New logic accepts "Shared Count < 2".
+            // Asymmetric data: ME has 1 parent, HALF-SIB has 2.
             const rels = calc(data, 'ME', 'HALF-SIB');
             
             expect(rels[0].type).toBe('LINEAGE');
@@ -464,7 +574,7 @@ CHILD: HALF-SIB
     });
 
     // ==========================================
-    // 5. Step-Siblings (Divorced Parents)
+    // 12. Step-Siblings (Divorced Parents)
     // ==========================================
     describe('Step-Siblings (Divorced Parents)', () => {
         const data = `
