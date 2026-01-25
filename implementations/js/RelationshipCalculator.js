@@ -409,31 +409,39 @@ export class RelationshipCalculator {
 
     _findAffinalRelationships(idA, idB, results) {
         // A's Spouse -> Relative of B
+        // (A is the spouse of someone related to B)
         const spousesA = this.spouses.get(idA) || new Map();
         spousesA.forEach((status, spouseId) => {
-            if (!status.active || spouseId === idB) return;
+            if (spouseId === idB) return;
+            
             const rels = this._findLineageRelationships(spouseId, idB);
             rels.forEach(rel => {
                 results.push({
                     type: 'AFFINAL',
                     subType: 'VIA_SPOUSE',
                     spouseId: spouseId,
-                    bloodRel: rel
+                    bloodRel: rel,
+                    isExUnion: !status.active, 
+                    unionReason: status.reason
                 });
             });
         });
 
         // B's Spouse -> Relative of A
+        // (B is the spouse of someone related to A)
         const spousesB = this.spouses.get(idB) || new Map();
         spousesB.forEach((status, spouseId) => {
-            if (!status.active || spouseId === idA) return;
+            if (spouseId === idA) return;
+
             const rels = this._findLineageRelationships(idA, spouseId);
             rels.forEach(rel => {
                 results.push({
                     type: 'AFFINAL',
                     subType: 'VIA_BLOOD_SPOUSE',
                     spouseId: spouseId,
-                    bloodRel: rel
+                    bloodRel: rel,
+                    isExUnion: !status.active,
+                    unionReason: status.reason
                 });
             });
         });
@@ -643,39 +651,94 @@ export class RelationText {
         const bloodDistB = rel.bloodRel.distB;
         const bloodGender = getGender(this.records[rel.spouseId]);
         const spouseName = getDisplayName(this.records[rel.spouseId]);
+        
+        const prefixEx = (t) => rel.isExUnion ? `Former ${t}` : t;
+        const isStep = rel.bloodRel.isStep;
+        const isExStep = rel.bloodRel.isExStep;
+        
+        const getBaseTerm = (dA, dB, g) => {
+            return this.getBloodTerm(dA, dB, g, rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, isStep, isExStep);
+        };
 
         let term = "In-Law";
+        let detail = "";
+
+        // ---------------------------------------------------------
+        // CASE 1: VIA_SPOUSE (A is the Spouse of B's Relative)
+        // ---------------------------------------------------------
+        // Example: A (Me) -> Spouse (Wife) -> Relative (Father). 
+        // A is Son-in-Law.
         if (rel.subType === 'VIA_SPOUSE') {
-            if (bloodDistA === 0 && bloodDistB > 0) {
-                term = this.getAncestorTerm(bloodDistB, genderA) + "-in-law";
-            } else if (bloodDistA === 1 && bloodDistB === 1) {
-                term = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling") + "-in-law";
-            } else {
-                const relTerm = this.getBloodTerm(bloodDistA, bloodDistB, bloodGender, false, false, false, false, false);
-                term = `${relTerm}-in-law`;
+            // Sub-case: Spouse is Descendant of B (distB=0).
+            // e.g. Spouse is Daughter (distA=1) of B.
+            // A is Son-in-Law.
+            if (bloodDistB === 0) {
+                const core = this.getDescendantTerm(bloodDistA, genderA);
+                term = prefixEx(`${core}-in-law`);
             }
-            return { 
-                term: term, 
-                detail: `${nameA} is the spouse of ${spouseName}, who is the ${this.getBloodTerm(bloodDistA, bloodDistB, bloodGender, false, false, false, false, false)} of ${nameB}.` 
-            };
+            // Sub-case: Spouse is Ancestor of B (distA=0).
+            // e.g. Spouse is Mother of B.
+            // A is Step-Father.
+            else if (bloodDistA === 0) {
+                const core = this.getAncestorTerm(bloodDistB, genderA);
+                term = prefixEx(`Step-${core}`); 
+            }
+            // Sub-case: Spouse is Sibling of B.
+            // A is Brother/Sister-in-law.
+            else if (bloodDistA === 1 && bloodDistB === 1) {
+                 const core = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling");
+                 term = prefixEx(`${core}-in-law`);
+            }
+            else {
+                 term = prefixEx(`${getBaseTerm(bloodDistA, bloodDistB, genderA)}-in-law`);
+            }
+            
+            detail = `${nameA} is the ${rel.isExUnion ? 'former ' : ''}spouse of ${spouseName}, who is the ${getBaseTerm(bloodDistA, bloodDistB, bloodGender)} of ${nameB}.`;
         }
 
-        if (rel.subType === 'VIA_BLOOD_SPOUSE') {
-            if (bloodDistA === 0 && bloodDistB > 0) {
-                term = this.getDescendantTerm(bloodDistA, genderA) + "-in-law";
-            } else if (bloodDistA === 1 && bloodDistB === 1) {
-                term = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling") + "-in-law";
-            } else {
-                const relTerm = this.getBloodTerm(bloodDistA, bloodDistB, genderA, false, false, false, false, false);
-                term = `${relTerm}-in-law`;
+        // ---------------------------------------------------------
+        // CASE 2: VIA_BLOOD_SPOUSE (A is the Relative of B's Spouse)
+        // ---------------------------------------------------------
+        // Example: A (FIL) -> Relative (Wife) <- Spouse (Me)
+        // A is the Father-in-Law.
+        else if (rel.subType === 'VIA_BLOOD_SPOUSE') {
+            // Sub-case: A is Ancestor of Spouse (distA=0).
+            // e.g. A is Father of Spouse.
+            // A is Father-in-law.
+            if (bloodDistA === 0) {
+                const core = this.getAncestorTerm(bloodDistB, genderA);
+                
+                let finalTerm = core;
+                if (isStep) finalTerm = `Step-${core}`;
+                else if (isExStep) finalTerm = `Former Step-${core}`;
+                
+                term = prefixEx(`${finalTerm}-in-law`);
             }
-            return {
-                term: term,
-                detail: `${nameB} is the spouse of ${nameA}'s relative, ${spouseName}.`
-            };
+            // Sub-case: A is Descendant of Spouse (distB=0).
+            // e.g. A is Son of Spouse.
+            // A is Step-Son (Child of Spouse).
+            else if (bloodDistB === 0) {
+                const core = this.getDescendantTerm(bloodDistA, genderA);
+                term = prefixEx(`Step-${core}`);
+            }
+            // Sub-case: A is Sibling of Spouse.
+            // A is Brother/Sister-in-law.
+            else if (bloodDistA === 1 && bloodDistB === 1) {
+                const core = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling");
+                
+                let finalTerm = core;
+                if (isStep) finalTerm = `Step-${core}`;
+                
+                term = prefixEx(`${finalTerm}-in-law`);
+            }
+            else {
+                term = prefixEx(`${getBaseTerm(bloodDistA, bloodDistB, genderA)}-in-law`);
+            }
+
+            detail = `${nameB} is the ${rel.isExUnion ? 'former ' : ''}spouse of ${nameA}'s relative, ${spouseName}.`;
         }
         
-        return { term: "Affinal", detail: "Complex in-law relationship." };
+        return { term, detail };
     }
 
     getBloodTerm(distA, distB, sex, isHalf, isDouble, isAdoptive, isStep, isExStep) {

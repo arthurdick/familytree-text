@@ -941,4 +941,143 @@ SEX: F
             expect(desc.term).toBe('Mother');
         });
     });
+    
+    // ==========================================
+    // 21. Step-In-Laws
+    // ==========================================
+    describe('Step-In-Laws', () => {
+        const data = `
+HEAD_FORMAT: FTT v0.1
+ID: ME
+SEX: M
+UNION: WIFE | MARR
+
+ID: WIFE
+SEX: F
+UNION: ME | MARR
+PARENT: BIO-MOM | BIO
+
+ID: BIO-MOM
+SEX: F
+UNION: STEP-FIL | MARR
+CHILD: WIFE
+
+ID: STEP-FIL
+SEX: M
+UNION: BIO-MOM | MARR
+`;
+
+        it('should identify Step-Father-in-law', () => {
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+
+            // Path: STEP-FIL (A) -> Spouse (BioMom) -> Child (Wife) <- Spouse (Me, B)
+            // A is Relative of B's Spouse. (VIA_BLOOD_SPOUSE)
+            // A is Step-Father of Spouse.
+            const rels = calculator.calculate('STEP-FIL', 'ME');
+            const description = textGen.describe(rels[0], 'M', 'ME', 'STEP-FIL');
+
+            expect(rels[0].type).toBe('AFFINAL');
+            expect(description.term).toBe('Step-Father-in-law');
+        });
+
+        it('should identify Son-in-law (for step-child\'s spouse)', () => {
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+
+            // Path: ME (A) -> Wife -> Step-Father (B).
+            // A is Spouse of B's Relative. (VIA_SPOUSE)
+            // Wife is Step-Daughter of B.
+            // A is Son-in-law.
+            const rels = calculator.calculate('ME', 'STEP-FIL');
+            const description = textGen.describe(rels[0], 'M', 'STEP-FIL', 'ME');
+
+            expect(rels[0].type).toBe('AFFINAL');
+            expect(description.term).toBe('Son-in-law');
+        });
+    });
+
+    // ==========================================
+    // 22. Ex-In-Laws
+    // ==========================================
+    describe('Ex-In-Laws', () => {
+        const data = `
+HEAD_FORMAT: FTT v0.1
+ID: ME
+SEX: M
+UNION: EX-WIFE | MARR | 1990 | 2000 | DIV
+
+ID: EX-WIFE
+SEX: F
+UNION: ME | MARR | 1990 | 2000 | DIV
+PARENT: P1 | BIO
+PARENT: P2 | BIO
+# Merged CHILD: EX-BIL is not strictly needed for sibling logic if parents match
+
+ID: EX-BIL
+SEX: M
+PARENT: P1 | BIO
+PARENT: P2 | BIO
+
+ID: P1
+ID: P2
+`;
+
+        it('should identify Former Brother-in-law', () => {
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+
+            const rels = calculator.calculate('EX-BIL', 'ME');
+            
+            expect(rels[0].type).toBe('AFFINAL');
+            expect(rels[0].isExUnion).toBe(true);
+
+            const description = textGen.describe(rels[0], 'M', 'ME', 'EX-BIL');
+            expect(description.term).toBe('Former Brother-in-law');
+        });
+    });
+
+    // ==========================================
+    // 23. Former Step-Mother-in-law
+    // ==========================================
+    describe('Combined: Former Step-Mother-in-law', () => {
+        const data = `
+HEAD_FORMAT: FTT v0.1
+ID: ME
+SEX: M
+UNION: EX-HUSB | MARR | 2000 | 2005 | DIV
+
+ID: EX-HUSB
+SEX: M
+UNION: ME | MARR | 2000 | 2005 | DIV
+PARENT: BIO-DAD | BIO
+
+ID: BIO-DAD
+SEX: M
+UNION: STEP-MIL | MARR
+
+ID: STEP-MIL
+SEX: F
+UNION: BIO-DAD | MARR
+`;
+
+        it('should identify Former Step-Mother-in-law', () => {
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+
+            // A (STEP-MIL) -> Spouse (Dad) -> Child (Ex-Husb) <- Spouse (Me, B)
+            // A is Step-Mother of Ex-Spouse.
+            // A is Former Step-Mother-in-law.
+            const rels = calculator.calculate('STEP-MIL', 'ME');
+            const description = textGen.describe(rels[0], 'F', 'ME', 'STEP-MIL');
+
+            expect(rels[0].type).toBe('AFFINAL');
+            expect(rels[0].isExUnion).toBe(true);
+            expect(description.term).toBe('Former Step-Mother-in-law');
+        });
+    });
 });
