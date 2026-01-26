@@ -1379,4 +1379,31 @@ PARENT: DAD | BIO
             expect(desc.term).toBe('Uncle (Ambiguous)');
         });
     });
+    
+    describe('Implicit Step-Siblings (Shared Sibling Bridge)', () => {
+        it('should identify Step-Siblings if parents share a child but have no explicit UNION', () => {
+            const data = `
+ID: DAD
+ID: MOM
+
+ID: ME
+PARENT: DAD | BIO
+
+ID: STEP-SIS
+PARENT: MOM | BIO
+
+ID: OUR-MUTUAL-HALF-SIB
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+# DAD and MOM are implicitly partners because they share this child.
+# Therefore ME and STEP-SIS are step-siblings via this connection.
+`;
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'STEP-SIS');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('STEP_SIBLING');
+        });
+    });
 });

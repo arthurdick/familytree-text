@@ -182,18 +182,47 @@ export class RelationshipCalculator {
 
         for (const pA of parentsA) {
             for (const pB of parentsB) {
-                const uStatus = this._getUnionStatus(pA, pB);
+                if (pA === pB) continue; // Skip shared parent (Handled by Lineage as Half/Full Sibling)
+
+                // 1. Attempt to get status via explicit union
+                let uStatus = this._getUnionStatus(pA, pB);
+                
+                // 2. If no explicit union, check for implicit partnership (Shared Children)
+                if (!uStatus) {
+                    const childrenA = this.childrenMap.get(pA);
+                    const childrenB = this.childrenMap.get(pB);
+                    let hasSharedChild = false;
+                    
+                    if (childrenA && childrenB) {
+                         for (const child of childrenA) {
+                             if (childrenB.has(child)) {
+                                 hasSharedChild = true;
+                                 break;
+                             }
+                         }
+                    }
+
+                    if (hasSharedChild) {
+                        // Synthesize an active Partner status for the calculation
+                        uStatus = { active: true, reason: null, type: 'PART' };
+                    }
+                }
+
                 if (uStatus) {
                     const bioA = this.lineageParents.get(idA)?.includes(pA);
                     const bioB = this.lineageParents.get(idB)?.includes(pB);
                     
                     const sharedParents = parentsA.filter(p => parentsB.includes(p));
-                    // Check if they share any biological/lineage parent
+                    // Check if they share any biological/lineage parent (which would make them Half-Siblings)
                     const shareLineageParent = sharedParents.some(p => 
                         this.lineageParents.get(idA).includes(p) && 
                         this.lineageParents.get(idB).includes(p)
                     );
 
+                    // They are Step-Siblings IF:
+                    // 1. Parents are united (Explicit or Implicit)
+                    // 2. They do NOT share a biological parent (Not Half-Siblings)
+                    // 3. The linked parents are biological parents to A and B respectively
                     if (!shareLineageParent && bioA && bioB) {
                         return {
                             type: 'STEP_SIBLING',
