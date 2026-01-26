@@ -1406,4 +1406,47 @@ PARENT: MOM | BIO
             expect(rels[0].type).toBe('STEP_SIBLING');
         });
     });
+    
+    describe('Robustness: Missing Parent + Remarriage', () => {
+        const data = `
+# Grandpa married twice
+ID: GRANDPA
+UNION: GRANDMA-1 | MARR
+UNION: GRANDMA-2 | MARR
+
+ID: GRANDMA-1
+UNION: GRANDPA | MARR | ? | ? | DIV
+
+ID: GRANDMA-2
+UNION: GRANDPA | MARR
+
+# DAD is fully linked to both
+ID: DAD
+PARENT: GRANDPA | BIO
+PARENT: GRANDMA-1 | BIO
+CHILD: ME
+
+# UNCLE is missing his mother record (Incomplete Data)
+# But he is actually full brother to DAD (we just don't know it yet)
+ID: UNCLE-INCOMPLETE
+PARENT: GRANDPA | BIO
+CHILD: COUSIN-AMBIGUOUS
+
+ID: ME
+PARENT: DAD | BIO
+
+ID: COUSIN-AMBIGUOUS
+PARENT: UNCLE-INCOMPLETE | BIO
+`;
+
+        it('should NOT assume Half-Cousin status just because an ancestor remarried (Missing Data)', () => {
+            // Shared Ancestors: Only GRANDPA (Count=1)
+            // Grandpa has 2 spouses.
+            const rels = calc(data, 'ME', 'COUSIN-AMBIGUOUS');
+            
+            expect(rels[0].type).toBe('LINEAGE');
+            // We expect the system to give the benefit of the doubt
+            expect(rels[0].isHalf).toBe(false); 
+        });
+    });
 });
