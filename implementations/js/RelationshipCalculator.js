@@ -430,6 +430,14 @@ export class RelationshipCalculator {
 
             const findPartner = (childId, parentId) => {
                 const allP = this.allParents.get(childId) || [];
+                const types = this.parentTypes.get(childId);
+                const currentType = types.get(parentId);
+
+                if (currentType === 'BIO') {
+                    const bioPartner = allP.find(p => p !== parentId && types.get(p) === 'BIO');
+                    if (bioPartner) return bioPartner;
+                }
+
                 return allP.find(p => p !== parentId) || null;
             };
 

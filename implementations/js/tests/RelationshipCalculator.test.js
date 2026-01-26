@@ -1506,4 +1506,59 @@ PARENT: HALF-COZ | BIO
             expect(desc.term).toBe('Half-1st Cousin 1x Removed');
         });
     });
+    
+    describe('The "Third Parent" Problem (Cousins)', () => {
+        it('should identify Full Cousins correctly even if an ancestor has a Step-Parent listed first', () => {
+            const data = `
+# Ancestors
+ID: GRANDMA
+UNION: GRANDPA | MARR
+UNION: STEP-GRANDPA | MARR
+
+ID: GRANDPA
+UNION: GRANDMA | MARR
+
+ID: STEP-GRANDPA
+UNION: GRANDMA | MARR
+
+# Parents
+ID: MOM
+PARENT: GRANDMA | BIO
+PARENT: STEP-GRANDPA | STE
+PARENT: GRANDPA | BIO
+CHILD: ME
+
+ID: AUNT
+# Aunt has standard parents
+PARENT: GRANDMA | BIO
+PARENT: GRANDPA | BIO
+CHILD: COUSIN
+
+# Children
+ID: ME
+PARENT: MOM | BIO
+
+ID: COUSIN
+PARENT: AUNT | BIO
+`;
+            const parser = new FTTParser();
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            
+            if (result.errors.length > 0) {
+                throw new Error(result.errors[0].message);
+            }
+
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'COUSIN');
+            
+            // Basic Cousin Check
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(2); // Grandchild
+            expect(rels[0].distB).toBe(2); // Grandchild
+            
+            // Expected Behavior: isHalf should be false (Full First Cousins).
+            expect(rels[0].isHalf).toBe(false); 
+        });
+    });
 });
