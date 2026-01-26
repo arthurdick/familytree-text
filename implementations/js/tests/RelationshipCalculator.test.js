@@ -1141,4 +1141,100 @@ PARENT: PARENT-B | BIO
             expect(rel.isHalf).toBe(true);
         });
     });
+    
+    describe('Deep Affinal (Counter-In-Laws)', () => {
+        it('should identify the Father of a Brother-in-law', () => {
+            const data = `
+HEAD_FORMAT: FTT v0.1
+# ME -> SIS -> BIL -> BIL-DAD
+
+ID: ME
+SEX: M
+PARENT: MY-DAD | BIO
+
+ID: MY-DAD
+CHILD: ME
+CHILD: SIS
+
+ID: SIS
+SEX: F
+PARENT: MY-DAD | BIO
+UNION: BIL | MARR
+
+ID: BIL
+SEX: M
+UNION: SIS | MARR
+PARENT: BIL-DAD | BIO
+
+ID: BIL-DAD
+SEX: M
+CHILD: BIL
+`;
+            const parser = new FTTParser();
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+
+            // Path: ME -> SIS (Sibling) -> BIL (Spouse) -> BIL-DAD (Parent)
+            const rels = calculator.calculate('BIL-DAD', 'ME');
+
+            expect(rels).not.toHaveLength(0);
+            expect(rels[0].type).not.toBe('NONE');
+            
+            // We want a type that indicates extended affinity
+            expect(rels[0].type).toBe('EXTENDED_AFFINAL'); 
+            
+            const desc = textGen.describe(rels[0], 'M', 'BIL-DAD', 'ME');
+            expect(desc.term).toBe('Father of Brother-in-law');
+        });
+        
+        it('should identify the Great-Grandfather of a Brother-in-law', () => {
+            // Data Setup: ME -> SIS -> BIL -> BIL-DAD -> BIL-G-DAD -> BIL-GG-DAD
+            const data = `
+HEAD_FORMAT: FTT v0.1
+ID: ME
+SEX: M
+PARENT: MY-DAD | BIO
+
+ID: MY-DAD
+CHILD: ME
+CHILD: SIS
+
+ID: SIS
+SEX: F
+PARENT: MY-DAD | BIO
+UNION: BIL | MARR
+
+ID: BIL
+SEX: M
+PARENT: BIL-DAD | BIO
+
+ID: BIL-DAD
+SEX: M
+PARENT: BIL-G-DAD | BIO
+
+ID: BIL-G-DAD
+SEX: M
+PARENT: BIL-GG-DAD | BIO
+
+ID: BIL-GG-DAD
+SEX: M
+`;
+            const parser = new FTTParser();
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+
+            // Calculate ME -> Great-Grandfather of BIL
+            const rels = calculator.calculate('BIL-GG-DAD', 'ME');
+            
+            expect(rels).not.toHaveLength(0);
+            expect(rels[0].type).toBe('EXTENDED_AFFINAL');
+            
+            const desc = textGen.describe(rels[0], 'M', 'BIL-GG-DAD', 'ME');
+            
+            // This proves the logic is generalized to N steps
+            expect(desc.term).toBe('Great-Grandfather of Brother-in-law');
+        });
+    });
 });

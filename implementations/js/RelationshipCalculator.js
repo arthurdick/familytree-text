@@ -123,14 +123,17 @@ export class RelationshipCalculator {
         // 5. Check Co-Affinal (Spouses of Siblings)
         this._findCoAffinalRelationships(idA, idB, results);
 
-        // 6. Check Step-Siblings
+        // 6. Check Deep Extended Affinal
+        this._findExtendedAffinalRelationships(idA, idB, results);
+
+        // 7. Check Step-Siblings
         const stepSib = this._findStepSibling(idA, idB);
         if (stepSib) results.push(stepSib);
 
         // Fallback
         if (results.length === 0) return [{ type: 'NONE' }];
 
-        // 7. Deduplicate & Filter
+        // 8. Deduplicate & Filter
         results = this._deduplicateResults(results);
         return this._filterRedundant(results);
     }
@@ -492,6 +495,73 @@ export class RelationshipCalculator {
             });
         });
     }
+    
+    _findExtendedAffinalRelationships(idA, idB, results) {
+        // CASE 1: A is the Sibling of the Spouse of B's Relative.
+        // (e.g. A="Me", B="Father of my BIL". A is the Brother-in-law of B's Son)
+        const parentsA = this.lineageParents.get(idA) || [];
+        if (parentsA.length > 0) {
+            const siblingsA = [];
+            parentsA.forEach(pId => {
+                const children = this.childrenMap.get(pId);
+                if (children) children.forEach(c => {
+                    if (c !== idA && !siblingsA.includes(c)) siblingsA.push(c);
+                });
+            });
+
+            for (const sibId of siblingsA) {
+                const spouses = this.spouses.get(sibId);
+                if (!spouses) continue;
+
+                spouses.forEach((status, spouseId) => {
+                    if (!status.active) return;
+                    const relsToSpouse = this._findLineageRelationships(spouseId, idB);
+                    relsToSpouse.forEach(rel => {
+                        results.push({
+                            type: 'EXTENDED_AFFINAL',
+                            subType: 'VIA_SIBLING_SPOUSE',
+                            siblingId: sibId,
+                            spouseId: spouseId,
+                            bloodRel: rel // B's relationship to Spouse
+                        });
+                    });
+                });
+            }
+        }
+
+        // CASE 2: A is the Relative of the Spouse of B's Sibling.
+        // (e.g. A="Father of BIL", B="Me". A is the Father of Brother-in-law)
+        const parentsB = this.lineageParents.get(idB) || [];
+        if (parentsB.length > 0) {
+             const siblingsB = [];
+             parentsB.forEach(pId => {
+                const children = this.childrenMap.get(pId);
+                if (children) children.forEach(c => {
+                    if (c !== idB && !siblingsB.includes(c)) siblingsB.push(c);
+                });
+             });
+             
+             for (const sibId of siblingsB) {
+                 const spouses = this.spouses.get(sibId);
+                 if (!spouses) continue;
+                 
+                 spouses.forEach((status, spouseId) => {
+                     if (!status.active) return;
+                     // Check if A is related to the Spouse
+                     const relsToSpouse = this._findLineageRelationships(idA, spouseId);
+                     relsToSpouse.forEach(rel => {
+                         results.push({
+                             type: 'EXTENDED_AFFINAL',
+                             subType: 'VIA_BLOOD_SPOUSE_SIBLING',
+                             siblingId: sibId, // B's sibling
+                             spouseId: spouseId, // The in-law
+                             bloodRel: rel // A's relationship to Spouse
+                         });
+                     });
+                 });
+             }
+        }
+    }
 
     _isAncestor(ancestorId, descendantId) {
         const q = [descendantId];
@@ -514,6 +584,7 @@ export class RelationshipCalculator {
             if (res.type === 'UNION' || res.type === 'FORMER_UNION') key += `-${res.target}`;
             if (res.type === 'AFFINAL') key += `-${res.subType}-${res.spouseId}-${res.bloodRel.distA}-${res.bloodRel.distB}`;
             if (res.type === 'CO_AFFINAL') key += `-${res.spouseA}-${res.spouseB}`;
+            if (res.type === 'EXTENDED_AFFINAL') key += `-${res.subType}-${res.siblingId}-${res.spouseId}-${res.bloodRel.distA}`;
             if (res.type === 'STEP_PARENT' || res.type === 'STEP_CHILD') key += `-${res.parentId}-${res.isEx}`;
             if (res.type === 'STEP_SIBLING') key += `-${res.parentA}-${res.parentB}`;
             
@@ -611,6 +682,58 @@ export class RelationText {
              const spAName = getDisplayName(this.records[rel.spouseA]);
              const spBName = getDisplayName(this.records[rel.spouseB]);
              return { term: `Co-${t}`, detail: `${nameA}'s spouse (${spAName}) is a sibling of ${nameB}'s spouse (${spBName}).` };
+        }
+        
+        if (rel.type === 'EXTENDED_AFFINAL') {
+            const spouseName = getDisplayName(this.records[rel.spouseId]);
+            const spouseGender = getGender(this.records[rel.spouseId]);
+            
+            // CASE 1: Downward/Lateral Look (Me -> My Sibling -> Spouse -> Spouse's Parent/Relative)
+            // "I am the Brother-in-law of his Son."
+            if (rel.subType === 'VIA_SIBLING_SPOUSE') {
+                // 1. Determine what A (Me) is to the Spouse.
+                // Since I am the sibling of their partner, I am their Sibling-in-law.
+                const myInLawTerm = genderA === 'M' ? "Brother-in-law" : 
+                                    genderA === 'F' ? "Sister-in-law" : "Sibling-in-law";
+
+                // 2. Determine what the Spouse is to B (Target).
+                // e.g., If B is the Father, the Spouse is the Son.
+                // We use getBloodTerm, but we treat the Spouse as the 'Descendant' (A) and B as the 'Ancestor' (B)
+                // distA in bloodRel = Spouse's dist to Common.
+                // distB in bloodRel = B's dist to Common.
+                const relativeTerm = this.getBloodTerm(
+                    rel.bloodRel.distA, // Spouse's distance (e.g. 1 for Son)
+                    rel.bloodRel.distB, // B's distance (e.g. 0 for Father)
+                    spouseGender,       // We want the Spouse's label (e.g. "Son")
+                    rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, rel.bloodRel.isStep, rel.bloodRel.isExStep
+                );
+
+                return {
+                    term: `${myInLawTerm} of ${relativeTerm}`,
+                    detail: `${nameA} is the ${myInLawTerm} of ${nameB}'s ${relativeTerm}, ${spouseName}.`
+                };
+            }
+            
+            // CASE 2: Upward/Lateral Look (Me -> My Spouse -> My Spouse's Sibling -> Sibling's Relative)
+            // "He is the Father of my Brother-in-law."
+            if (rel.subType === 'VIA_BLOOD_SPOUSE_SIBLING') {
+                // 1. Determine what the Spouse is to B (Brother/Sister-in-law)
+                const inLawTerm = spouseGender === 'M' ? "Brother-in-law" : 
+                                  spouseGender === 'F' ? "Sister-in-law" : "Sibling-in-law";
+                            
+                // 2. Determine what A is to the Spouse (Father, Grandfather)
+                const relativeTerm = this.getBloodTerm(
+                    rel.bloodRel.distA,
+                    rel.bloodRel.distB,
+                    genderA,
+                    rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, rel.bloodRel.isStep, rel.bloodRel.isExStep
+                );
+                
+                return {
+                    term: `${relativeTerm} of ${inLawTerm}`,
+                    detail: `${nameA} is the ${relativeTerm} of ${nameB}'s ${inLawTerm}, ${spouseName}.`
+                };
+            }
         }
 
         if (rel.type === 'LINEAGE') {
