@@ -1449,4 +1449,61 @@ PARENT: UNCLE-INCOMPLETE | BIO
             expect(rels[0].isHalf).toBe(false); 
         });
     });
+    
+    describe('Step and Half-Removed relationships', () => {
+        it('should correctly identify Step-Cousins (Recursive Step Logic)', () => {
+            const data = `
+ID: ME
+PARENT: DAD | BIO
+ID: DAD
+UNION: STEP-MOM | MARR
+ID: STEP-MOM
+PARENT: STEP-GP | BIO
+ID: STEP-UNCLE
+PARENT: STEP-GP | BIO
+CHILD: STEP-COUSIN
+ID: STEP-COUSIN
+PARENT: STEP-UNCLE | BIO
+ID: STEP-GP
+`;
+            const rels = calc(data, 'ME', 'STEP-COUSIN');
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].isStep).toBe(true);
+            expect(rels[0].distA).toBe(2); // Step-Grandchild
+            expect(rels[0].distB).toBe(2); // Grandchild
+        });
+
+        it('should correctly textually formatting Half-Cousins with Removal', () => {
+             const data = `
+ID: SHARED-GP
+UNION: W1 | MARR
+UNION: W2 | MARR
+ID: W1
+ID: W2
+ID: DAD
+PARENT: SHARED-GP | BIO
+PARENT: W1 | BIO
+CHILD: ME
+ID: HALF-AUNT
+PARENT: SHARED-GP | BIO
+PARENT: W2 | BIO
+CHILD: HALF-COZ
+ID: HALF-COZ
+PARENT: HALF-AUNT | BIO
+CHILD: HALF-COZ-KID
+ID: ME
+PARENT: DAD | BIO
+ID: HALF-COZ-KID
+PARENT: HALF-COZ | BIO
+`;
+            const rels = calc(data, 'ME', 'HALF-COZ-KID');
+            expect(rels[0].isHalf).toBe(true);
+            
+            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
+            const desc = textGen.describe(rels[0], 'M', 'HALF-COZ-KID', 'ME');
+            
+            // Confirms the original string concatenation works as intended
+            expect(desc.term).toBe('Half-1st Cousin 1x Removed');
+        });
+    });
 });
