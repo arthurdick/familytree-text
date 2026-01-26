@@ -274,52 +274,83 @@ export class RelationshipCalculator {
 
             let isHalf = false;
             let isDouble = false;
+            
+            let isAmbiguous = false;
 
             // BLOOD RELATIONSHIP CHECKS
             if (!isStep && !isExStep) {
                 // 1. Half-Blood Logic (Single Common Ancestor)
-                // GUARD: Direct ancestors/descendants (dist=0) are never 'Half'.
                 if (lcaCount === 1 && distA > 0 && distB > 0) {
-                    // Sibling Case (1-1): 
-                    // Only assert Half-Sibling if we have positive proof of divergence.
-                    // (i.e. Both parties have 2 known parents, but only 1 matches).
-                    if (distA === 1 && distB === 1) {
+                     // Sibling Case (1-1): 
+                     if (distA === 1 && distB === 1) {
                         const parentsA = this.lineageParents.get(idA) || [];
                         const parentsB = this.lineageParents.get(idB) || [];
+                        const lenA = parentsA.length;
+                        const lenB = parentsB.length;
                         
-                        // strictly require both to have 2 parents
-                        if (parentsA.length >= 2 && parentsB.length >= 2) {
+                        // Case A: Both have 2 parents -> Positive Half
+                        if (lenA >= 2 && lenB >= 2) {
                             isHalf = true;
                         }
-                    } 
-                    // Avuncular Case (1-N):
-                    // If the Uncle/Aunt (who is 1 step from LCA) has 2 known parents,
-                    // but we only share 1 (lcaCount=1), it implies the second parent is different.
+                        // Case B: One has 2, One has 1 -> Ambiguous
+                        // We share 1 parent. The one with 2 parents has a 2nd parent X.
+                        // The one with 1 parent is missing data. Their 2nd parent *could* be X (Full)
+                        // or *could* be Y (Half). We cannot default to Full.
+                        else if ((lenA === 2 && lenB === 1) || (lenA === 1 && lenB === 2)) {
+                            // We treat this as a distinct state, not Half, not Full.
+                            // We will use a new property 'isAmbiguous'.
+                        }
+                     } 
+                     // Avuncular Case (1-N):
                     else if (distA === 1 || distB === 1) {
                         const uncleId = distA === 1 ? idA : idB;
-                        const parents = this.lineageParents.get(uncleId) || [];
-                        if (parents.length >= 2) {
+                        const nephewId = distA === 1 ? idB : idA;
+                        
+                        const parentsUncle = this.lineageParents.get(uncleId) || [];
+                        
+                        // 1. Proven Half: Uncle has 2 parents, but we only matched 1.
+                        if (parentsUncle.length >= 2) {
                             isHalf = true;
                         }
+                        // 2. Ambiguous: Uncle has 1 parent (Missing Data).
+                        // We check if the Nephew's linking parent (Uncle's Sibling) has 2 parents.
+                        else if (parentsUncle.length === 1) {
+                            // Only perform this check for direct Uncle/Nephew (dist=2) 
+                            // to avoid expensive traversals for Great-Uncles.
+                            const distNephew = distA === 1 ? distB : distA;
+                            
+                            if (distNephew === 2) {
+                                // Identify the Nephew's parent who descends from the LCA
+                                const lcaId = group[0].id;
+                                const parentsNephew = this.lineageParents.get(nephewId) || [];
+                                
+                                const siblingOfUncle = parentsNephew.find(p => 
+                                    (this.lineageParents.get(p) || []).includes(lcaId)
+                                );
+
+                                if (siblingOfUncle) {
+                                    const parentsSibling = this.lineageParents.get(siblingOfUncle) || [];
+                                    
+                                    // Sibling has 2 parents (Full context), Uncle has 1 (Missing context).
+                                    // We cannot assume Uncle shares the second parent.
+                                    if (parentsSibling.length === 2) {
+                                        isAmbiguous = true;
+                                    }
+                                }
+                            }
+                        }
                     }
-                    // Cousin Case (N-N):
-                    // If we only find 1 common ancestor, it COULD be a Half-Cousin, 
-                    // or it COULD be missing data (e.g. Grandma is not in the file).
-                    // Heuristic: Only assume "Half" if the ancestor has known multiple partners.
-                    else {
+                     // Cousin Case (N-N):
+                     else {
                         const ancestorId = group[0].id;
                         const spouseMap = this.spouses.get(ancestorId);
-                        
-                        // If the ancestor has 2 or more partners recorded, 
-                        // it's statistically likely this is a Half-relationship.
-                        // Otherwise, give benefit of the doubt (Full).
                         if (spouseMap && spouseMap.size >= 2) {
                             isHalf = true;
                         } else {
                             isHalf = false;
                         }
-                    }
-                } 
+                     }
+                }
                 
                 // 2. Double Logic (Restricted to Cousins)
                 // We only check Double for dist > 1.
@@ -348,6 +379,16 @@ export class RelationshipCalculator {
                 }
                 if (lca.lineageA === 'ADO' || lca.lineageB === 'ADO') isAdoptive = true;
             });
+            
+            // Determine ambiguity based on the Sibling logic above
+            if (!isStep && !isExStep && lcaCount === 1 && distA === 1 && distB === 1 && !isHalf) {
+                const parentsA = this.lineageParents.get(idA) || [];
+                const parentsB = this.lineageParents.get(idB) || [];
+                if ((parentsA.length === 2 && parentsB.length === 1) || 
+                    (parentsA.length === 1 && parentsB.length === 2)) {
+                    isAmbiguous = true;
+                }
+            }
 
             finalRels.push({
                 type: 'LINEAGE',
@@ -355,6 +396,7 @@ export class RelationshipCalculator {
                 distA,
                 distB,
                 isHalf,
+                isAmbiguous,
                 isDouble,
                 isAdoptive,
                 isFoster,
@@ -557,7 +599,7 @@ export class RelationshipCalculator {
             
             // Standard Lineage
             if (res.type === 'LINEAGE') {
-                key += `-${res.distA}-${res.distB}-${res.isStep}-${res.isExStep}-${res.isHalf}-${res.lineageA}-${res.lineageB}`;
+                key += `-${res.distA}-${res.distB}-${res.isStep}-${res.isExStep}-${res.isHalf}-${res.isAmbiguous}-${res.lineageA}-${res.lineageB}`;
             }
             
             // Unions
@@ -730,7 +772,7 @@ export class RelationText {
                     rel.bloodRel.distA, // Spouse's distance (e.g. 1 for Son)
                     rel.bloodRel.distB, // B's distance (e.g. 0 for Father)
                     spouseGender,       // We want the Spouse's label (e.g. "Son")
-                    rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, rel.bloodRel.isStep, rel.bloodRel.isExStep
+                    rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, rel.bloodRel.isStep, rel.bloodRel.isExStep, rel.bloodRel.isAmbiguous
                 );
 
                 return {
@@ -751,7 +793,7 @@ export class RelationText {
                     rel.bloodRel.distA,
                     rel.bloodRel.distB,
                     genderA,
-                    rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, rel.bloodRel.isStep, rel.bloodRel.isExStep
+                    rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, rel.bloodRel.isStep, rel.bloodRel.isExStep, rel.bloodRel.isAmbiguous
                 );
                 
                 return {
@@ -823,7 +865,7 @@ export class RelationText {
                 specialPrefix += "(Adoptive) ";
             }
 
-            const term = this.getBloodTerm(rel.distA, rel.distB, genderA, rel.isHalf, rel.isDouble, rel.isAdoptive, rel.isStep, rel.isExStep);
+            const term = this.getBloodTerm(rel.distA, rel.distB, genderA, rel.isHalf, rel.isDouble, rel.isAdoptive, rel.isStep, rel.isExStep, rel.isAmbiguous);
             const commonName = getDisplayName(this.records[rel.ancestorIds[0]]);
             const lcaCount = rel.ancestorIds.length;
             const sA = rel.distA === 1 ? "step" : "steps";
@@ -857,7 +899,7 @@ export class RelationText {
         const isExStep = rel.bloodRel.isExStep;
         
         const getBaseTerm = (dA, dB, g) => {
-            return this.getBloodTerm(dA, dB, g, rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, isStep, isExStep);
+            return this.getBloodTerm(dA, dB, g, rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, isStep, isExStep, rel.bloodRel.isAmbiguous);
         };
 
         let term = "In-Law";
@@ -941,7 +983,7 @@ export class RelationText {
         return { term, detail };
     }
 
-    getBloodTerm(distA, distB, sex, isHalf, isDouble, isAdoptive, isStep, isExStep) {
+    getBloodTerm(distA, distB, sex, isHalf, isDouble, isAdoptive, isStep, isExStep, isAmbiguous) {
         let prefix = "";
         if (isExStep) prefix = "Former Step-";
         else if (isStep) prefix = "Step-";
@@ -949,6 +991,7 @@ export class RelationText {
         else if (isDouble) prefix = "Double ";
 
         let suffix = "";
+        if (isAmbiguous) suffix += " (Ambiguous)";
 
         if (distA === 0) return prefix + this.getAncestorTerm(distB, sex) + suffix;
         if (distB === 0) return prefix + this.getDescendantTerm(distA, sex) + suffix;

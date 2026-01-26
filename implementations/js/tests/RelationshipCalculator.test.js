@@ -1314,4 +1314,69 @@ PARENT: MOM | BIO
             expect(rels[0].distB).toBe(0); // Parent
         });
     });
+    
+    describe('Ambiguous Sibling Heuristic', () => {
+        it('should label siblings as Ambiguous if one has 2 parents and the other has 1', () => {
+            const data = `
+ID: DAD
+ID: MOM
+ID: ME
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+
+ID: BRO-MISSING-DATA
+PARENT: DAD | BIO
+# MOM is not linked. 
+# They share DAD. "ME" has 2 parents. "BRO" has 1.
+# This creates ambiguity: Is BRO's mother MOM (Full) or someone else (Half)?
+`;
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+            
+            const rels = calculator.calculate('ME', 'BRO-MISSING-DATA');
+            const desc = textGen.describe(rels[0], 'M', 'BRO-MISSING-DATA', 'ME');
+
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].isHalf).toBe(false);      // Not definitely half
+            expect(rels[0].isAmbiguous).toBe(true);  // But definitely ambiguous
+            
+            // Check Text Output
+            expect(desc.term).toContain('Brother (Ambiguous)');
+        });
+    });
+    
+    describe('Ambiguous Avuncular Heuristic', () => {
+        it('should label Uncle as Ambiguous if he is missing a mother record while the Sibling has one', () => {
+            const data = `
+ID: GRANDPA
+ID: GRANDMA
+
+# Dad has both parents
+ID: DAD
+PARENT: GRANDPA | BIO
+PARENT: GRANDMA | BIO
+
+# Uncle only has Grandpa recorded
+ID: UNCLE-MISSING-DATA
+PARENT: GRANDPA | BIO
+
+ID: ME
+PARENT: DAD | BIO
+`;
+            const parser = new FTTParser();
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+            
+            const rels = calculator.calculate('UNCLE-MISSING-DATA', 'ME');
+            const desc = textGen.describe(rels[0], 'M', 'UNCLE-MISSING-DATA', 'ME');
+
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].isHalf).toBe(false);      // Not definitely half
+            expect(rels[0].isAmbiguous).toBe(true);  // Definitely ambiguous
+            
+            expect(desc.term).toBe('Uncle (Ambiguous)');
+        });
+    });
 });
