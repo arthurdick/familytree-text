@@ -277,15 +277,21 @@ export class RelationshipCalculator {
                 // 1. Half-Blood Logic (Single Common Ancestor)
                 // GUARD: Direct ancestors/descendants (dist=0) are never 'Half'.
                 if (lcaCount === 1 && distA > 0 && distB > 0) {
-                    // Sibling Case (1-1): Check if either party has 2 known parents
+                    // Sibling Case (1-1): 
+                    // Only assert Half-Sibling if we have positive proof of divergence.
+                    // (i.e. Both parties have 2 known parents, but only 1 matches).
                     if (distA === 1 && distB === 1) {
                         const parentsA = this.lineageParents.get(idA) || [];
                         const parentsB = this.lineageParents.get(idB) || [];
-                        if (parentsA.length >= 2 || parentsB.length >= 2) {
+                        
+                        // strictly require both to have 2 parents
+                        if (parentsA.length >= 2 && parentsB.length >= 2) {
                             isHalf = true;
                         }
                     } 
-                    // Avuncular Case (1-N): Check if the 'Uncle' (dist=1) has 2 known parents
+                    // Avuncular Case (1-N):
+                    // If the Uncle/Aunt (who is 1 step from LCA) has 2 known parents,
+                    // but we only share 1 (lcaCount=1), it implies the second parent is different.
                     else if (distA === 1 || distB === 1) {
                         const uncleId = distA === 1 ? idA : idB;
                         const parents = this.lineageParents.get(uncleId) || [];
@@ -293,7 +299,8 @@ export class RelationshipCalculator {
                             isHalf = true;
                         }
                     }
-                    // Cousin Case (N-N): Default to Half if only 1 ancestor
+                    // Cousin Case (N-N): Default to Half if only 1 ancestor is found.
+                    // Standard genealogy convention: 1 shared GP = Half Cousin. 2 shared GP = Full Cousin.
                     else {
                         isHalf = true;
                     }

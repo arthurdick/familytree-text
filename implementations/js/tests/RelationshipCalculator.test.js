@@ -82,6 +82,9 @@ ID: MOM
 CHILD: ME
 CHILD: SIS
 
+ID: OTHER-MOM
+CHILD: HALF-BRO
+
 ID: ME
 SEX: M
 PARENT: DAD | BIO
@@ -95,7 +98,7 @@ PARENT: MOM | BIO
 ID: HALF-BRO
 SEX: M
 PARENT: DAD | BIO
-# Different mom or unknown
+PARENT: OTHER-MOM | BIO
 `;
 
         it('should identify Full Siblings', () => {
@@ -526,7 +529,7 @@ CHILD: HALF-SIB
 
 ID: ME
 PARENT: DAD | BIO
-# Mom is unknown/missing
+PARENT: ?UNK-MOM-1 | BIO
 
 ID: HALF-SIB
 PARENT: DAD | BIO
@@ -1078,6 +1081,54 @@ UNION: BIO-DAD | MARR
             expect(rels[0].type).toBe('AFFINAL');
             expect(rels[0].isExUnion).toBe(true);
             expect(description.term).toBe('Former Step-Mother-in-law');
+        });
+    });
+    
+    describe('Half-Blood Logic', () => {
+        it('should NOT label siblings as Half-Blood just because one has a missing parent record', () => {
+            const data = `
+ID: DAD
+ID: MOM
+
+ID: ME
+SEX: M
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+
+ID: BROTHER-INCOMPLETE
+SEX: M
+PARENT: DAD | BIO
+# MOM is missing from record, but not necessarily different
+`;
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'BROTHER-INCOMPLETE');
+            
+            expect(rels[0].type).toBe('LINEAGE');
+            // We expect the system to give the benefit of the doubt (Full/Ambiguous)
+            // rather than asserting "Half" without proof.
+            expect(rels[0].isHalf).toBe(false);
+        });
+        
+        it('should correctly label True Half-Siblings when both sets of parents diverge', () => {
+            const data = `
+ID: DAD
+ID: MOM
+ID: STEPMOM
+
+ID: ME
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+
+ID: HALF-BRO
+PARENT: DAD | BIO
+PARENT: STEPMOM | BIO
+`;
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'HALF-BRO');
+            
+            expect(rels[0].isHalf).toBe(true);
         });
     });
 });
