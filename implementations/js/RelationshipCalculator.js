@@ -124,7 +124,7 @@ export class RelationshipCalculator {
         this._findCoAffinalRelationships(idA, idB, results);
 
         // 6. Check Deep Extended Affinal
-        this._findExtendedAffinalRelationships(idA, idB, results);
+        this._findGeneralizedAffinalRelationships(idA, idB, results);
 
         // 7. Check Step-Siblings
         const stepSib = this._findStepSibling(idA, idB);
@@ -496,82 +496,44 @@ export class RelationshipCalculator {
         });
     }
     
-    _findExtendedAffinalRelationships(idA, idB, results) {
-        // CASE 1: A is the Sibling of the Spouse of B's Relative.
-        // (e.g. A="Me", B="Father of my BIL". A is the Brother-in-law of B's Son)
-        const parentsA = this.lineageParents.get(idA) || [];
-        if (parentsA.length > 0) {
-            const siblingsA = [];
-            parentsA.forEach(pId => {
-                const children = this.childrenMap.get(pId);
-                if (children) children.forEach(c => {
-                    if (c !== idA && !siblingsA.includes(c)) siblingsA.push(c);
-                });
-            });
+    _findGeneralizedAffinalRelationships(idA, idB, results) {
+        // Iterate over all known unions in the graph to find a "Bridge"
+        // Pattern: A -> (Lineage) -> Spouse1 <-> Spouse2 -> (Lineage) -> B
+        
+        for (const [spouse1Id, spouses] of this.spouses) {
+            // Optimization: First check if A is related to Spouse 1
+            // This prunes the search space significantly.
+            
+            // Skip if Spouse1 IS A (Direct Affinal, handled elsewhere)
+            if (spouse1Id === idA) continue;
 
-            for (const sibId of siblingsA) {
-                const spouses = this.spouses.get(sibId);
-                if (!spouses) continue;
+            const relsA = this._findLineageRelationships(idA, spouse1Id);
+            if (relsA.length === 0) continue; // A is not related to this side of the union
 
-                spouses.forEach((status, spouseId) => {
-                    if (!status.active) return;
-                    
-                    // If the spouse IS B, this is just "A is the Sibling of B's Spouse".
-                    // That is a standard Brother-in-Law/Sister-in-Law relationship,
-                    // which is already caught by _findAffinalRelationships.
-                    if (spouseId === idB) return; 
+            for (const [spouse2Id, status] of spouses) {
+                if (!status.active) continue; // Only active marriages bridge families
+                if (spouse2Id === idB) continue; // Spouse2 IS B (Direct Affinal, handled elsewhere)
 
-                    const relsToSpouse = this._findLineageRelationships(spouseId, idB);
-                    relsToSpouse.forEach(rel => {
-                        results.push({
-                            type: 'EXTENDED_AFFINAL',
-                            subType: 'VIA_SIBLING_SPOUSE',
-                            siblingId: sibId,
-                            spouseId: spouseId,
-                            bloodRel: rel // B's relationship to Spouse
+                // Check if Spouse 2 is related to B
+                const relsB = this._findLineageRelationships(spouse2Id, idB);
+                
+                if (relsB.length > 0) {
+                    // Path Found: A -> Spouse1 <-> Spouse2 -> B
+                    // We generate a result for every valid lineage combination
+                    relsA.forEach(relA => {
+                        relsB.forEach(relB => {
+                            results.push({
+                                type: 'EXTENDED_AFFINAL',
+                                subType: 'GENERALIZED',
+                                spouse1Id: spouse1Id, // A's relative
+                                spouse2Id: spouse2Id, // B's relative
+                                relA: relA, // A -> Spouse1
+                                relB: relB  // Spouse2 -> B
+                            });
                         });
                     });
-                });
+                }
             }
-        }
-
-        // CASE 2: A is the Relative of the Spouse of B's Sibling.
-        // (e.g. A="Father of BIL", B="Me". A is the Father of Brother-in-law)
-        const parentsB = this.lineageParents.get(idB) || [];
-        if (parentsB.length > 0) {
-             const siblingsB = [];
-             parentsB.forEach(pId => {
-                const children = this.childrenMap.get(pId);
-                if (children) children.forEach(c => {
-                    if (c !== idB && !siblingsB.includes(c)) siblingsB.push(c);
-                });
-             });
-
-             for (const sibId of siblingsB) {
-                 const spouses = this.spouses.get(sibId);
-                 if (!spouses) continue;
-                 
-                 spouses.forEach((status, spouseId) => {
-                     if (!status.active) return;
-                     
-                     // If the spouse IS A, this is just "A is the Spouse of B's Sibling".
-                     // That is a standard Brother-in-Law/Sister-in-Law relationship,
-                     // already caught by _findAffinalRelationships.
-                     if (spouseId === idA) return;
-
-                     // Check if A is related to the Spouse
-                     const relsToSpouse = this._findLineageRelationships(idA, spouseId);
-                     relsToSpouse.forEach(rel => {
-                         results.push({
-                             type: 'EXTENDED_AFFINAL',
-                             subType: 'VIA_BLOOD_SPOUSE_SIBLING',
-                             siblingId: sibId, // B's sibling
-                             spouseId: spouseId, // The in-law
-                             bloodRel: rel // A's relationship to Spouse
-                         });
-                     });
-                 });
-             }
         }
     }
 
@@ -592,13 +554,46 @@ export class RelationshipCalculator {
         const unique = new Map();
         results.forEach(res => {
             let key = res.type;
-            if (res.type === 'LINEAGE') key += `-${res.distA}-${res.distB}-${res.isStep}-${res.isExStep}-${res.isHalf}-${res.lineageA}-${res.lineageB}`;
-            if (res.type === 'UNION' || res.type === 'FORMER_UNION') key += `-${res.target}`;
-            if (res.type === 'AFFINAL') key += `-${res.subType}-${res.spouseId}-${res.bloodRel.distA}-${res.bloodRel.distB}`;
-            if (res.type === 'CO_AFFINAL') key += `-${res.spouseA}-${res.spouseB}`;
-            if (res.type === 'EXTENDED_AFFINAL') key += `-${res.subType}-${res.siblingId}-${res.spouseId}-${res.bloodRel.distA}`;
-            if (res.type === 'STEP_PARENT' || res.type === 'STEP_CHILD') key += `-${res.parentId}-${res.isEx}`;
-            if (res.type === 'STEP_SIBLING') key += `-${res.parentA}-${res.parentB}`;
+            
+            // Standard Lineage
+            if (res.type === 'LINEAGE') {
+                key += `-${res.distA}-${res.distB}-${res.isStep}-${res.isExStep}-${res.isHalf}-${res.lineageA}-${res.lineageB}`;
+            }
+            
+            // Unions
+            if (res.type === 'UNION' || res.type === 'FORMER_UNION') {
+                key += `-${res.target}`;
+            }
+            
+            // Standard Affinal
+            if (res.type === 'AFFINAL') {
+                key += `-${res.subType}-${res.spouseId}-${res.bloodRel.distA}-${res.bloodRel.distB}`;
+            }
+            
+            // Co-Affinal
+            if (res.type === 'CO_AFFINAL') {
+                key += `-${res.spouseA}-${res.spouseB}`;
+            }
+
+            // Extended Affinal (UPDATED)
+            if (res.type === 'EXTENDED_AFFINAL') {
+                if (res.subType === 'GENERALIZED') {
+                    // New Schema: uses spouse1Id, spouse2Id, relA, relB
+                    key += `-${res.subType}-${res.spouse1Id}-${res.spouse2Id}-${res.relA.distA}-${res.relB.distA}`;
+                } else {
+                    // Legacy Schema: uses siblingId, spouseId, bloodRel
+                    // Kept for safety if mixed results exist
+                    key += `-${res.subType}-${res.siblingId}-${res.spouseId}-${res.bloodRel.distA}`;
+                }
+            }
+
+            // Step-Relationships
+            if (res.type === 'STEP_PARENT' || res.type === 'STEP_CHILD') {
+                key += `-${res.parentId}-${res.isEx}`;
+            }
+            if (res.type === 'STEP_SIBLING') {
+                key += `-${res.parentA}-${res.parentB}`;
+            }
             
             if (!unique.has(key)) unique.set(key, res);
         });
@@ -606,7 +601,18 @@ export class RelationshipCalculator {
     }
 
     _filterRedundant(results) {
-        // 1. Filter Lineage steps if a Direct Step relationship exists
+        // 1. NOISE FILTER: Extended Affinal is a fallback.
+        // If we found a specific relationship (Lineage, Union, Standard In-Law, Step-Family),
+        // we discard the verbose generalized paths.
+        const hasSpecificRel = results.some(r => 
+            r.type !== 'EXTENDED_AFFINAL' && r.type !== 'NONE'
+        );
+        
+        if (hasSpecificRel) {
+            results = results.filter(r => r.type !== 'EXTENDED_AFFINAL');
+        }
+
+        // 2. Filter Lineage steps if a Direct Step relationship exists
         const isDirectStepParent = results.some(r => r.type === 'STEP_PARENT');
         if (isDirectStepParent) {
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distB === 1));
@@ -622,21 +628,21 @@ export class RelationshipCalculator {
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distA === 1 && r.distB === 1));
         }
 
-        // Check if a pure blood link exists
+        // 3. Blood Lineage Logic (Endogamy Support)
         const isBlood = results.some(r => r.type === 'LINEAGE' && !r.isStep && !r.isExStep);
         if (isBlood) {
-            // Blood only trumps Affinal if it is DIRECT LINEAGE.
-            // If I am your Mother (Direct), I cannot also be your "Father's Wife" (Affinal).
-            // But if I am your Cousin (Collateral), I CAN also be your Brother-in-Law.
-            
-            // Direct Lineage means distance is 0 for one party (Ancestor/Descendant).
-            const isDirectLineage = results.some(r => r.type === 'LINEAGE' && !r.isStep && !r.isExStep && (r.distA === 0 || r.distB === 0));
+            // Rule A: Blood trumps Affinal ONLY if it is DIRECT LINEAGE.
+            // (e.g. You cannot be an In-Law to your own Child, but you CAN be an In-Law to your Cousin).
+            const isDirectLineage = results.some(r => 
+                r.type === 'LINEAGE' && !r.isStep && !r.isExStep && (r.distA === 0 || r.distB === 0)
+            );
 
             if (isDirectLineage) {
                 results = results.filter(r => r.type !== 'AFFINAL');
             }
 
-            // Rule 2: Blood trumps Step-Lineage (Redundancy Filter)
+            // Rule B: Blood trumps Step-Lineage (Redundancy Filter)
+            // (e.g. Genetic Half-Uncle trumps Step-Uncle).
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep)));
         }
 
@@ -751,6 +757,39 @@ export class RelationText {
                 return {
                     term: `${relativeTerm} of ${inLawTerm}`,
                     detail: `${nameA} is the ${relativeTerm} of ${nameB}'s ${inLawTerm}, ${spouseName}.`
+                };
+            }
+            
+            // Generalized Handler
+            if (rel.subType === 'GENERALIZED') {
+                // Logic: Describe A's relation to Spouse1, then B's relation to Spouse1 (as an in-law).
+                // Formula: "[Term A->S1] of [Term B->S1]"
+                // Example: A=Father, S1=Sister, S2=Husband, B=Husband's Brother.
+                // A is Father of S1. B is Brother-in-Law of S1.
+                // Result: "Father of Brother-in-Law".
+
+                // 1. Get A's relationship to Spouse 1 (e.g., "Father")
+                const termA = this.getBloodTerm(
+                    rel.relA.distA, rel.relA.distB, genderA,
+                    rel.relA.isHalf, rel.relA.isDouble, rel.relA.isAdoptive, rel.relA.isStep, rel.relA.isExStep
+                );
+
+                // 2. Get B's relationship to Spouse 1 (The In-Law term)
+                // We fake an Affinal relationship object for B->S1 to reuse logic
+                const mockAffinalRel = {
+                    type: 'AFFINAL',
+                    subType: 'VIA_BLOOD_SPOUSE', // B -> Rel(S2) -> Spouse(S1)
+                    spouseId: rel.spouse1Id,
+                    bloodRel: rel.relB, // S2 -> B
+                    isExUnion: false
+                };
+                
+                const s1Gender = getGender(this.records[rel.spouse1Id]);
+                const termS1toB = this.describeAffinal(mockAffinalRel, s1Gender, nameB, "TEMP").term;
+
+                return {
+                    term: `${termA} of ${termS1toB}`,
+                    detail: `${nameA} is the ${termA} of ${termS1toB}, ${getDisplayName(this.records[rel.spouse1Id])}.`
                 };
             }
         }
