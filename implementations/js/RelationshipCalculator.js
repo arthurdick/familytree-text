@@ -515,6 +515,12 @@ export class RelationshipCalculator {
 
                 spouses.forEach((status, spouseId) => {
                     if (!status.active) return;
+                    
+                    // If the spouse IS B, this is just "A is the Sibling of B's Spouse".
+                    // That is a standard Brother-in-Law/Sister-in-Law relationship,
+                    // which is already caught by _findAffinalRelationships.
+                    if (spouseId === idB) return; 
+
                     const relsToSpouse = this._findLineageRelationships(spouseId, idB);
                     relsToSpouse.forEach(rel => {
                         results.push({
@@ -540,13 +546,19 @@ export class RelationshipCalculator {
                     if (c !== idB && !siblingsB.includes(c)) siblingsB.push(c);
                 });
              });
-             
+
              for (const sibId of siblingsB) {
                  const spouses = this.spouses.get(sibId);
                  if (!spouses) continue;
                  
                  spouses.forEach((status, spouseId) => {
                      if (!status.active) return;
+                     
+                     // If the spouse IS A, this is just "A is the Spouse of B's Sibling".
+                     // That is a standard Brother-in-Law/Sister-in-Law relationship,
+                     // already caught by _findAffinalRelationships.
+                     if (spouseId === idA) return;
+
                      // Check if A is related to the Spouse
                      const relsToSpouse = this._findLineageRelationships(idA, spouseId);
                      relsToSpouse.forEach(rel => {
@@ -594,6 +606,7 @@ export class RelationshipCalculator {
     }
 
     _filterRedundant(results) {
+        // 1. Filter Lineage steps if a Direct Step relationship exists
         const isDirectStepParent = results.some(r => r.type === 'STEP_PARENT');
         if (isDirectStepParent) {
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distB === 1));
@@ -611,13 +624,19 @@ export class RelationshipCalculator {
 
         // Check if a pure blood link exists
         const isBlood = results.some(r => r.type === 'LINEAGE' && !r.isStep && !r.isExStep);
-        
         if (isBlood) {
-            // Rule 1: Blood trumps Affinal (In-Laws)
-            results = results.filter(r => r.type !== 'AFFINAL');
+            // Blood only trumps Affinal if it is DIRECT LINEAGE.
+            // If I am your Mother (Direct), I cannot also be your "Father's Wife" (Affinal).
+            // But if I am your Cousin (Collateral), I CAN also be your Brother-in-Law.
+            
+            // Direct Lineage means distance is 0 for one party (Ancestor/Descendant).
+            const isDirectLineage = results.some(r => r.type === 'LINEAGE' && !r.isStep && !r.isExStep && (r.distA === 0 || r.distB === 0));
 
-            // Rule 2: Blood trumps Step-Lineage
-            // If I am your Half-Uncle, ignore that I might also be your Step-Uncle via a different marriage.
+            if (isDirectLineage) {
+                results = results.filter(r => r.type !== 'AFFINAL');
+            }
+
+            // Rule 2: Blood trumps Step-Lineage (Redundancy Filter)
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep)));
         }
 

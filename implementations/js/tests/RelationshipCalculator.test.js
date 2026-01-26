@@ -1237,4 +1237,81 @@ SEX: M
             expect(desc.term).toBe('Great-Grandfather of Brother-in-law');
         });
     });
+    
+    describe('Endogamy & Redundancy Filter', () => {
+        it('should return BOTH Cousin and In-Law relationships (Collateral)', () => {
+            const data = `
+# Grandparents share ME and COUSIN-BIL
+ID: GP
+CHILD: DAD
+CHILD: UNCLE
+
+ID: DAD
+PARENT: GP | BIO
+CHILD: ME
+
+ID: UNCLE
+PARENT: GP | BIO
+CHILD: COUSIN-BIL
+
+# ME marries WIFE
+ID: ME
+SEX: M
+PARENT: DAD | BIO
+UNION: WIFE | MARR
+
+# WIFE is sibling of COUSIN-BIL
+ID: WIFE
+SEX: F
+PARENT: IN-LAW-DAD | BIO
+
+ID: COUSIN-BIL
+SEX: M
+PARENT: UNCLE | BIO
+PARENT: IN-LAW-DAD | BIO
+
+# Connecting the in-law family
+ID: IN-LAW-DAD
+CHILD: WIFE
+CHILD: COUSIN-BIL
+`;
+            // Relationship:
+            // 1. Lineage: 1st Cousin (via GP)
+            // 2. Affinal: Brother-in-Law (Wife's Brother)
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'COUSIN-BIL');
+
+            expect(rels).toHaveLength(2);
+            
+            const types = rels.map(r => r.type).sort();
+            expect(types).toEqual(['AFFINAL', 'LINEAGE']);
+        });
+
+        it('should suppress In-Law relationship if Direct Lineage exists (Regression)', () => {
+            const data = `
+ID: DAD
+UNION: MOM | MARR
+
+ID: MOM
+UNION: DAD | MARR
+
+ID: CHILD
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+`;
+            // Relationship:
+            // 1. Lineage: Mother (Direct)
+            // 2. Affinal: Spouse of Father (Technically true, but socially redundant)
+            // EXPECTATION: The calculator should filter out the Affinal link because Direct Lineage exists.
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('CHILD', 'MOM');
+
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].distA).toBe(1); // Child
+            expect(rels[0].distB).toBe(0); // Parent
+        });
+    });
 });
