@@ -299,10 +299,22 @@ export class RelationshipCalculator {
                             isHalf = true;
                         }
                     }
-                    // Cousin Case (N-N): Default to Half if only 1 ancestor is found.
-                    // Standard genealogy convention: 1 shared GP = Half Cousin. 2 shared GP = Full Cousin.
+                    // Cousin Case (N-N):
+                    // If we only find 1 common ancestor, it COULD be a Half-Cousin, 
+                    // or it COULD be missing data (e.g. Grandma is not in the file).
+                    // Heuristic: Only assume "Half" if the ancestor has known multiple partners.
                     else {
-                        isHalf = true;
+                        const ancestorId = group[0].id;
+                        const spouseMap = this.spouses.get(ancestorId);
+                        
+                        // If the ancestor has 2 or more partners recorded, 
+                        // it's statistically likely this is a Half-relationship.
+                        // Otherwise, give benefit of the doubt (Full).
+                        if (spouseMap && spouseMap.size >= 2) {
+                            isHalf = true;
+                        } else {
+                            isHalf = false;
+                        }
                     }
                 } 
                 

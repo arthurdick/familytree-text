@@ -26,9 +26,6 @@ describe('RelationshipCalculator', () => {
         return rels;
     }
 
-    // ==========================================
-    // 1. Basic Lineage
-    // ==========================================
     describe('Lineage', () => {
         const data = `
 ID: PARENT
@@ -68,9 +65,6 @@ PARENT: CHILD | BIO
         });
     });
 
-    // ==========================================
-    // 2. Siblings & Half-Siblings
-    // ==========================================
     describe('Siblings', () => {
         const data = `
 ID: DAD
@@ -118,9 +112,6 @@ PARENT: OTHER-MOM | BIO
         });
     });
 
-    // ==========================================
-    // 3. Spouses (Direct Union)
-    // ==========================================
     describe('Unions', () => {
         const data = `
 ID: HUSB
@@ -139,9 +130,6 @@ UNION: HUSB | MARR
         });
     });
 
-    // ==========================================
-    // 4. Cousins
-    // ==========================================
     describe('Cousins', () => {
         const data = `
 ID: G-PA
@@ -182,9 +170,6 @@ PARENT: COUSIN | BIO
         });
     });
 
-    // ==========================================
-    // 5. Affinal (In-Laws)
-    // ==========================================
     describe('Affinal', () => {
         const data = `
 ID: HUSB
@@ -234,9 +219,6 @@ PARENT: FIL | BIO
         });
     });
 
-    // ==========================================
-    // 6. Step Relationships
-    // ==========================================
     describe('Step Relationships', () => {
         const data = `
 ID: STEP-DAD
@@ -267,9 +249,6 @@ PARENT: MOM | BIO
         });
     });
 
-    // ==========================================
-    // 7. Step-Siblings
-    // ==========================================
     describe('Step Siblings', () => {
         const data = `
 ID: DAD
@@ -296,9 +275,6 @@ PARENT: MOM | BIO
         });
     });
 
-    // ==========================================
-    // 8. Temporal Logic (Ex-Spouses)
-    // ==========================================
     describe('Temporal Logic', () => {
         const data = `
 ID: HUSB
@@ -329,9 +305,6 @@ UNION: HUSB | MARR | 2005 | .. |
         });
     });
 
-    // ==========================================
-    // 9. Deep Step-Relationships
-    // ==========================================
     describe('Deep Step-Traversal', () => {
         const data = `
 ID: ME
@@ -359,9 +332,6 @@ CHILD: STEP-DAD
         });
     });
 
-    // ==========================================
-    // 10. Topology-Based Double Cousins
-    // ==========================================
     describe('Double Cousins (Topology Check)', () => {
         it('should NOT identify as Double for standard 2nd Cousin 1x Removed', () => {
             const data = `
@@ -518,9 +488,6 @@ UNION: GP3 | MARR
         });
     });
 
-    // ==========================================
-    // 11. Robust Half-Sibling Logic
-    // ==========================================
     describe('Half-Siblings (Missing Parent)', () => {
         const data = `
 ID: DAD
@@ -548,9 +515,6 @@ CHILD: HALF-SIB
         });
     });
 
-    // ==========================================
-    // 12. Step-Siblings (Divorced Parents)
-    // ==========================================
     describe('Step-Siblings (Divorced Parents)', () => {
         const data = `
 ID: DAD
@@ -578,9 +542,6 @@ PARENT: MOM | BIO
         });
     });
 
-    // ==========================================
-    // 13. Complex Double Cousins (Half-Sibling Parents)
-    // ==========================================
     describe('Complex Double Cousins', () => {
         const data = `
 ID: GP1
@@ -639,9 +600,6 @@ PARENT: HALF-SIS2 | BIO
         });
     });
 
-    // ==========================================
-    // 14. Widowhood vs Divorce (Step-Siblings)
-    // ==========================================
     describe('Widowhood Step-Siblings', () => {
         const data = `
 ID: DAD
@@ -669,9 +627,6 @@ PARENT: MOM | BIO
         });
     });
 
-    // ==========================================
-    // 15. Co-Affinal Relationships
-    // ==========================================
     describe('Co-Affinal (Co-In-Laws)', () => {
         const data = `
 ID: HUSB1
@@ -702,9 +657,6 @@ CHILD: WIFE2
         });
     });
 
-    // ==========================================
-    // 16. Multi-Path Lineage (Bio + Adoptive)
-    // ==========================================
     describe('Multi-Path Lineage', () => {
         const data = `
 ID: CHILD
@@ -741,9 +693,6 @@ CHILD: ADO-DAD
         });
     });
 
-    // ==========================================
-    // 17. Adoptive Parent Text Gen
-    // ==========================================
     describe('Adoptive Parent Terminology', () => {
         const data = `
 ID: DAD
@@ -780,10 +729,7 @@ SEX: M
             expect(desc.term).toBe('Adopted Son');
         });
     });
-    
-    // ==========================================
-    // 18. REGRESSION TEST: Uncoupled Ancestor Bug
-    // ==========================================
+
     describe('Double Cousins (Uncoupled Ancestors)', () => {
         const data = `
 ID: TEST-ME
@@ -838,10 +784,7 @@ SEX: F
             expect(rels[0].ancestorIds).toContain('GP-MATERNAL');
         });
     });
-    
-    // ==========================================
-    // 19. Half-Avuncular (Half-Uncle)
-    // ==========================================
+
     describe('Half-Avuncular (Half-Uncle)', () => {
         const data = `
 ID: GRANDPA
@@ -899,10 +842,7 @@ PARENT: DAD | BIO
             expect(desc.term).toBe('Half-Uncle');
         });
     });
-    
-    // ==========================================
-    // 20. REGRESSION TEST: The "Half-Mother" Bug
-    // ==========================================
+
     describe('Direct Lineage vs Half-Blood', () => {
         const data = `
 ID: POLY-DAD
@@ -944,10 +884,7 @@ SEX: F
             expect(desc.term).toBe('Mother');
         });
     });
-    
-    // ==========================================
-    // 21. Step-In-Laws
-    // ==========================================
+
     describe('Step-In-Laws', () => {
         const data = `
 HEAD_FORMAT: FTT v0.1
@@ -1002,9 +939,6 @@ UNION: BIO-MOM | MARR
         });
     });
 
-    // ==========================================
-    // 22. Ex-In-Laws
-    // ==========================================
     describe('Ex-In-Laws', () => {
         const data = `
 HEAD_FORMAT: FTT v0.1
@@ -1043,9 +977,6 @@ ID: P2
         });
     });
 
-    // ==========================================
-    // 23. Former Step-Mother-in-law
-    // ==========================================
     describe('Combined: Former Step-Mother-in-law', () => {
         const data = `
 HEAD_FORMAT: FTT v0.1
@@ -1129,6 +1060,85 @@ PARENT: STEPMOM | BIO
             const rels = calculator.calculate('ME', 'HALF-BRO');
             
             expect(rels[0].isHalf).toBe(true);
+        });
+    });
+    
+    describe('Regression: Cousin Half-Blood Logic', () => {
+        it('should NOT label cousins as Half-Blood if only one ancestor is recorded (Missing Data)', () => {
+            const data = `
+# The Common Ancestor (Only one defined)
+ID: GG-PA
+# GG-MA is missing from file
+
+# Branch A
+ID: G-PA-1
+PARENT: GG-PA | BIO
+CHILD: PARENT-1
+
+ID: PARENT-1
+PARENT: G-PA-1 | BIO
+CHILD: ME
+
+ID: ME
+PARENT: PARENT-1 | BIO
+
+# Branch B
+ID: G-PA-2
+PARENT: GG-PA | BIO
+CHILD: PARENT-2
+
+ID: PARENT-2
+PARENT: G-PA-2 | BIO
+CHILD: COUSIN
+
+ID: COUSIN
+PARENT: PARENT-2 | BIO
+CHILD: COUSIN-KID
+
+ID: COUSIN-KID
+PARENT: COUSIN | BIO
+`;
+            // Relationship: ME <-> COUSIN-KID (2nd Cousin 1x Removed)
+            // Ancestor: GG-PA (Count = 1)
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'COUSIN-KID');
+            const rel = rels[0];
+            
+            expect(rel.type).toBe('LINEAGE');
+            expect(rel.isHalf).toBe(false); 
+        });
+        
+        it('should label cousins as Half-Blood if the ancestor has MULTIPLE unions', () => {
+            const data = `
+ID: SHARED-GP
+UNION: WIFE-1 | MARR
+UNION: WIFE-2 | MARR
+
+ID: WIFE-1
+ID: WIFE-2
+
+ID: PARENT-A
+PARENT: SHARED-GP | BIO
+PARENT: WIFE-1 | BIO
+CHILD: ME
+
+ID: PARENT-B
+PARENT: SHARED-GP | BIO
+PARENT: WIFE-2 | BIO
+CHILD: COUSIN
+
+ID: ME
+PARENT: PARENT-A | BIO
+
+ID: COUSIN
+PARENT: PARENT-B | BIO
+`;
+            const result = parser.parse(data);
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('ME', 'COUSIN');
+            const rel = rels[0];
+            expect(rel.isHalf).toBe(true);
         });
     });
 });
