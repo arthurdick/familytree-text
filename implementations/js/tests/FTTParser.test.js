@@ -311,5 +311,40 @@ BORN: May 12, 1980
         ])
       );
     });
+    
+    it('should normalize IDs to NFC to ensure cross-compatibility between different Unicode forms', () => {
+      // "Müller" written in two different ways:
+      // 1. Composed (NFC): \u00dc (Ü)
+      // 2. Decomposed (NFD): U + \u0308 (U + diaeresis)
+      const idNFC = "M\u00dcLLER-1890"; 
+      const idNFD = "MU\u0308LLER-1890"; 
+
+      const input = `
+HEAD_FORMAT: FTT v0.1
+ID: ${idNFD}
+NAME: Hans Müller
+
+ID: CHILD-01
+PARENT: ${idNFC} | BIO
+`;
+
+      const result = parser.parse(input);
+
+      // 1. Verify the defined ID was normalized to NFC in the records map
+      expect(result.records[idNFC]).toBeDefined();
+      
+      // 2. Verify that the NFD input was not stored as a separate unique key
+      expect(Object.keys(result.records)).toContain(idNFC);
+      
+      // 3. Verify the PARENT link (provided as NFC) matches the NFD definition
+      // because both were normalized to the same NFC string during parsing.
+      expect(result.errors).toHaveLength(0);
+      
+      const childRecord = result.records['CHILD-01'];
+      const parentRef = childRecord.data.PARENT[0].parsed[0];
+      
+      // The reference inside the data should also be normalized NFC
+      expect(parentRef).toBe(idNFC);
+    });
   });
 });
