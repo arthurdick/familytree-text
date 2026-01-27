@@ -274,10 +274,26 @@ export class RelationshipCalculator {
 
         let lcas = commonAncestors.filter(candidate => {
             return !commonAncestors.some(other => {
-                if (other.id === candidate.id) return false; 
-                return this._isAncestor(candidate.id, other.id) && 
-                       (candidate.distA > other.distA) && 
-                       (candidate.distB > other.distB);
+                if (other.id === candidate.id) return false;
+                
+                // Standard check: Is 'other' a descendant of 'candidate'?
+                // And is 'other' strictly closer to both subjects?
+                const isAncestor = this._isAncestor(candidate.id, other.id);
+                const isCloser = (candidate.distA > other.distA) && (candidate.distB > other.distB);
+                
+                if (isAncestor && isCloser) {
+                    // [FIX] Lineage Protection:
+                    // Only prune the distant ancestor if the lineage path types are identical.
+                    // If one is BIO and the other is ADO, they are distinct facts—keep both.
+                    const sameLineageA = candidate.lineageA === other.lineageA;
+                    const sameLineageB = candidate.lineageB === other.lineageB;
+                    
+                    if (sameLineageA && sameLineageB) {
+                        return true; // Prune it (It's just a redundant biological ancestor)
+                    }
+                }
+                
+                return false;
             });
         });
 
@@ -671,6 +687,30 @@ export class RelationshipCalculator {
                 results = results.filter(r => r.type !== 'AFFINAL');
             }
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep)));
+        }
+        
+        // If someone is a Direct Ancestor (e.g., Father), suppress "Collateral" versions 
+        // of that same relationship type (e.g., Uncle) if they come from the same lineage type.
+        // This prevents "Adoptive Father" from also appearing as "Adoptive Uncle".
+        const directAncestors = results.filter(r => r.type === 'LINEAGE' && r.distA === 0);
+        
+        if (directAncestors.length > 0) {
+            results = results.filter(r => {
+                if (r.type !== 'LINEAGE') return true;
+                if (r.distA === 0) return true; // Keep the parent relationship
+
+                // Check if this collateral relationship (e.g. Uncle) is redundant
+                // because we already have a direct ancestor (Parent) of the same lineage type (BIO/ADO)
+                const isRedundant = directAncestors.some(parentRel => 
+                    // Check if Lineage Types match (e.g. both are Adoptive)
+                    parentRel.isAdoptive === r.isAdoptive &&
+                    parentRel.isFoster === r.isFoster &&
+                    // Ensure we don't suppress distinct Biological links if the Parent is Adoptive
+                    !parentRel.isStep // Step-parents are handled separately
+                );
+                
+                return !isRedundant;
+            });
         }
 
         return results;

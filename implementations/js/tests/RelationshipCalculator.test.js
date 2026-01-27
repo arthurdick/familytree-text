@@ -1605,4 +1605,46 @@ PARENT: BIO-DAD | BIO
             expect(desc.term).toBe('Step-Mother');
         });
     });
+    
+    describe('"Ghost" Lineage: Intra-Family Adoption', () => {
+        const data = `
+# The Ancestors
+ID: GRANDPA
+CHILD: UNCLE-DAD
+CHILD: BIO-DAD
+
+# The Brothers
+ID: UNCLE-DAD
+# He is the biological brother of Bio-Dad
+PARENT: GRANDPA | BIO
+# He adopts the child
+CHILD: CHILD
+
+ID: BIO-DAD
+PARENT: GRANDPA | BIO
+
+# The Child
+ID: CHILD
+# Bio Parent
+PARENT: BIO-DAD | BIO
+# Adoptive Parent (The Uncle)
+PARENT: UNCLE-DAD | ADO
+`;
+
+        it('should detect BOTH the Adoptive Father and Natural Uncle relationships', () => {
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+            
+            const rels = calculator.calculate('UNCLE-DAD', 'CHILD');
+
+            expect(rels).toHaveLength(2);
+
+            const adoPath = rels.find(r => r.distA === 0 && r.distB === 1 && r.isAdoptive);
+            expect(adoPath).toBeDefined();
+
+            const unclePath = rels.find(r => r.distA === 1 && r.distB === 2 && !r.isAdoptive);
+            expect(unclePath).toBeDefined();
+        });
+    });
 });
