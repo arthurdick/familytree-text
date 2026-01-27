@@ -980,26 +980,54 @@ export class RelationText {
         const prefixEx = (t) => rel.isExUnion ? `Former ${t}` : t;
         const isStep = rel.bloodRel.isStep;
         const isExStep = rel.bloodRel.isExStep;
+
         const getBaseTerm = (dA, dB, g) => {
             return this.getBloodTerm(dA, dB, g, rel.bloodRel.isHalf, rel.bloodRel.isDouble, rel.bloodRel.isAdoptive, isStep, isExStep, rel.bloodRel.isAmbiguous);
+        };
+
+        // Helper to handle Step-Prefixing consistent with other Affinal terms
+        const applyStep = (coreTerm) => {
+             if (isExStep) return `Former Step-${coreTerm}`;
+             if (isStep) return `Step-${coreTerm}`;
+             return coreTerm;
         };
 
         let term = "In-Law";
         let detail = "";
 
         if (rel.subType === 'VIA_SPOUSE') {
+            // CASE 1: Child-in-law (Spouse's Child)
             if (bloodDistB === 0) {
                 const core = this.getDescendantTerm(bloodDistA, genderA);
                 term = prefixEx(`${core}-in-law`);
             }
+            // CASE 2: Parent-in-law (Spouse's Parent)
             else if (bloodDistA === 0) {
                 const core = this.getAncestorTerm(bloodDistB, genderA);
-                term = prefixEx(`Step-${core}`); 
+                // Note: Step-Parents are typically handled by "STEP_PARENT" type, 
+                // but this covers "Step-Mother-in-law" (Spouse's Step-Mom)
+                term = prefixEx(`${applyStep(core)}-in-law`); 
             }
+            // CASE 3: Sibling-in-law (Spouse's Sibling)
             else if (bloodDistA === 1 && bloodDistB === 1) {
                  const core = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling");
-                 term = prefixEx(`${core}-in-law`);
+                 term = prefixEx(`${applyStep(core)}-in-law`);
             }
+            // CASE 4: Aunt/Uncle-in-law (Spouse's Aunt/Uncle)
+            else if (bloodDistA === 1 && bloodDistB > 1) {
+                 // Spouse (A in lineage) is Child of Ancestor. Target (B) is Grandchild+.
+                 // Spouse is Uncle/Aunt. I am Uncle/Aunt-in-law.
+                 const core = this.getNiblingTerm(bloodDistB - 1, genderA, true);
+                 term = prefixEx(`${applyStep(core)}-in-law`);
+            }
+            // CASE 5: Niece/Nephew-in-law (Spouse's Niece/Nephew)
+            else if (bloodDistB === 1 && bloodDistA > 1) {
+                 // Spouse (A) is Grandchild+. Target (B) is Child of Ancestor.
+                 // Spouse is Nibling. I am Niece/Nephew-in-law.
+                 const core = this.getNiblingTerm(bloodDistA - 1, genderA, false);
+                 term = prefixEx(`${applyStep(core)}-in-law`);
+            }
+            // FALLBACK: Cousin-in-law, etc.
             else {
                  term = prefixEx(`${getBaseTerm(bloodDistA, bloodDistB, genderA)}-in-law`);
             }
@@ -1007,25 +1035,38 @@ export class RelationText {
             detail = `${nameA} is the ${rel.isExUnion ? 'former ' : ''}spouse of ${spouseName}, who is the ${getBaseTerm(bloodDistA, bloodDistB, bloodGender)} of ${nameB}.`;
         }
         else if (rel.subType === 'VIA_BLOOD_SPOUSE') {
+            // CASE 1: Parent-in-law (Spouse of Parent)
             if (bloodDistA === 0) {
                 const core = this.getAncestorTerm(bloodDistB, genderA);
-                let finalTerm = core;
-                if (isStep) finalTerm = `Step-${core}`;
-                else if (isExStep) finalTerm = `Former Step-${core}`;
-                
-                term = prefixEx(`${finalTerm}-in-law`);
+                term = prefixEx(`${applyStep(core)}-in-law`);
             }
+            // CASE 2: Child-in-law (Spouse of Child)
             else if (bloodDistB === 0) {
                 const core = this.getDescendantTerm(bloodDistA, genderA);
-                term = prefixEx(`Step-${core}`);
+                term = prefixEx(`${applyStep(core)}-in-law`);
             }
+            // CASE 3: Sibling-in-law (Spouse of Sibling)
             else if (bloodDistA === 1 && bloodDistB === 1) {
                 const core = (genderA === 'M' ? "Brother" : genderA === 'F' ? "Sister" : "Sibling");
-                let finalTerm = core;
-                if (isStep) finalTerm = `Step-${core}`;
-                
-                term = prefixEx(`${finalTerm}-in-law`);
+                term = prefixEx(`${applyStep(core)}-in-law`);
             }
+            // CASE 4: Aunt/Uncle-in-law (Spouse of Aunt/Uncle)
+            else if (bloodDistA === 1 && bloodDistB > 1) {
+                 // I (A) am Child of Ancestor. Relative (R) is Grandchild+.
+                 // I am Uncle/Aunt. B is Spouse of Nibling.
+                 // This makes me the Uncle/Aunt-in-law of B.
+                 const core = this.getNiblingTerm(bloodDistB - 1, genderA, true);
+                 term = prefixEx(`${applyStep(core)}-in-law`);
+            }
+            // CASE 5: Niece/Nephew-in-law (Spouse of Niece/Nephew)
+            else if (bloodDistB === 1 && bloodDistA > 1) {
+                 // I (A) am Grandchild+. Relative (R) is Child of Ancestor.
+                 // I am Nibling. B is Spouse of Uncle.
+                 // This makes me the Niece/Nephew-in-law of B.
+                 const core = this.getNiblingTerm(bloodDistA - 1, genderA, false);
+                 term = prefixEx(`${applyStep(core)}-in-law`);
+            }
+            // FALLBACK
             else {
                 term = prefixEx(`${getBaseTerm(bloodDistA, bloodDistB, genderA)}-in-law`);
             }
