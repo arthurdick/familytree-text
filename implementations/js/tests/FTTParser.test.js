@@ -76,6 +76,20 @@ NOTES: Line 1.
       const raw = result.records['A'].data.NOTES[0].raw;
       expect(raw).toBe('Line 1. Line 2. Line 3.'); 
     });
+    
+    it('should demonstrate how explicit paragraph breaks are handled', () => {
+      const input = `
+ID: PARAGRAPH-TEST
+NOTES: Paragraph one.
+  
+  Paragraph two.
+`;
+      const result = parser.parse(input);
+      const notes = result.records['PARAGRAPH-TEST'].data.NOTES[0].raw;
+
+      // According to Spec 8.1, a blank line should inject a newline marker
+      expect(notes).toContain('Paragraph one.\nParagraph two.');
+    });
   });
 
   // ==========================================

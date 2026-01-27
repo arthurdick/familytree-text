@@ -126,29 +126,16 @@ class ParseSession {
 
     _processLine(line, lineNum) {
         if (line.startsWith('#')) return;
-
+        
+        // 1. Block Termination Check
         if (line.startsWith('---')) {
             this._flushBuffer();
             this.currentRecordId = null;
             return;
         }
 
-        // Indentation Check
-        if (line.startsWith('  ')) {
-            if (!this.currentKey) {
-                this._error('SYNTAX_INDENT', 'Indented content without a preceding key.', lineNum);
-                return;
-            }
-            const content = line.substring(2);
-            // Append space if buffer doesn't end with newline
-            if (this.buffer.length > 0 && this.buffer[this.buffer.length - 1] !== '\n') {
-                this.buffer.push(' ');
-            }
-            this.buffer.push(content);
-            return;
-        }
-
-        // Blank Line Check
+        // 2. Blank Line Check (Paragraph logic)
+        // MUST happen before Indentation Check to catch indented blank lines.
         if (!line.trim()) {
             if (this.currentKey) {
                 this.buffer.push('\n');
@@ -156,7 +143,27 @@ class ParseSession {
             return;
         }
 
-        // New Key Detection
+        // 3. Indentation Check (Continuation)
+        if (line.startsWith('  ')) {
+            if (!this.currentKey) {
+                this._error('SYNTAX_INDENT', 'Indented content without a preceding key.', lineNum);
+                return;
+            }
+            const content = line.substring(2);
+
+            // Folding Rule: Only append a space if there is existing content 
+            // and the last element in the buffer is NOT an explicit newline (\n).
+            if (this.buffer.length > 0) {
+                const lastEntry = this.buffer[this.buffer.length - 1];
+                if (lastEntry !== '\n') {
+                    this.buffer.push(' ');
+                }
+            }
+            this.buffer.push(content);
+            return;
+        }
+
+        // 4. New Key Detection
         const keyMatch = line.match(KEY_PATTERN);
         if (keyMatch) {
             this._flushBuffer();
@@ -275,6 +282,7 @@ class ParseSession {
             return;
         }
 
+        // Join exactly as is; trim only the outer bounds of the block.
         const fullText = this.buffer.join('').trim();
 
         if (this.currentModifierTarget) {
