@@ -1709,4 +1709,45 @@ PARENT: COUSIN-PARENT | BIO
              expect(rels[0].isDouble).toBe(false); 
         });
     });
+    
+    describe('Duplicate Step-Lineage via Spouses', () => {
+        const data = `
+# The Parents (Married, creating Step-Sibling link between ME and STEP-BRO)
+ID: DAD
+UNION: STEP-MOM | MARR
+ID: STEP-MOM
+UNION: DAD | MARR
+
+ID: ME
+PARENT: DAD | BIO
+
+ID: STEP-BRO
+PARENT: STEP-MOM | BIO
+CHILD: STEP-NEPHEW
+
+ID: STEP-NEPHEW
+PARENT: STEP-BRO | BIO
+CHILD: STEP-GREAT-NEPHEW
+
+ID: STEP-GREAT-NEPHEW
+PARENT: STEP-NEPHEW | BIO
+`;
+
+        it('should return a single deduplicated Step-Relationship for Step-Grand-Nephew', () => {
+            // Calculate relationship from STEP-GREAT-NEPHEW to ME
+            const rels = calc(data, 'STEP-GREAT-NEPHEW', 'ME');
+
+            expect(rels).toHaveLength(1);
+
+            const rel = rels[0];
+            expect(rel.type).toBe('LINEAGE');
+            expect(rel.isStep).toBe(true);
+            
+            // Verify Distances
+            // STEP-GREAT-NEPHEW is 3 generations down from Common Ancestor Pair (STEP-MOM/DAD)
+            expect(rel.distA).toBe(3); 
+            // ME is 1 generation down from Common Ancestor Pair
+            expect(rel.distB).toBe(1);
+        });
+    });
 });

@@ -729,7 +729,6 @@ export class RelationshipCalculator {
         if (isDirectStepParent) {
             // Remove redundant LINEAGE (Step)
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distB === 1));
-
             // Remove redundant AFFINAL (Step-Parent via Spouse)
             // If we already know they are a Step-Parent, we don't need the "Spouse of Parent" affinal entry,
             // which often carries the incorrect "Former" tag due to widowhood logic.
@@ -744,7 +743,6 @@ export class RelationshipCalculator {
         if (isDirectStepChild) {
             // Remove redundant LINEAGE (Step)
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distA === 1));
-
             // Remove redundant AFFINAL (Step-Child via Blood Spouse)
             results = results.filter(r => !(
                 r.type === 'AFFINAL' && 
@@ -756,6 +754,40 @@ export class RelationshipCalculator {
         const isStepSibling = results.some(r => r.type === 'STEP_SIBLING');
         if (isStepSibling) {
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distA === 1 && r.distB === 1));
+        }
+
+        // Deduplicate Step-Relationships derived from Spousal Pairs
+        // Example: Step-Grand-Nephew -> Step-Mom (Bio) vs Step-Grand-Nephew -> Dad (Step).
+        // If two Lineage results have identical distances and step-status, and their ancestors are partners, drop one.
+        const stepLineages = results.filter(r => r.type === 'LINEAGE' && (r.isStep || r.isExStep));
+        if (stepLineages.length > 1) {
+             const toRemove = new Set();
+             
+             for (let i = 0; i < stepLineages.length; i++) {
+                 for (let j = i + 1; j < stepLineages.length; j++) {
+                     const r1 = stepLineages[i];
+                     const r2 = stepLineages[j];
+
+                     // Must match in distance and type
+                     if (r1.distA === r2.distA && 
+                         r1.distB === r2.distB && 
+                         r1.isStep === r2.isStep && 
+                         r1.isExStep === r2.isExStep) {
+                         
+                         const anc1 = r1.ancestorIds[0];
+                         const anc2 = r2.ancestorIds[0];
+                         
+                         if (anc1 !== anc2 && this._arePartners(anc1, anc2)) {
+                             // Redundancy found. Remove the second one.
+                             toRemove.add(r2);
+                         }
+                     }
+                 }
+             }
+             
+             if (toRemove.size > 0) {
+                 results = results.filter(r => !toRemove.has(r));
+             }
         }
 
         const isBlood = results.some(r => r.type === 'LINEAGE' && !r.isStep && !r.isExStep);
@@ -773,7 +805,6 @@ export class RelationshipCalculator {
         // of that same relationship type (e.g., Uncle) if they come from the same lineage type.
         // This prevents "Adoptive Father" from also appearing as "Adoptive Uncle".
         const directAncestors = results.filter(r => r.type === 'LINEAGE' && r.distA === 0);
-        
         if (directAncestors.length > 0) {
             results = results.filter(r => {
                 if (r.type !== 'LINEAGE') return true;
