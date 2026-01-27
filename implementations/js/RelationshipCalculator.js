@@ -756,7 +756,10 @@ export class RelationText {
         }
 
         if (rel.type === 'STEP_SIBLING') {
-            const t = genderA === 'M' ? "Step-Brother" : genderA === 'F' ? "Step-Sister" : "Step-Sibling";
+            const prefix = rel.parentsDivorced ? "Former " : "";
+            
+            const t = genderA === 'M' ?
+                "Step-Brother" : genderA === 'F' ? "Step-Sister" : "Step-Sibling";
             
             let status = "";
             if (rel.unionReason === 'WID') status = " (Widowed)";
@@ -765,11 +768,16 @@ export class RelationText {
             
             const pAName = getDisplayName(this.records[rel.parentA]);
             const pBName = getDisplayName(this.records[rel.parentB]);
-            return { term: t, detail: `Parents linked via union${status}: ${pAName} and ${pBName}.` };
+            
+            return { 
+                term: prefix + t, 
+                detail: `Parents linked via union${status}: ${pAName} and ${pBName}.` 
+            };
         }
 
         if (rel.type === 'CO_AFFINAL') {
-             const t = genderA === 'M' ? "Brother-in-law" : genderA === 'F' ? "Sister-in-law" : "Sibling-in-law";
+             const t = genderA === 'M' ?
+                 "Brother-in-law" : genderA === 'F' ? "Sister-in-law" : "Sibling-in-law";
              const spAName = getDisplayName(this.records[rel.spouseA]);
              const spBName = getDisplayName(this.records[rel.spouseB]);
              return { term: `Co-${t}`, detail: `${nameA}'s spouse (${spAName}) is a sibling of ${nameB}'s spouse (${spBName}).` };
