@@ -1561,4 +1561,48 @@ PARENT: AUNT | BIO
             expect(rels[0].isHalf).toBe(false); 
         });
     });
+    
+    describe('Widowed Step-Parent Logic', () => {
+        const data = `
+ID: BIO-DAD
+SEX: M
+UNION: STEP-MOM | MARR | 1990 | 2000 | WID
+CHILD: ME
+
+ID: STEP-MOM
+SEX: F
+UNION: BIO-DAD | MARR | 1990 | 2000 | WID
+
+ID: ME
+SEX: M
+PARENT: BIO-DAD | BIO
+# No biological link to STEP-MOM
+`;
+
+        it('should identify Widowed Step-Parent as current Step-Parent', () => {
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            if (result.errors.length > 0) throw new Error(result.errors[0].message);
+
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate('STEP-MOM', 'ME');
+
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('STEP_PARENT');
+            expect(rels[0].parentId).toBe('BIO-DAD');
+
+            expect(rels[0].isEx).toBe(false); 
+        });
+
+        it('should generate correct "Step-Mother" text instead of "Former"', () => {
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+            const textGen = new RelationText(result.records);
+            
+            const rels = calculator.calculate('STEP-MOM', 'ME');
+            const desc = textGen.describe(rels[0], 'F', 'ME', 'STEP-MOM');
+
+            // Should be "Step-Mother", NOT "Former Step-Mother"
+            expect(desc.term).toBe('Step-Mother');
+        });
+    });
 });

@@ -79,7 +79,15 @@ export class RelationshipCalculator {
                     
                     if (!existingParents.includes(spouseId)) {
                         existingParents.push(spouseId);
-                        const type = status.active ? 'STE' : 'STE_EX';
+
+                        let type = 'STE_EX'; 
+
+                        if (status.active) {
+                            type = 'STE';
+                        } else if (status.reason === 'WID') {
+                            type = 'STE';
+                        }
+
                         this.parentTypes.get(childId).set(spouseId, type);
                     }
                 });
@@ -623,12 +631,30 @@ export class RelationshipCalculator {
 
         const isDirectStepParent = results.some(r => r.type === 'STEP_PARENT');
         if (isDirectStepParent) {
+            // Remove redundant LINEAGE (Step)
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distB === 1));
+
+            // Remove redundant AFFINAL (Step-Parent via Spouse)
+            // If we already know they are a Step-Parent, we don't need the "Spouse of Parent" affinal entry,
+            // which often carries the incorrect "Former" tag due to widowhood logic.
+            results = results.filter(r => !(
+                r.type === 'AFFINAL' && 
+                r.subType === 'VIA_SPOUSE' && 
+                r.bloodRel.distA === 0
+            ));
         }
 
         const isDirectStepChild = results.some(r => r.type === 'STEP_CHILD');
         if (isDirectStepChild) {
+            // Remove redundant LINEAGE (Step)
             results = results.filter(r => !(r.type === 'LINEAGE' && (r.isStep || r.isExStep) && r.distA === 1));
+
+            // Remove redundant AFFINAL (Step-Child via Blood Spouse)
+            results = results.filter(r => !(
+                r.type === 'AFFINAL' && 
+                r.subType === 'VIA_BLOOD_SPOUSE' && 
+                r.bloodRel.distB === 0
+            ));
         }
 
         const isStepSibling = results.some(r => r.type === 'STEP_SIBLING');
