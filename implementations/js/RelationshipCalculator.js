@@ -565,18 +565,28 @@ export class RelationshipCalculator {
     }
     
     _findGeneralizedAffinalRelationships(idA, idB, results) {
-        for (const [spouse1Id, spouses] of this.spouses) {
-            if (spouse1Id === idA) continue;
-            const relsA = this._findLineageRelationships(idA, spouse1Id);
-            if (relsA.length === 0) continue;
+        const relativesA = this._getConnectedRelatives(idA);
 
-            for (const [spouse2Id, status] of spouses) {
-                if (!status.active) continue;
+        for (const spouse1Id of relativesA) {
+            if (spouse1Id === idA) continue; 
+
+            // Check if this relative has a spouse (Fast lookup)
+            const spousesMap = this.spouses.get(spouse1Id);
+            if (!spousesMap) continue;
+
+            // Confirm the specific relationship type (e.g., Cousin, Sibling)
+            const relsA = this._findLineageRelationships(idA, spouse1Id);
+            if (relsA.length === 0) continue; 
+
+            for (const [spouse2Id, status] of spousesMap) {
+                if (!status.active) continue; // Generally, generalized affinal links traverse current unions
                 if (spouse2Id === idB) continue;
 
+                // Check if the relative's spouse is related to idB
                 const relsB = this._findLineageRelationships(spouse2Id, idB);
+                
                 if (relsB.length > 0) {
-                    relsA.forEach(relA => {
+                     relsA.forEach(relA => {
                         relsB.forEach(relB => {
                             results.push({
                                 type: 'EXTENDED_AFFINAL',
@@ -591,6 +601,44 @@ export class RelationshipCalculator {
                 }
             }
         }
+    }
+
+    /**
+     * Helper: BFS to find all nodes reachable via Parent/Child links (Ancestors, Descendants, Cousins, etc.)
+     * Used to restrict search space for affinal lookups.
+     */
+    _getConnectedRelatives(startId) {
+        const visited = new Set();
+        const queue = [startId];
+        visited.add(startId);
+        
+        const relatives = [];
+
+        while(queue.length > 0) {
+            const curr = queue.shift();
+            relatives.push(curr);
+
+            // Traverse Up (Parents)
+            const parents = this.allParents.get(curr) || [];
+            for (const p of parents) {
+                if (!visited.has(p)) {
+                    visited.add(p);
+                    queue.push(p);
+                }
+            }
+
+            // Traverse Down (Children)
+            const children = this.childrenMap.get(curr);
+            if (children) {
+                for (const c of children) {
+                    if (!visited.has(c)) {
+                        visited.add(c);
+                        queue.push(c);
+                    }
+                }
+            }
+        }
+        return relatives;
     }
 
     _isAncestor(ancestorId, descendantId) {
