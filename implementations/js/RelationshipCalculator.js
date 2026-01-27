@@ -447,23 +447,34 @@ export class RelationshipCalculator {
 
     _getAllAncestors(startId) {
         const visited = new Map();
-        const queue = [{ id: startId, dist: 0, isStep: false, isExStep: false, lineageType: 'BIO', viaPartner: null, viaNode: null }];
         
+        const queue = [{ 
+            id: startId, 
+            dist: 0, 
+            isStep: false, 
+            isExStep: false, 
+            lineageType: 'BIO', 
+            viaPartner: null, 
+            viaNode: null,
+            initialBranch: null 
+        }];
+
         while (queue.length > 0) {
-            const { id, dist, isStep, isExStep, lineageType } = queue.shift();
+            const { id, dist, isStep, isExStep, lineageType, initialBranch } = queue.shift();
+            
             const parents = this.allParents.get(id) || [];
             const types = this.parentTypes.get(id);
 
+            // Inline helper to find partners
             const findPartner = (childId, parentId) => {
                 const allP = this.allParents.get(childId) || [];
-                const types = this.parentTypes.get(childId);
-                const currentType = types.get(parentId);
+                const tMap = this.parentTypes.get(childId);
+                const currentType = tMap.get(parentId);
 
                 if (currentType === 'BIO') {
-                    const bioPartner = allP.find(p => p !== parentId && types.get(p) === 'BIO');
+                    const bioPartner = allP.find(p => p !== parentId && tMap.get(p) === 'BIO');
                     if (bioPartner) return bioPartner;
                 }
-
                 return allP.find(p => p !== parentId) || null;
             };
 
@@ -479,6 +490,11 @@ export class RelationshipCalculator {
 
                 const partnerId = findPartner(id, pId);
 
+                // Determine Branch Root
+                // If dist is 0 (Self), the parent we are moving to IS the start of the branch.
+                // Otherwise, we propagate the existing branch identifier.
+                const nextInitialBranch = dist === 0 ? pId : initialBranch;
+
                 const newEntry = { 
                     dist: dist + 1, 
                     isStep: nextIsStep, 
@@ -486,20 +502,23 @@ export class RelationshipCalculator {
                     type: pType, 
                     lineageType: nextLineageType,
                     viaPartner: partnerId,
-                    viaNode: id // Track the child node we came from to distinguish parallel branches
+                    viaNode: id, // The child node we came from
+                    initialBranch: nextInitialBranch // The root parent of this path
                 };
 
                 if (!visited.has(pId)) visited.set(pId, []);
-                
                 const existing = visited.get(pId);
                 
-                // We only discard the path if it is identical in distance, type, AND comes from the exact same child node.
-                // This allows "Double" paths (reaching GGP via Mom AND via Dad) to persist.
+                // Enhanced Redundancy Check
+                // We now verify 'initialBranch' uniqueness. This ensures that if we reach
+                // the same Ancestor via Mom AND via Dad (Endogamy), we keep BOTH paths
+                // even if they share the same distance and lineage type.
                 const isRedundant = existing.some(e => 
                    e.dist === newEntry.dist && 
                    e.lineageType === newEntry.lineageType && 
                    e.isStep === newEntry.isStep &&
-                   e.viaNode === newEntry.viaNode // Strict path check
+                   e.viaNode === newEntry.viaNode &&
+                   e.initialBranch === newEntry.initialBranch 
                 );
 
                 if (!isRedundant) {
