@@ -550,15 +550,15 @@ export class RelationshipCalculator {
                 if (spouseIdA === spouseIdB) return;
 
                 const rels = this._findLineageRelationships(spouseIdA, spouseIdB);
+                
                 rels.forEach(rel => {
-                    if (rel.distA === 1 && rel.distB === 1 && !rel.isStep) {
-                        results.push({
-                            type: 'CO_AFFINAL',
-                            subType: 'SPOUSES_ARE_SIBLINGS',
-                            spouseA: spouseIdA,
-                            spouseB: spouseIdB
-                        });
-                    }
+                    results.push({
+                        type: 'CO_AFFINAL',
+                        subType: 'SPOUSES_ARE_RELATIVES', // Updated generic subtype
+                        spouseA: spouseIdA,
+                        spouseB: spouseIdB,
+                        bloodRel: rel // Capture specific lineage for text generation
+                    });
                 });
             });
         });
@@ -669,6 +669,9 @@ export class RelationshipCalculator {
             }
             if (res.type === 'CO_AFFINAL') {
                 key += `-${res.spouseA}-${res.spouseB}`;
+                if (res.bloodRel) {
+                    key += `-${res.bloodRel.distA}-${res.bloodRel.distB}-${res.bloodRel.isHalf}-${res.bloodRel.isDouble}`;
+                }
             }
             if (res.type === 'EXTENDED_AFFINAL') {
                 if (res.subType === 'GENERALIZED') {
@@ -824,11 +827,27 @@ export class RelationText {
         }
 
         if (rel.type === 'CO_AFFINAL') {
-             const t = genderA === 'M' ?
-                 "Brother-in-law" : genderA === 'F' ? "Sister-in-law" : "Sibling-in-law";
-             const spAName = getDisplayName(this.records[rel.spouseA]);
-             const spBName = getDisplayName(this.records[rel.spouseB]);
-             return { term: `Co-${t}`, detail: `${nameA}'s spouse (${spAName}) is a sibling of ${nameB}'s spouse (${spBName}).` };
+            const spAName = getDisplayName(this.records[rel.spouseA]);
+            const spBName = getDisplayName(this.records[rel.spouseB]);
+            
+            // Dynamic term generation
+            // We use genderA to frame the "-in-law" term (e.g. "Co-Brother" vs "Co-Sister")
+            const bloodTerm = this.getBloodTerm(
+                rel.bloodRel.distA,
+                rel.bloodRel.distB,
+                genderA, 
+                rel.bloodRel.isHalf, 
+                rel.bloodRel.isDouble, 
+                rel.bloodRel.isAdoptive, 
+                rel.bloodRel.isStep, 
+                rel.bloodRel.isExStep, 
+                rel.bloodRel.isAmbiguous
+            );
+             
+            return { 
+                term: `Co-${bloodTerm}-in-law`, 
+                detail: `${nameA}'s spouse (${spAName}) is the ${bloodTerm} of ${nameB}'s spouse (${spBName}).` 
+            };
         }
         
         if (rel.type === 'EXTENDED_AFFINAL') {
