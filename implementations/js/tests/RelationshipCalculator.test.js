@@ -1650,4 +1650,67 @@ PARENT: UNCLE-DAD | ADO
             expect(unclePath).toBeDefined();
         });
     });
+    
+    describe('Pedigree Collapse (Double Relationship via Endogamy)', () => {
+        const data = `
+# Common Ancestor
+ID: GGP
+
+# Branch 1 (Paternal Grandparent)
+ID: GP1
+PARENT: GGP | BIO
+
+# Branch 2 (Maternal Grandparent)
+ID: GP2
+PARENT: GGP | BIO
+
+# Branch 3 (Cousin's Grandparent)
+ID: GP3
+PARENT: GGP | BIO
+
+# DAD and MOM are First Cousins (Share GGP)
+ID: DAD
+PARENT: GP1 | BIO
+UNION: MOM | MARR
+
+ID: MOM
+PARENT: GP2 | BIO
+UNION: DAD | MARR
+
+# ME is the Child of Cousins (Pedigree Collapse)
+# ME has two paths to GGP:
+# 1. ME -> DAD -> GP1 -> GGP
+# 2. ME -> MOM -> GP2 -> GGP
+ID: ME
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+
+# Target Cousin (Standard descent from GGP)
+ID: COUSIN-PARENT
+PARENT: GP3 | BIO
+
+ID: TARGET-COUSIN
+PARENT: COUSIN-PARENT | BIO
+`;
+
+        it('should identify Double Second Cousin relationship due to pedigree collapse', () => {
+             // Setup
+             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+             const calculator = new RelationshipCalculator(result.records);
+             
+             // Execution
+             const rels = calculator.calculate('ME', 'TARGET-COUSIN');
+             
+             // Baseline Assertions (Standard 2nd Cousin properties)
+             expect(rels).toHaveLength(1);
+             expect(rels[0].type).toBe('LINEAGE');
+             expect(rels[0].distA).toBe(3); // Great-Grandchild
+             expect(rels[0].distB).toBe(3); // Great-Grandchild
+             
+             // CRITICAL ASSERTION (This currently FAILS)
+             // Because ME descends from GGP twice, this is a Double relationship.
+             // The current deduplication logic discards the second path.
+             expect(rels[0].isDouble).toBe(true); 
+        });
+    });
 });

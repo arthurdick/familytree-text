@@ -431,7 +431,10 @@ export class RelationshipCalculator {
     }
 
     _arePartners(idA, idB) {
+        if (idA === idB) return false;
+
         if (this._getUnionStatus(idA, idB)) return true;
+        
         const childrenA = this.childrenMap.get(idA);
         const childrenB = this.childrenMap.get(idB);
         if (childrenA && childrenB) {
@@ -444,11 +447,10 @@ export class RelationshipCalculator {
 
     _getAllAncestors(startId) {
         const visited = new Map();
-        const queue = [{ id: startId, dist: 0, isStep: false, isExStep: false, lineageType: 'BIO', viaPartner: null }];
+        const queue = [{ id: startId, dist: 0, isStep: false, isExStep: false, lineageType: 'BIO', viaPartner: null, viaNode: null }];
         
         while (queue.length > 0) {
             const { id, dist, isStep, isExStep, lineageType } = queue.shift();
-            
             const parents = this.allParents.get(id) || [];
             const types = this.parentTypes.get(id);
 
@@ -483,19 +485,23 @@ export class RelationshipCalculator {
                     isExStep: nextIsExStep, 
                     type: pType, 
                     lineageType: nextLineageType,
-                    viaPartner: partnerId 
+                    viaPartner: partnerId,
+                    viaNode: id // Track the child node we came from to distinguish parallel branches
                 };
 
                 if (!visited.has(pId)) visited.set(pId, []);
                 
                 const existing = visited.get(pId);
-                // We must distinguish paths by lineageType now to support "Bio AND Adoptive" scenarios
+                
+                // We only discard the path if it is identical in distance, type, AND comes from the exact same child node.
+                // This allows "Double" paths (reaching GGP via Mom AND via Dad) to persist.
                 const isRedundant = existing.some(e => 
                    e.dist === newEntry.dist && 
-                   e.lineageType === newEntry.lineageType && // Strict Lineage Check
-                   e.isStep === newEntry.isStep
+                   e.lineageType === newEntry.lineageType && 
+                   e.isStep === newEntry.isStep &&
+                   e.viaNode === newEntry.viaNode // Strict path check
                 );
-                
+
                 if (!isRedundant) {
                     existing.push(newEntry);
                     queue.push({ id: pId, ...newEntry });
