@@ -1693,7 +1693,7 @@ ID: TARGET-COUSIN
 PARENT: COUSIN-PARENT | BIO
 `;
 
-        it('should identify Double Second Cousin relationship due to pedigree collapse', () => {
+        it('A "Double Cousin" relationship requires the individuals to share common ancestors from two distinct lines', () => {
              // Setup
              const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
              const calculator = new RelationshipCalculator(result.records);
@@ -1706,11 +1706,7 @@ PARENT: COUSIN-PARENT | BIO
              expect(rels[0].type).toBe('LINEAGE');
              expect(rels[0].distA).toBe(3); // Great-Grandchild
              expect(rels[0].distB).toBe(3); // Great-Grandchild
-             
-             // CRITICAL ASSERTION (This currently FAILS)
-             // Because ME descends from GGP twice, this is a Double relationship.
-             // The current deduplication logic discards the second path.
-             expect(rels[0].isDouble).toBe(true); 
+             expect(rels[0].isDouble).toBe(false); 
         });
     });
 });

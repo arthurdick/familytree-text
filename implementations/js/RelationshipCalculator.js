@@ -389,12 +389,16 @@ export class RelationshipCalculator {
                 
                 // Double Logic
                 if (lcaCount >= 2 && distA > 1 && distB > 1) {
-                    if (lcaCount === 2) {
-                        const p1 = group[0].id;
-                        const p2 = group[1].id;
-                        if (!this._arePartners(p1, p2)) isDouble = true;
-                    } else {
-                        isDouble = true;
+                    const uniqueIDs = new Set(group.map(g => g.id));
+                    if (uniqueIDs.size >= 2) { 
+                        if (lcaCount === 2) {
+                             const p1 = group[0].id;
+                             const p2 = group[1].id;
+                             // Only flag isDouble if they are distinct people AND not partners
+                             if (p1 !== p2 && !this._arePartners(p1, p2)) isDouble = true;
+                        } else {
+                             isDouble = true;
+                        }
                     }
                 }
             }
