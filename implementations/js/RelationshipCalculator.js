@@ -263,7 +263,9 @@ export class RelationshipCalculator {
                             lineageA: metaA.lineageType,
                             lineageB: metaB.lineageType,
                             viaPartnerA: metaA.viaPartner,
-                            viaPartnerB: metaB.viaPartner
+                            viaPartnerB: metaB.viaPartner,
+                            initialBranchA: metaA.initialBranch,
+                            initialBranchB: metaB.initialBranch
                         });
                     });
                 });
@@ -282,14 +284,21 @@ export class RelationshipCalculator {
                 const isCloser = (candidate.distA > other.distA) && (candidate.distB > other.distB);
                 
                 if (isAncestor && isCloser) {
-                    // [FIX] Lineage Protection:
-                    // Only prune the distant ancestor if the lineage path types are identical.
-                    // If one is BIO and the other is ADO, they are distinct facts—keep both.
+                    // Lineage Protection:
+                    // If the distant ancestor (candidate) comes from the exact same immediate 
+                    // parent branch (initialBranchB) as the closer ancestor (other), prune it.
+                    // This handles cases where the lineage type changes mid-stream (e.g. Bio Dad -> Adoptive Grandpa).
+                    // We prioritize the closer relationship (Father) over the distant one (Uncle/Grandpa).
+                    
+                    if (candidate.initialBranchB === other.initialBranchB) return true;
+
+                    // Fallback for cases where initialBranch might be identical/null (e.g. siblings)
+                    // but lineage types differ significantly (Double/Ghost relationships).
                     const sameLineageA = candidate.lineageA === other.lineageA;
                     const sameLineageB = candidate.lineageB === other.lineageB;
                     
                     if (sameLineageA && sameLineageB) {
-                        return true; // Prune it (It's just a redundant biological ancestor)
+                        return true;
                     }
                 }
                 

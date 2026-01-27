@@ -1750,4 +1750,45 @@ PARENT: STEP-NEPHEW | BIO
             expect(rel.distB).toBe(1);
         });
     });
+    
+    describe('Mixed Lineage Pruning (Adoptive Grandparents)', () => {
+        const data = `
+ID: ME
+SEX: M
+PARENT: DAD | BIO
+
+ID: DAD
+SEX: M
+# Dad is connected to me biologically
+# But Dad himself is adopted by his parents
+PARENT: GRANDPA-ADOPTIVE | ADO
+PARENT: GRANDMA-ADOPTIVE | ADO
+
+ID: GRANDPA-ADOPTIVE
+SEX: M
+UNION: GRANDMA-ADOPTIVE | MARR
+
+ID: GRANDMA-ADOPTIVE
+SEX: F
+`;
+
+        it('should identify DAD only as Father, pruning the redundant Adoptive Uncle relationship', () => {
+            // Without the fix, the calculator sees two paths:
+            // 1. Direct: DAD -> ME (Bio)
+            // 2. Common Ancestor (Grandpa): DAD is Child (Ado) & ME is Grandchild (Ado pathway).
+            //    This creates a false "Adoptive Uncle" relationship if not pruned.
+            const rels = calc(data, 'DAD', 'ME');
+
+            expect(rels).toHaveLength(1);
+            
+            const rel = rels[0];
+            expect(rel.type).toBe('LINEAGE');
+            expect(rel.distA).toBe(0); // DAD is Ancestor (0 steps up)
+            expect(rel.distB).toBe(1); // ME is Descendant (1 step down)
+            
+            // Ensure the primary relationship is purely recognized as biological father
+            // The fact that Dad *has* adoptive parents shouldn't make him an "Adoptive Father" to ME.
+            expect(rel.isAdoptive).toBe(false);
+        });
+    });
 });
