@@ -346,6 +346,65 @@ PARENT: ${idNFC} | BIO
       // The reference inside the data should also be normalized NFC
       expect(parentRef).toBe(idNFC);
     });
+    
+    it('should respect CHILD tag order and append sorted implicit children', () => {
+      const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: PARENT
+NAME: The Parent
+# Explicit Order: Youngest first (User preference)
+CHILD: CHILD-EX-2
+CHILD: CHILD-EX-1
+
+# Explicit Child 1 (Older)
+ID: CHILD-EX-1
+NAME: Explicit 1
+BORN: 1980
+PARENT: PARENT
+
+# Explicit Child 2 (Younger)
+ID: CHILD-EX-2
+NAME: Explicit 2
+BORN: 1985
+PARENT: PARENT
+
+# Implicit Child (Forgotten in manifest, born LAST)
+ID: CHILD-IM-LATE
+NAME: Implicit Late
+BORN: 2000
+PARENT: PARENT
+
+# Implicit Child (Forgotten in manifest, born EARLIEST)
+ID: CHILD-IM-EARLY
+NAME: Implicit Early
+BORN: 1970
+PARENT: PARENT
+`;
+
+        const parser = new FTTParser();
+        const result = parser.parse(input);
+
+        const parent = result.records['PARENT'];
+        expect(parent).toBeDefined();
+        expect(parent.data.CHILD).toBeDefined();
+
+        // Map the CHILD objects to their IDs for easy checking
+        const childIds = parent.data.CHILD.map(c => c.parsed[0]);
+
+        // EXPECTED LOGIC:
+        // 1. Explicit tags come first, strictly in the order listed in the file (EX-2, then EX-1)
+        // 2. Implicit children come after, sorted by Birth Date (EARLY 1970, then LATE 2000)
+        
+        const expectedOrder = [
+            'CHILD-EX-2',   // Explicit #1
+            'CHILD-EX-1',   // Explicit #2
+            'CHILD-IM-EARLY', // Implicit (1970)
+            'CHILD-IM-LATE'   // Implicit (2000)
+        ];
+
+        expect(childIds).toEqual(expectedOrder);
+    });
   });
   
   describe('Advanced Graph Integrity', () => {
