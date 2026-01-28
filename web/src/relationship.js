@@ -120,8 +120,23 @@ function renderResult(relationships, records, idA, idB) {
         if (details.length > 0) {
             const divDetail = document.createElement('div');
             divDetail.className = 'path-detail';
+
             if (details.length > 1) {
-                divDetail.innerHTML = '<ul>' + details.map(d => `<li>${d.replace(/\n/g, '<br>')}</li>`).join('') + '</ul>';
+                const ul = document.createElement('ul');
+                details.forEach(detailText => {
+                    const li = document.createElement('li');
+                    
+                    const lines = detailText.split('\n');
+                    lines.forEach((line, index) => {
+                        li.appendChild(document.createTextNode(line));
+                        if (index < lines.length - 1) {
+                            li.appendChild(document.createElement('br'));
+                        }
+                    });
+                    
+                    ul.appendChild(li);
+                });
+                divDetail.appendChild(ul);
             } else {
                 divDetail.textContent = details[0];
             }
