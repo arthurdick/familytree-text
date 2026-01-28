@@ -199,6 +199,16 @@ export default class GedcomImporter {
         // We are implicitly "using" the HUSB/WIFE pointers in the FAM record here
         this._markTagHandled(fam, 'HUSB');
         this._markTagHandled(fam, 'WIFE');
+        
+        // Also claim "my" own CHIL slot in this family to prevent false "Unhandled" warnings.
+        // This covers cases where parents are missing/unlinked, but the child linkage is valid.
+        const myChilNode = fam.children.find(c => 
+            c.tag === 'CHIL' && c.value.replace(/@/g, '') === indi.id
+        );
+        if (myChilNode) {
+            myChilNode.handled = true;
+        }
+        
         // Check structural parent links
         const husbId = this._peekTag(fam, 'HUSB')?.replace(/@/g, '');
         const wifeId = this._peekTag(fam, 'WIFE')?.replace(/@/g, '');
@@ -216,6 +226,16 @@ export default class GedcomImporter {
       if (fam) {
         this._markTagHandled(fam, 'HUSB');
         this._markTagHandled(fam, 'WIFE');
+        
+        // Handle Children to preserve order and silence audit warnings
+        // 1. Mark CHIL tags in the family as handled (stops false positive audit logs)
+        // 2. Generate CHILD: lines in FTT to preserve the specific birth order from GEDCOM
+        const chilNodes = fam.children.filter(c => c.tag === 'CHIL');
+        chilNodes.forEach(childNode => {
+            childNode.handled = true;
+            const childId = childNode.value.replace(/@/g, '');
+            out.push(`CHILD: ${childId}`);
+        });
         
         const husbId = this._peekTag(fam, 'HUSB')?.replace(/@/g, '');
         const wifeId = this._peekTag(fam, 'WIFE')?.replace(/@/g, '');
@@ -371,6 +391,10 @@ export default class GedcomImporter {
     let d = gedDate.trim().toUpperCase();
     if (d.startsWith('ABT')) return this._parseStandardDate(d.replace('ABT', '').trim()) + '~';
     if (d.startsWith('EST') || d.startsWith('CAL')) return this._parseStandardDate(d.replace(/EST|CAL/, '').trim()) + '~';
+    
+    if (d.startsWith('BEF')) return `[..${this._parseStandardDate(d.replace('BEF', '').trim())}]`;
+    if (d.startsWith('AFT')) return `[${this._parseStandardDate(d.replace('AFT', '').trim())}..]`;
+    
     if (d.startsWith('BET')) {
        const parts = d.replace('BET', '').split('AND');
        if (parts.length === 2) {

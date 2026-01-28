@@ -70,7 +70,11 @@ export default class GedcomExporter {
                 }
 
                 if (evt.date) output.push(`2 DATE ${evt.date}`);
-                if (evt.reason === 'DIV') output.push(`1 DIV`);
+                if (evt.reason === 'DIV') {
+                    output.push(`1 DIV`);
+                    // If an end date exists, attach it to the Divorce event
+                    if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
+                }
             });
         }
 
@@ -188,12 +192,13 @@ export default class GedcomExporter {
                 const partnerId = u.parsed[0];
                 const type = u.parsed[1] || 'MARR';
                 const date = this._gedDate(u.parsed[2]);
+                const endDate = this._gedDate(u.parsed[3]);
                 const reason = u.parsed[4];
 
                 const fam = this._getFamily(rec.id, partnerId, allRecords);
                 
                 if (!fam.hasMarr) {
-                    fam.events.push({ tag: 'MARR', date, reason, type });
+                    fam.events.push({ tag: 'MARR', date, endDate, reason, type });
                     fam.hasMarr = true;
                 }
                 out.push(`1 FAMS ${fam.id}`);
@@ -303,18 +308,37 @@ export default class GedcomExporter {
 
     _gedDate(fttDate) {
         if (!fttDate) return null;
+        const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        
         // ISO to GEDCOM conversion
         const isoMatch = fttDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (isoMatch) {
-            const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             return `${parseInt(isoMatch[3])} ${months[parseInt(isoMatch[2])-1]} ${isoMatch[1]}`;
         }
+        
+        const monthMatch = fttDate.match(/^(\d{4})-(\d{2})$/);
+        if (monthMatch) {
+             return `${months[parseInt(monthMatch[2])-1]} ${monthMatch[1]}`;
+        }
+        
         if (/^\d{4}$/.test(fttDate)) return fttDate;
-        if (fttDate.endsWith('~')) return `ABT ${fttDate.replace('~', '')}`;
+        
+        // Handle '?' suffix (Uncertain) same as '~' (Approx)
+        if (fttDate.endsWith('~') || fttDate.endsWith('?')) {
+            return `ABT ${fttDate.replace(/[~?]/g, '')}`;
+        }
         
         // FTT [A..B] is a "Window". GEDCOM BET A AND B implies roughly the same.
         const rangeMatch = fttDate.match(/^\[(.*?)\.\.(.*?)\]$/);
-        if (rangeMatch) return `BET ${rangeMatch[1]} AND ${rangeMatch[2]}`;
+        if (rangeMatch) {
+            const start = rangeMatch[1].trim();
+            const end = rangeMatch[2].trim();
+            
+            if (!start && end) return `BEF ${end}`;
+            if (start && !end) return `AFT ${start}`;
+            
+            return `BET ${start} AND ${end}`;
+        }
 
         return fttDate;
     }
