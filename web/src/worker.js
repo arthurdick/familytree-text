@@ -65,7 +65,6 @@ function calculateGenerations(records) {
     });
     const clusterMap = new Map();
     Object.keys(records).forEach(id => clusterMap.set(id, find(id)));
-    
     // Add implicit parents to cluster logic to avoid crashes
     // (Ideally implicit parents are handled, but for rank calc we focus on records.
     //  Implicit parents will default to rank 0 later if not found here.)
@@ -120,14 +119,12 @@ function calculateGenerations(records) {
 function calculateNodeVisualOrder(records, ranks, allNodeIds) {
     const visualOrder = new Map(); 
     const idsByRank = new Map();
-
     // 1. Group IDs by Rank (Including implicit ones which default to 0)
     allNodeIds.forEach(id => {
         const r = ranks[id] || 0;
         if (!idsByRank.has(r)) idsByRank.set(r, []);
         idsByRank.get(r).push(id);
     });
-
     const maxRank = Math.max(...Array.from(idsByRank.keys()), 0);
 
     for (let r = 0; r <= maxRank; r++) {
@@ -136,7 +133,7 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
         ids.forEach((id, index) => {
             const rec = records[id];
             
-            // Base Score
+            // Base Score (preserves stability for nodes with no other constraints)
             let score = index * 0.0001;
 
             // Only apply parent logic if record exists
@@ -156,16 +153,40 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
                     score += (parentScoreSum / parentCount);
                 }
 
-                const primaryParentRef = rec.data.PARENT[0];
-                const pId = primaryParentRef.parsed[0];
-                // Check parent in records or implicit map?
-                // For simplicity, we only optimize sorting if parent is in records
-                const parentRec = records[pId];
-                if (parentRec && parentRec.data.CHILD) {
-                    const myIndex = parentRec.data.CHILD.findIndex(c => c.parsed[0] === id);
-                    if (myIndex !== -1) {
-                        score += (myIndex + 1);
+                // Scan ALL parents for the best explicit index
+                let bestIndex = Infinity; 
+                let foundExplicit = false;
+
+                rec.data.PARENT.forEach(p => {
+                    const pId = p.parsed[0];
+                    const parentRec = records[pId];
+                    if (parentRec && parentRec.data.CHILD) {
+                        // Find the entry for this child in this parent's list
+                        const childEntry = parentRec.data.CHILD.find(c => c.parsed[0] === id);
+                        if (childEntry) {
+                            const idx = parentRec.data.CHILD.indexOf(childEntry);
+                            // Check if this entry is from an Explicit CHILD tag or Implicitly appended
+                            const isExplicit = !childEntry.isImplicit;
+                            
+                            if (isExplicit) {
+                                if (!foundExplicit) {
+                                    // First explicit found: prioritized immediately
+                                    bestIndex = idx;
+                                    foundExplicit = true;
+                                } else {
+                                    // If we have multiple explicit parents, prefer the lowest index (earlier in list)
+                                    bestIndex = Math.min(bestIndex, idx);
+                                }
+                            } else if (!foundExplicit) {
+                                // If we haven't found any explicit entries yet, track the implicit index
+                                bestIndex = Math.min(bestIndex, idx);
+                            }
+                        }
                     }
+                });
+
+                if (bestIndex !== Infinity) {
+                    score += (bestIndex + 1);
                 }
             } else {
                 score += (index * 100);
@@ -232,7 +253,6 @@ function convertToCytoscape(parsedData, ranks) {
 
     // [Step 2] Calculate Order (using expanded allNodeIds)
     const visualScores = calculateNodeVisualOrder(records, ranks, allNodeIds);
-
     const sortedNodeIds = Array.from(allNodeIds).sort((a, b) => {
         const scoreA = visualScores.get(a) || 0;
         const scoreB = visualScores.get(b) || 0;
@@ -242,10 +262,13 @@ function convertToCytoscape(parsedData, ranks) {
     function addNode(id, label, subLabel, type) {
         if (createdNodeIds.has(id)) return;
         const rank = ranks[id] !== undefined ? ranks[id] : 0;
+        
         elements.push({
             data: {
                 id, label, subLabel, type,
-                elk: { 'org.eclipse.elk.layered.layerIndex': rank }
+                elk: { 
+                    'org.eclipse.elk.layered.layerIndex': rank
+                }
             }
         });
         createdNodeIds.add(id);
@@ -266,7 +289,6 @@ function convertToCytoscape(parsedData, ranks) {
             continue;
         }
         if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
-        
         let label = id;
         let subLabel = "";
         if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
@@ -290,12 +312,15 @@ function convertToCytoscape(parsedData, ranks) {
 
         const hubId = isPair ? `union_${unionCounter++}` : `solo_${unionCounter++}`;
         const type = isPair ? (records[p1]?.data.UNION ? 'UNION_NODE' : 'IMPLICIT_NODE') : 'SOLO_NODE';
+
         if (isPair) pairToHubId[key] = hubId;
         else soloToHubId[key] = hubId;
 
         const p1Rank = ranks[p1] || 0;
         const hubRank = p1Rank + 1;
-
+        
+        // Hubs should generally sit "between" the parents visual priority if possible,
+        // but simple rank placement is usually enough.
         elements.push({
             data: { id: hubId, type: type, elk: { 'org.eclipse.elk.layered.layerIndex': hubRank } }
         });
@@ -324,12 +349,10 @@ function convertToCytoscape(parsedData, ranks) {
         const children = parentToChildren.get(parentId);
         if (!children || children.length === 0) continue;
 
-        const parentRec = records[parentId] || { data: {} }; // Mock for implicit
+        const parentRec = records[parentId] || { data: {} };
+        // Mock for implicit
 
-        // Creating a copy to reverse without mutating the map for other references
-        const orderedChildren = [...children].reverse();
-
-        orderedChildren.forEach(childId => {
+        children.forEach(childId => {
             const childRec = records[childId];
             if (!childRec || !childRec.data.PARENT) return;
 

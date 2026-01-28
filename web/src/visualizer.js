@@ -269,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': 50,
                         'elk.layered.spacing.nodeNodeBetweenLayers': 80,
                         'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.edgeRouting': 'ORTHOGONAL',
+                        'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
                     }
                 }).run();
             } catch (err) {
