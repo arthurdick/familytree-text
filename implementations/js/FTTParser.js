@@ -1,5 +1,5 @@
 /**
- * FamilyTree-Text (FTT) Reference Parser v0.1.2
+ * FamilyTree-Text (FTT) Reference Parser v0.1.3
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
  */
@@ -330,6 +330,7 @@ class ParseSession {
 
     _postProcess() {
         this._injectImplicitUnions();
+        this._reconcileChildLists();
         this._processPlaceHierarchies();
     }
 
@@ -376,6 +377,82 @@ class ParseSession {
                 }
             }
         }
+    }
+    
+    _reconcileChildLists() {
+        // 1. Build a map of "Actual Children" by scanning PARENT links (The Source of Truth)
+        const parentToKidsMap = new Map();
+
+        for (const [childId, childRec] of this.records) {
+            if (childRec.data['PARENT']) {
+                childRec.data['PARENT'].forEach(pField => {
+                    const parentId = pField.parsed[0];
+                    if (!this.records.has(parentId)) return;
+
+                    if (!parentToKidsMap.has(parentId)) {
+                        parentToKidsMap.set(parentId, []);
+                    }
+                    parentToKidsMap.get(parentId).push(childRec);
+                });
+            }
+        }
+
+        // 2. Reconcile every parent record
+        for (const [parentId, parentRec] of this.records) {
+            const actualChildren = parentToKidsMap.get(parentId) || [];
+            const manifestFields = parentRec.data['CHILD'] || [];
+            
+            // Extract IDs explicitly listed in the manifest
+            const manifestIds = new Set();
+            const finalList = [];
+
+            // A. Add Manifest Children (Preserve User Order)
+            manifestFields.forEach(field => {
+                const childId = field.parsed[0];
+                // Only add if the child actually exists and reciprocates (Ghost Child check handles errors elsewhere)
+                if (this.records.has(childId)) {
+                    finalList.push(field);
+                    manifestIds.add(childId);
+                }
+            });
+
+            // B. Find "Forgotten" Children (Actual children not in manifest)
+            const forgottenChildren = actualChildren.filter(c => !manifestIds.has(c.id));
+
+            // C. Sort forgotten children by Birth Date (Chronological)
+            forgottenChildren.sort((a, b) => {
+                const dateA = this._getSortableDate(a);
+                const dateB = this._getSortableDate(b);
+                return dateA.localeCompare(dateB);
+            });
+
+            // D. Append forgotten children to the list (Synthesizing fields)
+            forgottenChildren.forEach(childRec => {
+                finalList.push({
+                    raw: `CHILD: ${childRec.id}`,
+                    parsed: [childRec.id],
+                    modifiers: {},
+                    line: parentRec.line, // Attribute to parent for lack of better location
+                    isImplicit: true
+                });
+            });
+
+            // E. Update the record
+            if (finalList.length > 0) {
+                parentRec.data['CHILD'] = finalList;
+            }
+        }
+    }
+
+    // Helper to extract ISO dates for sorting
+    _getSortableDate(record) {
+        if (!record.data['BORN'] || !record.data['BORN'][0]) return "9999";
+        const rawDate = record.data['BORN'][0].parsed[0];
+        if (!rawDate) return "9999";
+        
+        // Extract first 4 digits (Year)
+        const match = rawDate.match(/([0-9]{4})/);
+        return match ? match[1] : "9999";
     }
 
     _processPlaceHierarchies() {
