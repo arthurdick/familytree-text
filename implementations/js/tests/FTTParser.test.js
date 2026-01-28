@@ -347,4 +347,71 @@ PARENT: ${idNFC} | BIO
       expect(parentRef).toBe(idNFC);
     });
   });
+  
+  describe('Advanced Graph Integrity', () => {
+      it('should detect complex multi-generational and placeholder-inclusive circular lineages', () => {
+        /**
+         * Scenario: 4-Generation Loop with a Placeholder
+         * A -> B -> ?C -> D -> A
+         */
+        const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: RECORD-A
+PARENT: RECORD-B | BIO
+
+ID: RECORD-B
+PARENT: ?PLACEHOLDER-C | BIO
+
+ID: RECORD-D
+PARENT: RECORD-A | BIO
+
+# The link that closes the loop
+ID: ?PLACEHOLDER-C
+PARENT: RECORD-D | BIO
+`;
+
+        const result = parser.parse(input);
+
+        // Verify parser flags CIRCULAR_LINEAGE [cite: 1201, 1205]
+        expect(result.errors).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ 
+              code: 'CIRCULAR_LINEAGE',
+              message: expect.stringContaining('RECORD-A -> RECORD-B -> ?PLACEHOLDER-C -> RECORD-D -> RECORD-A')
+            })
+          ])
+        );
+      });
+
+      it('should not flag legitimate endogamy (multiple paths to one ancestor) as a cycle', () => {
+        /**
+         * Scenario: Pedigree Collapse (Standard in genealogy)
+         * ME -> DAD -> GP
+         * ME -> MOM -> GP
+         * This is a "Diamond" shape, not a circle. [cite: 993, 997]
+         */
+        const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: GP
+NAME: Common Ancestor
+
+ID: DAD
+PARENT: GP | BIO
+
+ID: MOM
+PARENT: GP | BIO
+
+ID: ME
+PARENT: DAD | BIO
+PARENT: MOM | BIO
+`;
+
+        const result = parser.parse(input);
+
+        // Validation should pass as it is a Directed Acyclic Graph 
+        expect(result.errors.filter(e => e.code === 'CIRCULAR_LINEAGE')).toHaveLength(0);
+      });
+    });
 });
