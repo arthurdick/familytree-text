@@ -250,7 +250,8 @@ PARENT: MOM | BIO
     });
 
     describe('Step Siblings', () => {
-        const data = `
+        it('should identify Step-Siblings', () => {
+            const data = `
 ID: DAD
 UNION: MOM | MARR
 CHILD: SON
@@ -268,10 +269,35 @@ SEX: F
 PARENT: MOM | BIO
 # Parents are married, but no shared parents
 `;
-
-        it('should identify Step-Siblings', () => {
             const rels = calc(data, 'SON', 'DAUGHTER');
             expect(rels[0].type).toBe('STEP_SIBLING');
+        });
+        
+        it('should identify Foster Step-Siblings', () => {
+            const data = `
+ID: DAD
+UNION: STEP-MOM | MARR
+CHILD: BIO-SON
+
+ID: STEP-MOM
+UNION: DAD | MARR
+CHILD: FOSTER-DAUGHTER
+
+ID: BIO-SON
+SEX: M
+PARENT: DAD | BIO
+
+ID: FOSTER-DAUGHTER
+SEX: F
+PARENT: STEP-MOM | FOS
+# FOS is not in VALID_LINEAGE, so this fails the 'bioB' check in the original code.
+`;
+            const rels = calc(data, 'BIO-SON', 'FOSTER-DAUGHTER');
+            
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe('STEP_SIBLING');
+            expect(rels[0].parentA).toBe('DAD');
+            expect(rels[0].parentB).toBe('STEP-MOM');
         });
     });
 

@@ -208,9 +208,6 @@ export class RelationshipCalculator {
                 }
 
                 if (uStatus) {
-                    const bioA = this.lineageParents.get(idA)?.includes(pA);
-                    const bioB = this.lineageParents.get(idB)?.includes(pB);
-                    
                     const sharedParents = parentsA.filter(p => parentsB.includes(p));
                     
                     const shareLineageParent = sharedParents.some(p => 
@@ -218,7 +215,7 @@ export class RelationshipCalculator {
                         this.lineageParents.get(idB).includes(p)
                     );
 
-                    if (!shareLineageParent && bioA && bioB) {
+                    if (!shareLineageParent) {
                         return {
                             type: 'STEP_SIBLING',
                             parentA: pA,
