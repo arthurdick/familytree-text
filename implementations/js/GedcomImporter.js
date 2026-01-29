@@ -245,6 +245,17 @@ export default class GedcomImporter {
     const famcNodes = indi.children.filter(c => c.tag === 'FAMC');
     famcNodes.forEach(famc => {
       famc.handled = true; // Mark FAMC as handled
+
+      // Check for Pedigree (PEDI)
+      // GEDCOM values: 'adopted', 'birth', 'foster', 'sealing'
+      let relType = 'BIO';
+      const pediVal = this._extractTag(famc, 'PEDI');
+      if (pediVal) {
+          const p = pediVal.trim().toLowerCase();
+          if (p === 'adopted') relType = 'ADO';
+          else if (p === 'foster') relType = 'FOS';
+      }
+
       const famId = famc.value.replace(/@/g, '');
       const fam = this.families.get(famId);
       if (fam) {
@@ -263,8 +274,8 @@ export default class GedcomImporter {
         // Check structural parent links
         const husbId = this._peekTag(fam, 'HUSB')?.replace(/@/g, '');
         const wifeId = this._peekTag(fam, 'WIFE')?.replace(/@/g, '');
-        if (husbId) out.push(`PARENT: ${husbId} | BIO`);
-        if (wifeId) out.push(`PARENT: ${wifeId} | BIO`);
+        if (husbId) out.push(`PARENT: ${husbId} | ${relType}`);
+        if (wifeId) out.push(`PARENT: ${wifeId} | ${relType}`);
       }
     });
 

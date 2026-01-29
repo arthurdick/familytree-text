@@ -222,6 +222,14 @@ export default class GedcomExporter {
                     fam.children.push(rec.id);
                 }
                 out.push(`1 FAMC ${fam.id}`);
+
+                // Map FTT relationship type to GEDCOM PEDI
+                const relType = rec.data.PARENT[0].parsed[1];
+                if (relType === 'ADO') {
+                    out.push(`2 PEDI adopted`);
+                } else if (relType === 'FOS') {
+                    out.push(`2 PEDI foster`);
+                }
             }
         }
     }
