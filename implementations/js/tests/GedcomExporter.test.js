@@ -282,4 +282,66 @@ ID: P2
             expect(gedcom).toContain('Date \'2000\' stripped');
         });
     });
+    
+    // ==========================================
+    // 8. NOTES & COMMENTS
+    // ==========================================
+    describe('Notes & Comments', () => {
+        it('should export record-level NOTES for Individuals', () => {
+            const input = `
+ID: P1
+NAME: Note Tester
+NOTES: This is a general note about the person.
+
+  It continues on a second line.
+`;
+            const gedcom = convertWithHeader(input);
+            expect(gedcom).toContain('1 NOTE This is a general note about the person.');
+            expect(gedcom).toContain('2 CONT It continues on a second line.');
+        });
+
+        it('should export record-level NOTES for Sources', () => {
+            const input = `
+ID: P1
+NAME: Src Tester
+
+ID: ^S1
+TITLE: Source with Notes
+NOTES: This source is questionable.
+`;
+            const gedcom = convertWithHeader(input);
+            
+            expect(gedcom).toContain('0 @S1@ SOUR');
+            expect(gedcom).toContain('1 NOTE This source is questionable.');
+        });
+
+        it('should export field-level modifiers (_NOTE) on Events', () => {
+            const input = `
+ID: P1
+BORN: 1980 | Hospital
+BORN_NOTE: Birth certificate was hard to read.
+
+  Maybe 1981?
+`;
+            const gedcom = convertWithHeader(input);
+
+            // BIRT is Level 1, so Note should be Level 2
+            expect(gedcom).toContain('1 BIRT');
+            expect(gedcom).toContain('2 NOTE Birth certificate was hard to read.');
+            expect(gedcom).toContain('3 CONT Maybe 1981?');
+        });
+
+        it('should export notes on generic inline EVENTS', () => {
+            const input = `
+ID: P1
+EVENT: GRAD | 2000 || College
+EVENT_NOTE: Graduated with honors.
+`;
+            const gedcom = convertWithHeader(input);
+
+            expect(gedcom).toContain('1 EVEN');
+            expect(gedcom).toContain('2 TYPE GRAD');
+            expect(gedcom).toContain('2 NOTE Graduated with honors.');
+        });
+    });
 });

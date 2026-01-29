@@ -94,6 +94,13 @@ export default class GedcomExporter {
         if (title) out.push(`1 TITL ${title}`);
         const auth = this._getField(rec, 'AUTHOR');
         if (auth) out.push(`1 AUTH ${auth}`);
+        
+        // Export Notes
+        if (rec.data.NOTES) {
+            rec.data.NOTES.forEach(n => {
+                this._writeNote(n.parsed[0], out, 1);
+            });
+        }
     }
 
     _writePlaceholder(rec, out) {
@@ -180,6 +187,13 @@ export default class GedcomExporter {
             });
         }
 
+        // Export Notes
+        if (rec.data.NOTES) {
+            rec.data.NOTES.forEach(n => {
+                this._writeNote(n.parsed[0], out, 1);
+            });
+        }
+
         // Family Linkage (Spouse)
         if (rec.data.UNION) {
             rec.data.UNION.forEach(u => {
@@ -254,7 +268,7 @@ export default class GedcomExporter {
                     }
                 }
 
-                // Citations
+                // Citations & Notes
                 if (f.modifiers) {
                     for (const [modKey, mods] of Object.entries(f.modifiers)) {
                         if (modKey.endsWith('_SRC')) {
@@ -265,6 +279,11 @@ export default class GedcomExporter {
                                 if(page) out.push(`3 PAGE ${page}`);
                             });
                         }
+                        if (modKey.endsWith('_NOTE')) {
+                            mods.forEach(m => {
+                                this._writeNote(m.parsed[0], out, 2);
+                            });
+                        }
                     }
                 }
             });
@@ -272,6 +291,15 @@ export default class GedcomExporter {
     }
 
     // --- Helpers ---
+
+    _writeNote(text, out, level) {
+        if (!text) return;
+        const lines = text.split('\n');
+        out.push(`${level} NOTE ${lines[0]}`);
+        for (let i = 1; i < lines.length; i++) {
+            out.push(`${level + 1} CONT ${lines[i]}`);
+        }
+    }
 
     _log(id, msg) {
         this.downgradeLog.push(`[${id}] ${msg}`);
