@@ -1047,6 +1047,8 @@ UNION: BIO-DAD | MARR
     describe('Half-Blood Logic', () => {
         it('should NOT label siblings as Half-Blood just because one has a missing parent record', () => {
             const data = `
+HEAD_FORMAT: FTT v0.1
+
 ID: DAD
 ID: MOM
 
@@ -1072,6 +1074,8 @@ PARENT: DAD | BIO
         
         it('should correctly label True Half-Siblings when both sets of parents diverge', () => {
             const data = `
+HEAD_FORMAT: FTT v0.1
+
 ID: DAD
 ID: MOM
 ID: STEPMOM
@@ -1095,6 +1099,8 @@ PARENT: STEPMOM | BIO
     describe('Regression: Cousin Half-Blood Logic', () => {
         it('should NOT label cousins as Half-Blood if only one ancestor is recorded (Missing Data)', () => {
             const data = `
+HEAD_FORMAT: FTT v0.1
+
 # The Common Ancestor (Only one defined)
 ID: GG-PA
 # GG-MA is missing from file
@@ -1140,6 +1146,8 @@ PARENT: COUSIN | BIO
         
         it('should label cousins as Half-Blood if the ancestor has MULTIPLE unions', () => {
             const data = `
+HEAD_FORMAT: FTT v0.1
+
 ID: SHARED-GP
 UNION: WIFE-1 | MARR
 UNION: WIFE-2 | MARR

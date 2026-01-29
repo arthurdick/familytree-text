@@ -521,12 +521,19 @@ Parsers **must** raise a **Validation Error** if:
 
 #### **8.2.5 Duplicate ID Handling (Collision Policy)**
 
-To maintain data integrity and prevent the accidental overwriting of genealogical data, parsers must implement a "First-Win" collision policy.
+To maintain data integrity and prevent ambiguous overwrites, parsers must implement a **Strict Collision Intolerance** policy.
 
-1. **Detection:** When a parser encounters an `ID:` key, it must check if that ID has already been indexed in the current session.
-2. **Error Reporting:** If the ID already exists, the parser **must raise a Validation Error** indicating the line number of the duplicate attempt.
-3. **Preservation:** The parser must ignore the second (duplicate) record block entirely to preserve the data of the original record.
-4. **Block Recovery:** To prevent subsequent fields (like `NAME:` or `BORN:`) from being incorrectly attached to the previous valid record or the global header, the parser should enter an "error state" for that block until a new valid `ID:` or block terminator (`---`) is encountered.
+1. **Detection:** When a parser encounters an `ID:` key, it must strictly verify that the ID has not been indexed previously in the current parsing session.
+
+2. **Immediate Failure:** If a duplicate ID is detected, the parser **must raise a Critical Fatal Error** and **halt parsing immediately**.
+* *Rationale:* A duplicate ID usually indicates a copy-paste error where the user intended to create a new record but forgot to update the identifier. Continuing to parse (or silently ignoring the block) risks discarding valuable data or corrupting the graph.
+
+3. **Error Reporting:** The error message must explicitly identify:
+* The **Conflicting ID**.
+* The **Line Number** of the *original* definition.
+* The **Line Number** of the *duplicate* attempt.
+
+4. **No "First-Win" Fallback:** Parsers are explicitly forbidden from implementing a "First-Win" or "Last-Win" logic. The file must be considered invalid until the collision is resolved manually by the user.
 
 ### **8.3 Graph Integrity: Relationship Resolution**
 

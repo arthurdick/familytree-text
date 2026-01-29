@@ -1,11 +1,28 @@
 /**
- * FamilyTree-Text (FTT) Reference Parser v0.1.3
+ * FamilyTree-Text (FTT) Reference Parser v0.1.4
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
  */
 
 const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_\.-]*$/u;
 const KEY_PATTERN = /^([A-Z0-9_]+):(?:\s+(.*))?$/;
+
+// Errors defined as Critical/Fatal in FTT Spec v0.1
+const FATAL_CODES = new Set([
+    'SYNTAX_INDENT',
+    'SYNTAX_INVALID',
+    'CTX_HEADER',
+    'CTX_ORPHAN',
+    'CTX_MODIFIER',
+    'ID_FORMAT',
+    'DUPLICATE_ID',
+    'MISSING_HEADER',
+    'VERSION_MISMATCH',
+    'GHOST_CHILD',       // Spec 8.3.1: "Critical Error"
+    'CIRCULAR_LINEAGE',  // Spec 8.3.3: "Critical Lineage Error"
+    'DANGLING_REF',      // Spec 8.3.4: "Critical Validation Error"
+    'DANGLING_SRC'       // Spec 8.3.4: "Critical Validation Error"
+]);
 
 export default class FTTParser {
     constructor() {
@@ -19,8 +36,6 @@ export default class FTTParser {
      */
     parse(rawText) {
         const session = new ParseSession(this.SUPPORTED_VERSION);
-        // Optimization: Pass an iterator instead of splitting the entire string into an array.
-        // This reduces memory pressure on large files.
         return session.run(this._createLineIterator(rawText));
     }
 
@@ -44,9 +59,6 @@ export default class FTTParser {
                 line = line.slice(0, -1);
             }
 
-            // If we are at the end of the file and the text didn't end with a newline,
-            // we yield the last chunk. If it did end with a newline, we yield an empty string
-            // (mimicking split behavior), though FTT logic largely ignores trailing blank lines.
             if (start <= length) {
                 yield { line, lineNum: lineNum++ };
             }
@@ -71,6 +83,17 @@ class FTTError {
 
     toString() {
         return `[${this.severity}] Line ${this.line}: ${this.message} (${this.code})`;
+    }
+}
+
+/**
+ * Internal Error for halting execution immediately
+ */
+class FTTFatalError extends Error {
+    constructor(fttError) {
+        super(fttError.message);
+        this.name = "FTTFatalError";
+        this.errorObj = fttError;
     }
 }
 
@@ -102,14 +125,31 @@ class ParseSession {
     }
 
     run(lineIterator) {
-        // Iterate via generator (Memory Optimization)
-        for (const { line, lineNum } of lineIterator) {
-            this._processLine(line, lineNum);
-        }
+        try {
+            // Iterate via generator (Memory Optimization)
+            for (const { line, lineNum } of lineIterator) {
+                this._processLine(line, lineNum);
+            }
 
-        this._flushBuffer();
-        this._postProcess();
-        this._validateGraph();
+            this._flushBuffer();
+            this._postProcess();
+            this._validateGraph();
+
+        } catch (e) {
+            // Catch Fatal Errors and halt parsing immediately
+            if (e instanceof FTTFatalError) {
+                this.errors.push(e.errorObj);
+                
+                // Return NO records on fatal error to prevent data corruption
+                return {
+                    headers: this.headers, // Headers parsed so far might be useful for debugging
+                    records: {},
+                    errors: this.errors,
+                    warnings: this.warnings
+                };
+            }
+            throw e; // Re-throw unexpected system errors
+        }
 
         return {
             headers: this.headers,
@@ -134,7 +174,6 @@ class ParseSession {
         }
 
         // 2. Blank Line Check (Paragraph logic)
-        // MUST happen before Indentation Check to catch indented blank lines.
         if (!line.trim()) {
             if (this.currentKey) {
                 this.buffer.push('\n');
@@ -146,12 +185,10 @@ class ParseSession {
         if (line.startsWith('  ')) {
             if (!this.currentKey) {
                 this._error('SYNTAX_INDENT', 'Indented content without a preceding key.', lineNum);
-                return;
+                return; // Logic stops if fatal
             }
             const content = line.substring(2);
 
-            // Folding Rule: Only append a space if there is existing content 
-            // and the last element in the buffer is NOT an explicit newline (\n).
             if (this.buffer.length > 0) {
                 const lastEntry = this.buffer[this.buffer.length - 1];
                 if (lastEntry !== '\n') {
@@ -179,7 +216,7 @@ class ParseSession {
 
     _handleNewKey(key, inlineValue, lineNum) {
         this.currentKey = key;
-        this.bufferStartLine = lineNum; // Track where this block started
+        this.bufferStartLine = lineNum;
 
         if (inlineValue) this.buffer.push(inlineValue);
 
@@ -188,7 +225,6 @@ class ParseSession {
             if (this.currentRecordId) {
                 this._error('CTX_HEADER', `Header ${key} found inside a record block.`, lineNum);
             }
-            // Note: We don't commit to headers object until flush
             return;
         }
 
@@ -197,17 +233,21 @@ class ParseSession {
             const id = inlineValue.trim().normalize('NFC');
             this._validateID(id, lineNum);
 
+            // Strict Collision Intolerance
             if (this.records.has(id)) {
-                this._error('DUPLICATE_ID', `Duplicate Record ID "${id}". Ignoring definition.`, lineNum);
-                this.currentRecordId = null;
-                return;
+                const originalLine = this.records.get(id).line;
+                this._error(
+                    'DUPLICATE_ID', 
+                    `Duplicate Record ID "${id}" detected. Originally defined on Line ${originalLine}.`, 
+                    lineNum
+                );
             }
 
             this.currentRecordId = id;
             this.records.set(id, {
                 id: id,
                 type: this._determineRecordType(id),
-                line: lineNum, // Store definition line for later validation
+                line: lineNum,
                 data: {}
             });
             this.ids.add(id);
@@ -238,7 +278,7 @@ class ParseSession {
             raw: '',
             parsed: [],
             modifiers: {},
-            line: lineNum // Critical for validation reporting
+            line: lineNum
         };
 
         record.data[key].push(newFieldObj);
@@ -281,7 +321,6 @@ class ParseSession {
             return;
         }
 
-        // Join exactly as is; trim only the outer bounds of the block.
         const fullText = this.buffer.join('').trim();
 
         if (this.currentModifierTarget) {
@@ -344,14 +383,12 @@ class ParseSession {
                 const partnerRecord = this.records.get(partnerId);
                 if (!partnerRecord) continue;
 
-                // Check reciprocals
                 let reciprocalField = null;
                 if (partnerRecord.data['UNION']) {
                     reciprocalField = partnerRecord.data['UNION'].find(u => u.parsed[0] === id);
                 }
 
                 if (reciprocalField) {
-                    // Consistency Check
                     for (let i = 1; i <= 4; i++) {
                         const valA = (unionField.parsed[i] || '').trim();
                         const valB = (reciprocalField.parsed[i] || '').trim();
@@ -360,17 +397,14 @@ class ParseSession {
                         }
                     }
                 } else {
-                    // Inject implicit
                     if (!partnerRecord.data['UNION']) partnerRecord.data['UNION'] = [];
-
                     const implicitParsed = [...unionField.parsed];
-                    implicitParsed[0] = id; // Swap ID
-
+                    implicitParsed[0] = id;
                     partnerRecord.data['UNION'].push({
                         raw: `(Implicit Reciprocal of ${id})`,
                         parsed: implicitParsed,
                         modifiers: {},
-                        line: partnerRecord.line, // Attribute to record start since it's implicit
+                        line: partnerRecord.line,
                         isImplicit: true
                     });
                 }
@@ -379,7 +413,6 @@ class ParseSession {
     }
     
     _reconcileChildLists() {
-        // 1. Build a map of "Actual Children" by scanning PARENT links (The Source of Truth)
         const parentToKidsMap = new Map();
 
         for (const [childId, childRec] of this.records) {
@@ -396,70 +429,55 @@ class ParseSession {
             }
         }
 
-        // 2. Reconcile every parent record
         for (const [parentId, parentRec] of this.records) {
             const actualChildren = parentToKidsMap.get(parentId) || [];
             const manifestFields = parentRec.data['CHILD'] || [];
             
-            // Extract IDs explicitly listed in the manifest
             const manifestIds = new Set();
             const finalList = [];
 
-            // A. Add Manifest Children (Preserve User Order)
             manifestFields.forEach(field => {
                 const childId = field.parsed[0];
-                // Only add if the child actually exists and reciprocates (Ghost Child check handles errors elsewhere)
                 if (this.records.has(childId)) {
                     finalList.push(field);
                     manifestIds.add(childId);
                 }
             });
 
-            // B. Find "Forgotten" Children (Actual children not in manifest)
             const forgottenChildren = actualChildren.filter(c => !manifestIds.has(c.id));
-
-            // C. Sort forgotten children by Birth Date (Chronological)
             forgottenChildren.sort((a, b) => {
                 const dateA = this._getSortableDate(a);
                 const dateB = this._getSortableDate(b);
                 return dateA.localeCompare(dateB);
             });
 
-            // D. Append forgotten children to the list (Synthesizing fields)
             forgottenChildren.forEach(childRec => {
                 finalList.push({
                     raw: `CHILD: ${childRec.id}`,
                     parsed: [childRec.id],
                     modifiers: {},
-                    line: parentRec.line, // Attribute to parent for lack of better location
+                    line: parentRec.line,
                     isImplicit: true
                 });
             });
 
-            // E. Update the record
             if (finalList.length > 0) {
                 parentRec.data['CHILD'] = finalList;
             }
         }
     }
 
-    // Helper to extract ISO dates for sorting
     _getSortableDate(record) {
         if (!record.data['BORN'] || !record.data['BORN'][0]) return "9999";
         const rawDate = record.data['BORN'][0].parsed[0];
         if (!rawDate) return "9999";
-        
-        // Extract longest valid ISO date match (YYYY, YYYY-MM, or YYYY-MM-DD)
         const match = rawDate.match(/([0-9]{4}(?:-[0-9]{2})?(?:-[0-9]{2})?)/);
         return match ? match[1] : "9999";
     }
 
     _processPlaceHierarchies() {
         const PLACE_INDICES = {
-            'BORN': 1,
-            'DIED': 1,
-            'EVENT': 3,
-            'PLACE': 0
+            'BORN': 1, 'DIED': 1, 'EVENT': 3, 'PLACE': 0
         };
 
         for (const record of this.records.values()) {
@@ -470,14 +488,8 @@ class ParseSession {
                 for (const field of fields) {
                     if (field.parsed.length > placeIdx) {
                         const rawPlace = field.parsed[placeIdx];
-                        
                         if (rawPlace && (rawPlace.includes('{=') || rawPlace.includes('<'))) {
-                            const {
-                                display,
-                                geo,
-                                coords
-                            } = this._parsePlaceString(rawPlace);
-                            
+                            const { display, geo, coords } = this._parsePlaceString(rawPlace);
                             field.parsed[placeIdx] = display;
                             if (!field.metadata) field.metadata = {};
                             if (geo) field.metadata.geo = geo;
@@ -496,20 +508,10 @@ class ParseSession {
         if (coordsMatch) {
             coords = `${coordsMatch[1]}, ${coordsMatch[2]}`;
         }
-
-        let display = str
-            .replace(/\s*\{=.*?\}/g, '')
-            .replace(coordsRegex, '')
-            .trim();
-
+        let display = str.replace(/\s*\{=.*?\}/g, '').replace(coordsRegex, '').trim();
         const geoRaw = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, '$2');
         const geo = geoRaw.replace(coordsRegex, '').trim();
-
-        return {
-            display,
-            geo,
-            coords
-        };
+        return { display, geo, coords };
     }
 
     // =========================================================================
@@ -537,7 +539,6 @@ class ParseSession {
     }
 
     _validateGraph() {
-        // Version Check
         const formatHeader = this.headers['HEAD_FORMAT'];
         if (!formatHeader) {
             this._error('MISSING_HEADER', 'Missing Header: HEAD_FORMAT', 1);
@@ -551,8 +552,7 @@ class ParseSession {
         // 1. Dangling Reference Check
         this.records.forEach((record) => this._checkReferences(record));
 
-        // 2. Ghost Child Check
-        // Ensures that if A lists B as a child, B actually lists A as a parent.
+        // 2. Ghost Child Check (Defined as Critical Error in Spec 8.3.1)
         this.records.forEach((record, parentId) => {
             if (record.data['CHILD']) {
                 record.data['CHILD'].forEach(childField => {
@@ -570,56 +570,39 @@ class ParseSession {
             }
         });
 
-        // 3. Cycle Detection (Iterative DFS with Post-Order Visited)
-        // 'visited' must only track nodes that are fully processed (Black set), 
-        // not just discovered (Gray set), to prevent premature skipping.
+        // 3. Cycle Detection
         const visited = new Set();
         for (const rootId of this.ids) {
-            // Only process Individuals for lineage cycles
             if (this._determineRecordType(rootId) !== 'INDIVIDUAL') continue;
             if (visited.has(rootId)) continue;
 
-            // Stack stores: { id, path, processed }
-            // processed = false (Expand/Visit), true (Post-visit/Mark Safe)
             const stack = [{ id: rootId, path: [], processed: false }];
 
             while (stack.length > 0) {
                 const frame = stack[stack.length - 1];
-
                 if (frame.processed) {
-                    // Post-order: We are done with this node
                     visited.add(frame.id);
                     stack.pop();
                     continue;
                 }
-
-                // Mark as processed so next time we see this frame, we pop it (Post-order)
                 frame.processed = true;
                 const { id, path } = frame;
 
-                // Cycle Check (Gray Set Logic via Path)
                 if (path.includes(id)) {
                     const cyclePath = [...path, id].join(' -> ');
-                    this._error(
-                        'CIRCULAR_LINEAGE',
-                        `Circular Lineage Detected: ${cyclePath}`,
-                        this.records.get(id)?.line || 0
-                    );
-                    stack.pop(); // Remove faulty node to continue processing stack
+                    this._error('CIRCULAR_LINEAGE', `Circular Lineage Detected: ${cyclePath}`, this.records.get(id)?.line || 0);
+                    stack.pop();
                     continue;
                 }
 
-                // If globally visited (Black Set), we know it's safe
                 if (visited.has(id)) {
                     stack.pop();
                     continue;
                 }
 
-                // Expand Parents (Add to stack)
                 const record = this.records.get(id);
                 if (record && record.data['PARENT']) {
                     const nextPath = [...path, id];
-
                     for (const pField of record.data['PARENT']) {
                         const parentId = pField.parsed[0];
                         if (parentId && this.records.has(parentId)) {
@@ -630,7 +613,7 @@ class ParseSession {
             }
         }
 
-        // 4. Vocabulary & Date Validation
+        // 4. Vocabulary & Date (Non-Fatal Validation)
         this._validateVocabulary();
         this._validateDates();
     }
@@ -646,7 +629,6 @@ class ParseSession {
             });
         });
 
-        // Check Citation modifiers
         Object.values(record.data).forEach(fieldList => {
             fieldList.forEach(field => {
                 for (const modKey in field.modifiers) {
@@ -680,7 +662,7 @@ class ParseSession {
             });
 
             record.data['UNION']?.forEach(f => {
-                if (f.isImplicit) return; // Don't validate generated implicit records
+                if (f.isImplicit) return;
                 const type = (f.parsed[1] || '').trim();
                 const reason = (f.parsed[4] || '').trim();
                 if (type && !VALID.UNION_TYPES.has(type)) this._error('INVALID_VOCAB', `Invalid UNION Type "${type}"`, f.line);
@@ -703,14 +685,8 @@ class ParseSession {
 
     _validateDates() {
         const DATE_KEYS = {
-            'BORN': [0],
-            'DIED': [0],
-            'EVENT': [1, 2],
-            'UNION': [2, 3],
-            'ASSOC': [2, 3],
-            'MEDIA': [1],
-            'START_DATE': [0],
-            'END_DATE': [0]
+            'BORN': [0], 'DIED': [0], 'EVENT': [1, 2], 'UNION': [2, 3],
+            'ASSOC': [2, 3], 'MEDIA': [1], 'START_DATE': [0], 'END_DATE': [0]
         };
 
         for (const record of this.records.values()) {
@@ -737,12 +713,15 @@ class ParseSession {
         return this.ids.has(id);
     }
 
-    // =========================================================================
-    // 6. Logging Helpers
-    // =========================================================================
-
     _error(code, msg, line) {
-        this.errors.push(new FTTError(code, msg, line, 'ERROR'));
+        const error = new FTTError(code, msg, line, FATAL_CODES.has(code) ? 'FATAL' : 'ERROR');
+        
+        // Immediate Halt if Fatal
+        if (FATAL_CODES.has(code)) {
+            throw new FTTFatalError(error);
+        }
+        
+        this.errors.push(error);
     }
 
     _warning(code, msg, line) {
@@ -756,80 +735,45 @@ class ParseSession {
 function isValidFTTDate(dateStr) {
     if (!dateStr) return false;
     const str = dateStr.trim();
+    if (str === '?' || str === '..') return true; 
 
-    // 1. Special Literals
-    if (str === '?' || str === '..') return true; // Unknown or Open/Ongoing
-
-    // 2. Bounding Window (One of a set) [Start..End]
     if (str.startsWith('[') && str.endsWith(']')) {
         const content = str.slice(1, -1);
-        
-        // FTT Spec implies [Earliest..Latest] syntax
         if (!content.includes('..')) return false; 
-
         const parts = content.split('..');
-        if (parts.length !== 2) return false; // Too many segments
-
+        if (parts.length !== 2) return false; 
         const [start, end] = parts;
-        
-        // Allow open bounds like [..1900] or [1900..]
-        // We validate sub-parts only if they are not empty string.
         const validStart = !start || validateSimpleDate(start.trim());
         const validEnd = !end || validateSimpleDate(end.trim());
-
-        return validStart && validEnd && (start || end); // At least one bound must exist
+        return validStart && validEnd && (start || end); 
     }
-
-    // 3. Simple Date (Point in Time)
     return validateSimpleDate(str);
 }
 
-/**
- * Validates a single EDTF date string (e.g. "1980-05-12?").
- */
 function validateSimpleDate(str) {
-    // Structure: 
-    // ^ (-)? (YYYY or XXXX) -? (MM or XX)? -? (DD or XX)? ([?~]+)? $
     const match = str.match(/^(-?)([\dX]{4})(?:-([\dX]{2})(?:-([\dX]{2}))?)?([?~]+)?$/);
     if (!match) return false;
-
     const [, neg, year, month, day, suffix] = match;
-
-    // 1. Year Check
-    // 4 digits or X. No specific logic needed beyond regex.
-    // (Negative years are allowed by regex).
-
-    // 2. Month Check
     let isSeason = false;
     if (month) {
         if (!month.includes('X')) {
             const m = parseInt(month, 10);
-            // Months: 01-12
-            // Seasons (Level 2): 21 (Spring), 22 (Summer), 23 (Autumn), 24 (Winter)
             const isStandard = m >= 1 && m <= 12;
             isSeason = m >= 21 && m <= 24;
-
             if (!isStandard && !isSeason) return false;
         }
     }
-
-    // 3. Day Check
     if (day) {
-        // Seasons cannot have days
         if (isSeason) return false;
-
         if (!day.includes('X')) {
             const d = parseInt(day, 10);
             if (d < 1 || d > 31) return false;
-
-            // Basic days-in-month check (if month is known and numeric)
             if (month && !month.includes('X')) {
                 const m = parseInt(month, 10);
-                const maxDays = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Allow 29 for Feb (Leap safety)
+                const maxDays = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
                 if (m <= 12 && d > maxDays[m]) return false;
             }
         }
     }
-
     return true;
 }

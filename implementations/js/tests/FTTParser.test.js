@@ -27,6 +27,7 @@ HEAD_ROOT:  I1
 
     it('should parse a simple individual record', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
 ID: PERSON-01
 NAME: John Doe | Doe, John
 SEX:  M
@@ -42,6 +43,8 @@ SEX:  M
 
     it('should handle pipe delimiters and empty fields', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 # Format: Display | Sort | Type | Status
 NAME: John ||| PREF
@@ -57,6 +60,8 @@ NAME: John ||| PREF
 
     it('should handle escaped pipes', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 NOTE: This is a pipe \\| character
 `;
@@ -67,6 +72,8 @@ NOTE: This is a pipe \\| character
 
     it('should handle multiline indentation (folding)', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 NOTES: Line 1.
   Line 2.
@@ -79,6 +86,8 @@ NOTES: Line 1.
     
     it('should demonstrate how explicit paragraph breaks are handled', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: PARAGRAPH-TEST
 NOTES: Paragraph one.
   
@@ -98,10 +107,14 @@ NOTES: Paragraph one.
   describe('Modifiers (Adjacency Logic)', () => {
     it('should attach citations to the immediately preceding field', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN: 1980
 BORN_SRC: ^SRC-1
 DIED: 2020
+
+ID: ^SRC-1
 `;
       const result = parser.parse(input);
       const born = result.records['A'].data.BORN[0];
@@ -116,6 +129,8 @@ DIED: 2020
 
     it('should error if modifier has no predecessor', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN_SRC: ^SRC-1
 `;
@@ -126,6 +141,8 @@ BORN_SRC: ^SRC-1
 
     it('should error if modifier type mismatch (BORN_SRC after DIED)', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 DIED: 2020
 BORN_SRC: ^SRC-1
@@ -142,6 +159,8 @@ BORN_SRC: ^SRC-1
   describe('Place Parsing', () => {
     it('should parse standard place strings', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN: 1980 | City; Region; Country
 `;
@@ -152,6 +171,8 @@ BORN: 1980 | City; Region; Country
 
     it('should extract historical name metadata {=Modern}', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN: 1980 | Berlin {=Kitchener}; Ontario
 `;
@@ -164,6 +185,8 @@ BORN: 1980 | Berlin {=Kitchener}; Ontario
 
     it('should extract coordinates <lat, long>', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN: 1980 | City <51.5, -0.1>
 `;
@@ -180,6 +203,8 @@ BORN: 1980 | City <51.5, -0.1>
   describe('Graph Logic', () => {
     it('should inject implicit reciprocal unions', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: HUSB
 UNION: WIFE | MARR
 
@@ -196,6 +221,8 @@ ID: WIFE
 
     it('should warn on inconsistent reciprocal unions', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 UNION: B | MARR
 
@@ -214,6 +241,8 @@ UNION: A | PART
   describe('Validation', () => {
     it('should detect dangling references', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 PARENT: MISSING_ID | BIO
 `;
@@ -228,6 +257,7 @@ PARENT: MISSING_ID | BIO
     it('should allow references to Placeholder IDs (?)', () => {
       const input = `
 HEAD_FORMAT: FTT v0.1
+
 ID: A
 PARENT: ?UNK-FATHER | BIO
 `;
@@ -237,6 +267,8 @@ PARENT: ?UNK-FATHER | BIO
 
     it('should detect Ghost Children (Child not reciprocating Parent)', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: PARENT
 CHILD: KID
 
@@ -253,6 +285,8 @@ ID: KID
 
     it('should detect Circular Lineage', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 PARENT: B | BIO
 
@@ -270,6 +304,8 @@ PARENT: A | BIO
     it('should detect Circular Lineage involving Placeholder records', () => {
       // Regression test: Placeholders (?) should not block cycle detection
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 PARENT: B | BIO
 
@@ -290,6 +326,7 @@ PARENT: A | BIO
     it('should validate ISO 8601 / EDTF dates', () => {
       const input = `
 HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN: 1980-05-12
 DIED: 2020?
@@ -301,6 +338,8 @@ EVENT: OCC | [1900..1910] || Work
 
     it('should error on invalid dates', () => {
       const input = `
+HEAD_FORMAT: FTT v0.1
+
 ID: A
 BORN: May 12, 1980
 `;
