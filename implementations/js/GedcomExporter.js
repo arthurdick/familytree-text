@@ -20,6 +20,11 @@ export default class GedcomExporter {
         }
 
         const records = result.records;
+        
+        // 1b. Inject Implicit Placeholders
+        // Scan for ?IDs that are referenced but not defined, and create records for them.
+        this._injectImplicitPlaceholders(records);
+
         const output = [];
 
         // 2. Header
@@ -32,11 +37,8 @@ export default class GedcomExporter {
 
         // 3. Process Individuals & Build Family Cache
         for (const [id, rec] of Object.entries(records)) {
-            if (rec.type === 'INDIVIDUAL') {
+            if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
                 this._writeIndividual(rec, output, records);
-            } else if (rec.type === 'PLACEHOLDER') {
-                this._writePlaceholder(rec, output);
-                this._log(rec.id, 'Placeholder converted to dummy INDI record.');
             } else if (rec.type === 'SOURCE') {
                 this._writeSource(rec, output);
             } else if (rec.type === 'EVENT') {
@@ -85,6 +87,33 @@ export default class GedcomExporter {
         return output.join('\n');
     }
 
+    _injectImplicitPlaceholders(records) {
+        const referenced = new Set();
+        
+        const collect = (id) => {
+            if (id && id.startsWith('?') && !records[id]) {
+                referenced.add(id);
+            }
+        };
+
+        for (const rec of Object.values(records)) {
+            if (rec.data.PARENT) rec.data.PARENT.forEach(p => collect(p.parsed[0]));
+            if (rec.data.UNION) rec.data.UNION.forEach(u => collect(u.parsed[0]));
+            if (rec.data.CHILD) rec.data.CHILD.forEach(c => collect(c.parsed[0]));
+            if (rec.data.ASSOC) rec.data.ASSOC.forEach(a => collect(a.parsed[0]));
+        }
+
+        referenced.forEach(id => {
+            records[id] = {
+                id: id,
+                type: 'PLACEHOLDER',
+                data: {},
+                line: 0 // Synthetic
+            };
+            this._log(id, 'Implicit placeholder converted to dummy INDI record.');
+        });
+    }
+
     // --- Writers ---
 
     _writeSource(rec, out) {
@@ -101,12 +130,6 @@ export default class GedcomExporter {
                 this._writeNote(n.parsed[0], out, 1);
             });
         }
-    }
-
-    _writePlaceholder(rec, out) {
-        out.push(`0 @${rec.id}@ INDI`);
-        out.push(`1 NAME Unknown /Placeholder/`);
-        out.push(`1 NOTE This is a synthesized placeholder record from FTT.`);
     }
 
     _writeIndividual(rec, out, allRecords) {
@@ -136,6 +159,13 @@ export default class GedcomExporter {
                     out.push(`2 TYPE ${type}`);
                 }
             });
+        } else if (rec.type === 'PLACEHOLDER') {
+            out.push(`1 NAME Unknown /Placeholder/`);
+        }
+
+        // Placeholder Note
+        if (rec.type === 'PLACEHOLDER') {
+            out.push(`1 NOTE This is a synthesized placeholder record from FTT.`);
         }
 
         // Sex
@@ -215,20 +245,39 @@ export default class GedcomExporter {
 
         // Family Linkage (Child)
         if (rec.data.PARENT) {
-            const parents = rec.data.PARENT.map(p => p.parsed[0]);
-            if (parents.length > 0) {
-                const fam = this._getFamily(parents[0], parents[1] || null, allRecords);
-                if (!fam.children.includes(rec.id)) {
-                    fam.children.push(rec.id);
-                }
-                out.push(`1 FAMC ${fam.id}`);
+            // 1. Group parents by Relationship Type
+            const groups = {};
+            rec.data.PARENT.forEach(p => {
+                const pid = p.parsed[0];
+                const type = p.parsed[1] || 'BIO';
+                if (!groups[type]) groups[type] = [];
+                groups[type].push(pid);
+            });
 
-                // Map FTT relationship type to GEDCOM PEDI
-                const relType = rec.data.PARENT[0].parsed[1];
-                if (relType === 'ADO') {
-                    out.push(`2 PEDI adopted`);
-                } else if (relType === 'FOS') {
-                    out.push(`2 PEDI foster`);
+            // 2. Process each group
+            for (const [type, pids] of Object.entries(groups)) {
+                // Iterate in pairs (Standard Mom/Dad or single parents)
+                // This ensures we catch ALL parents, not just the first 2 of the entire list.
+                for (let i = 0; i < pids.length; i += 2) {
+                    const p1 = pids[i];
+                    const p2 = pids[i+1] || null;
+
+                    const fam = this._getFamily(p1, p2, allRecords);
+                    
+                    // Link Child to Family
+                    if (!fam.children.includes(rec.id)) {
+                        fam.children.push(rec.id);
+                    }
+                    
+                    // Write FAMC tag
+                    out.push(`1 FAMC ${fam.id}`);
+
+                    // Apply Relationship Type (PEDI)
+                    if (type === 'ADO') {
+                        out.push(`2 PEDI adopted`);
+                    } else if (type === 'FOS') {
+                        out.push(`2 PEDI foster`);
+                    }
                 }
             }
         }
@@ -339,8 +388,7 @@ export default class GedcomExporter {
         };
         ids.forEach(pid => {
             const prec = allRecords[pid];
-            // Treat placeholders as Unknown sex for safety
-            const sex = (prec && prec.type !== 'PLACEHOLDER' && prec.data.SEX) 
+            const sex = (prec && prec.data.SEX && prec.data.SEX[0]) 
                 ? prec.data.SEX[0].parsed[0] 
                 : 'U';
 
