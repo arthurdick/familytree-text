@@ -462,7 +462,7 @@ export default class GedcomExporter {
 
     _getFamily(p1, p2, allRecords) {
         const ids = [p1, p2].filter((x) => x).sort();
-        const key = ids.join("_");
+        const key = ids.join("|");
 
         if (this.famCache.has(key)) {
             return this.famCache.get(key);
