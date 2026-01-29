@@ -114,6 +114,28 @@ npm run dev
 npm run build
 ```
 
+4. **Run Tests:**
+   To run the suite of unit tests:
+
+```bash
+npm run test
+```
+
+5. **Lint and Format:**
+   To automatically fix linting issues and format the codebase:
+
+```bash
+npm run format
+npm run lint
+```
+
+6. **Full Validation:**
+   Before submitting a Pull Request, run the full validation suite (format, lint, and test):
+
+```bash
+npm run validate
+```
+
 ## 📄 License
 
 This project is licensed under the **MIT License**.
