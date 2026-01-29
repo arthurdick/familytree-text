@@ -53,11 +53,9 @@ export default class GedcomExporter {
             output.push(`0 ${fam.id} FAM`);
             if (fam.husb) output.push(`1 HUSB @${fam.husb}@`);
             if (fam.wife) output.push(`1 WIFE @${fam.wife}@`);
-            
             fam.children.forEach(childId => {
                 output.push(`1 CHIL @${childId}@`);
             });
-
             fam.events.forEach(evt => {
                 // Handle Union Semantics Downgrade
                 if (evt.type === 'PART') {
@@ -118,22 +116,30 @@ export default class GedcomExporter {
 
         // Name Parsing
         if (rec.data.NAME) {
-            const nameField = rec.data.NAME[0];
-            const display = nameField.parsed[0] || 'Unknown';
-            const sort = nameField.parsed[1] || '';
-            let gedName = display;
-            
-            if (sort.includes(',')) {
-                const surname = sort.split(',')[0].trim();
-                if (display.includes(surname)) {
-                    gedName = display.replace(surname, `/${surname}/`);
+            rec.data.NAME.forEach(nameField => {
+                const display = nameField.parsed[0] || 'Unknown';
+                const sort = nameField.parsed[1] || '';
+                const type = nameField.parsed[2] || '';
+
+                let gedName = display;
+                if (sort.includes(',')) {
+                    const surname = sort.split(',')[0].trim();
+                    if (display.includes(surname)) {
+                        gedName = display.replace(surname, `/${surname}/`);
+                    } else {
+                        gedName = `${display} /${surname}/`;
+                    }
                 } else {
-                    gedName = `${display} /${surname}/`;
+                    gedName = `${display} //`;
                 }
-            } else {
-                gedName = `${display} //`;
-            }
-            out.push(`1 NAME ${gedName}`);
+
+                out.push(`1 NAME ${gedName}`);
+                
+                // FTT allows name types (e.g., BIRTH, MARR, AKA)
+                if (type) {
+                    out.push(`2 TYPE ${type}`);
+                }
+            });
         }
 
         // Sex
@@ -230,7 +236,6 @@ export default class GedcomExporter {
             if (place) {
                 // FTT: "City; Country" -> GED: "City, Country"
                 out.push(`2 PLAC ${place.replace(/;/g, ',')}`);
-                
                 // CHECK FOR METADATA LOSS (Geocoding/Coordinates)
                 if (f.metadata && (f.metadata.geo || f.metadata.coords)) {
                     // 5.5.1 has MAP.LATI/LONG but strictly for PLAC structures.
@@ -309,7 +314,7 @@ export default class GedcomExporter {
     _gedDate(fttDate) {
         if (!fttDate) return null;
         const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-        
+
         // ISO to GEDCOM conversion
         const isoMatch = fttDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (isoMatch) {
@@ -322,13 +327,14 @@ export default class GedcomExporter {
         }
         
         if (/^\d{4}$/.test(fttDate)) return fttDate;
-        
+
         // Handle '?' suffix (Uncertain) same as '~' (Approx)
         if (fttDate.endsWith('~') || fttDate.endsWith('?')) {
             return `ABT ${fttDate.replace(/[~?]/g, '')}`;
         }
         
-        // FTT [A..B] is a "Window". GEDCOM BET A AND B implies roughly the same.
+        // FTT [A..B] is a "Window".
+        // GEDCOM BET A AND B implies roughly the same.
         const rangeMatch = fttDate.match(/^\[(.*?)\.\.(.*?)\]$/);
         if (rangeMatch) {
             const start = rangeMatch[1].trim();
@@ -336,7 +342,6 @@ export default class GedcomExporter {
             
             if (!start && end) return `BEF ${end}`;
             if (start && !end) return `AFT ${start}`;
-            
             return `BET ${start} AND ${end}`;
         }
 

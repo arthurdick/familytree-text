@@ -38,7 +38,6 @@ export default class GedcomImporter {
 
     // Regex: Level + [Optional ID] + Tag + [Optional Value]
     const lineRegex = /^\s*(\d+)\s+(?:(@[^@]+@)\s+)?(\w+)(?: (.*))?$/;
-
     lines.forEach((line, index) => {
       if (!line.trim()) return;
 
@@ -84,8 +83,7 @@ export default class GedcomImporter {
       if (level === 0) {
         currentRecord = { id: cleanId, type: tag, ...node };
         // We implicitly handle the Root Record Shell (INDI/FAM/SOUR tags themselves)
-        currentRecord.handled = true; 
-        
+        currentRecord.handled = true;
         stack = [];
         stack[0] = currentRecord;
 
@@ -94,7 +92,7 @@ export default class GedcomImporter {
         else if (tag === 'SOUR') this.sources.set(cleanId, currentRecord);
         else if (tag === 'HEAD' || tag === 'TRLR') {
              // Ignore purely structural/header records for loss reporting
-             currentRecord.handled = true; 
+             currentRecord.handled = true;
         }
       } else {
         const parent = stack[level - 1];
@@ -111,7 +109,6 @@ export default class GedcomImporter {
   // =========================================================================
   _generateFTT() {
     const output = [];
-
     output.push(`HEAD_FORMAT: FTT v0.1`);
     output.push(`HEAD_DATE: ${new Date().toISOString().split('T')[0]}`);
     output.push(`HEAD_TITLE: GEDCOM Import`);
@@ -137,7 +134,6 @@ export default class GedcomImporter {
     output.push('# RECORDS');
     output.push('# ==========================================');
     output.push('');
-
     for (const [indiId, indi] of this.individuals) {
       this._writeIndividual(indi, output);
       this._auditNode(indi, `INDI(${indiId})`); // Audit immediately
@@ -172,23 +168,68 @@ export default class GedcomImporter {
   _writeIndividual(indi, out) {
     out.push(`ID: ${indi.id}`);
 
-    // NAME
-    const nameNode = this._extractNode(indi, 'NAME');
-    if (nameNode) {
-      const rawName = nameNode.value || '';
-      const display = rawName.replace(/\//g, '').trim();
-      const match = rawName.match(/(.*)\/(.*)\/(.*)/);
-      let sortKey = '';
-      if (match) {
-        const given = (match[1] + ' ' + match[3]).trim();
-        const sur = match[2].trim();
-        sortKey = `${sur}, ${given}`;
-      }
-      out.push(`NAME: ${display} | ${sortKey} | BIRTH | PREF`);
-      
-      // Handle SURN / GIVN standard sub-tags if present to avoid false warnings
-      this._extractTag(nameNode, 'SURN');
-      this._extractTag(nameNode, 'GIVN');
+    // NAME Processing
+    const nameNodes = indi.children.filter(c => c.tag === 'NAME');
+    
+    if (nameNodes.length > 0) {
+        nameNodes.forEach((nameNode, index) => {
+            nameNode.handled = true; // Mark handled
+
+            // 1. Parse Display and Sort Key
+            const rawName = nameNode.value || '';
+            const display = rawName.replace(/\//g, '').trim();
+            const match = rawName.match(/(.*)\/(.*)\/(.*)/);
+            let sortKey = '';
+            if (match) {
+                const given = (match[1] + ' ' + match[3]).trim();
+                const sur = match[2].trim();
+                sortKey = `${sur}, ${given}`;
+            }
+
+            // 2. Extract Type
+            // Check for GEDCOM 'TYPE' sub-tag
+            let type = '';
+            const typeNode = nameNode.children.find(c => c.tag === 'TYPE');
+            
+            if (typeNode) {
+                typeNode.handled = true;
+                const rawType = typeNode.value.toUpperCase().trim();
+                
+                // Map GEDCOM types to FTT vocabulary where possible
+                if (rawType === 'AKA' || rawType === 'ALIAS') type = 'AKA';
+                else if (rawType === 'BIRTH' || rawType === 'MAIDEN' || rawType === 'NEE') type = 'BIRTH';
+                else if (rawType === 'MARRIED') type = 'MARR';
+                else if (rawType === 'NICK' || rawType === 'NICKNAME') type = 'NICK';
+                else if (rawType === 'IMMIGRANT') type = 'IMM';
+                else type = rawType; // Preserve unknown types as custom
+            } else {
+                // Heuristic: If it is the *first* name and has no type, default to 'BIRTH'.
+                // Subsequent names without types are left blank (Generic).
+                if (index === 0) type = 'BIRTH';
+            }
+
+            // 3. Determine Status
+            // Default: First name listed is 'PREF', others are standard.
+            let status = (index === 0) ? 'PREF' : '';
+
+            // 4. Output Main Name Line
+            out.push(`NAME: ${display} | ${sortKey} | ${type} | ${status}`);
+
+            // 5. Handle Sub-Tags & Nicknames
+            this._markTagHandled(nameNode, 'SURN');
+            this._markTagHandled(nameNode, 'GIVN');
+            this._markTagHandled(nameNode, '_PREF'); // Common non-standard tag
+
+            // If a NICK tag is nested inside NAME, export it as a separate NICK record
+            const nickNode = nameNode.children.find(c => c.tag === 'NICK');
+            if (nickNode) {
+                nickNode.handled = true;
+                const nickVal = nickNode.value.trim();
+                if (nickVal) {
+                    out.push(`NAME: ${nickVal} || NICK |`);
+                }
+            }
+        });
     }
 
     // SEX
@@ -212,7 +253,6 @@ export default class GedcomImporter {
         this._markTagHandled(fam, 'WIFE');
         
         // Also claim "my" own CHIL slot in this family to prevent false "Unhandled" warnings.
-        // This covers cases where parents are missing/unlinked, but the child linkage is valid.
         const myChilNode = fam.children.find(c => 
             c.tag === 'CHIL' && c.value.replace(/@/g, '') === indi.id
         );
@@ -239,7 +279,7 @@ export default class GedcomImporter {
         this._markTagHandled(fam, 'WIFE');
         
         // Handle Children to preserve order and silence audit warnings
-        // 1. Mark CHIL tags in the family as handled (stops false positive audit logs)
+        // 1. Mark CHIL tags in the family as handled
         // 2. Generate CHILD: lines in FTT to preserve the specific birth order from GEDCOM
         const chilNodes = fam.children.filter(c => c.tag === 'CHIL');
         chilNodes.forEach(childNode => {
@@ -265,7 +305,7 @@ export default class GedcomImporter {
                 const d = this._extractTag(marrNode, 'DATE');
                 if (d) dateStr = this._convertDate(d);
                 // Also handle PLAC inside MARR to avoid warning
-                this._extractTag(marrNode, 'PLAC'); 
+                this._extractTag(marrNode, 'PLAC');
             }
             
             const divNode = this._extractNode(fam, 'DIV');
@@ -380,13 +420,11 @@ export default class GedcomImporter {
 
   _generateLossReport() {
     if (this.lossReport.length === 0) return "";
-    
     const lines = [];
     lines.push("# ==========================================");
     lines.push(`# IMPORT WARNINGS (${this.lossReport.length} items stripped)`);
     lines.push("# ==========================================");
     lines.push("# The following GEDCOM data was not converted to FTT v0.1:");
-    
     this.lossReport.forEach(msg => {
         lines.push(`# ${msg}`);
     });
@@ -402,10 +440,8 @@ export default class GedcomImporter {
     let d = gedDate.trim().toUpperCase();
     if (d.startsWith('ABT')) return this._parseStandardDate(d.replace('ABT', '').trim()) + '~';
     if (d.startsWith('EST') || d.startsWith('CAL')) return this._parseStandardDate(d.replace(/EST|CAL/, '').trim()) + '~';
-    
     if (d.startsWith('BEF')) return `[..${this._parseStandardDate(d.replace('BEF', '').trim())}]`;
     if (d.startsWith('AFT')) return `[${this._parseStandardDate(d.replace('AFT', '').trim())}..]`;
-    
     if (d.startsWith('BET')) {
        const parts = d.replace('BET', '').split('AND');
        if (parts.length === 2) {
