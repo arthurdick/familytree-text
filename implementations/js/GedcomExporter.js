@@ -35,15 +35,11 @@ export default class GedcomExporter {
             if (rec.type === 'INDIVIDUAL') {
                 this._writeIndividual(rec, output, records);
             } else if (rec.type === 'PLACEHOLDER') {
-                // GEDCOM requires explicit records for placeholders
                 this._writePlaceholder(rec, output);
                 this._log(rec.id, 'Placeholder converted to dummy INDI record.');
             } else if (rec.type === 'SOURCE') {
                 this._writeSource(rec, output);
             } else if (rec.type === 'EVENT') {
-                // Shared Events cannot be exported as root records in GEDCOM.
-                // They are handled by flattening inside _writeIndividual.
-                // We log this structural loss here once.
                 this._log(rec.id, 'Shared Event flattened to individual events (Linkage lost).');
             }
         }
@@ -57,9 +53,7 @@ export default class GedcomExporter {
                 output.push(`1 CHIL @${childId}@`);
             });
             fam.events.forEach(evt => {
-                // Handle Union Semantics Downgrade
                 if (evt.type === 'PART') {
-                    // Export as MARR with TYPE to preserve some meaning, but strictly it's a semantic loss
                     output.push(`1 MARR`);
                     output.push(`2 TYPE Common Law / Partner`);
                     this._log(fam.id, `Union Type 'PART' exported as 'MARR' (Semantic downgrade).`);
@@ -70,7 +64,6 @@ export default class GedcomExporter {
                 if (evt.date) output.push(`2 DATE ${evt.date}`);
                 if (evt.reason === 'DIV') {
                     output.push(`1 DIV`);
-                    // If an end date exists, attach it to the Divorce event
                     if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
                 }
             });
@@ -104,8 +97,6 @@ export default class GedcomExporter {
     }
 
     _writePlaceholder(rec, out) {
-        // Create a dummy record so pointers remain valid
-        // FTT ?UNK-FATHER -> GEDCOM @UNK-FATHER@
         out.push(`0 @${rec.id}@ INDI`);
         out.push(`1 NAME Unknown /Placeholder/`);
         out.push(`1 NOTE This is a synthesized placeholder record from FTT.`);
@@ -113,7 +104,7 @@ export default class GedcomExporter {
 
     _writeIndividual(rec, out, allRecords) {
         out.push(`0 @${rec.id}@ INDI`);
-
+        
         // Name Parsing
         if (rec.data.NAME) {
             rec.data.NAME.forEach(nameField => {
@@ -134,8 +125,6 @@ export default class GedcomExporter {
                 }
 
                 out.push(`1 NAME ${gedName}`);
-                
-                // FTT allows name types (e.g., BIRTH, MARR, AKA)
                 if (type) {
                     out.push(`2 TYPE ${type}`);
                 }
@@ -150,7 +139,7 @@ export default class GedcomExporter {
         this._writeEvent(rec, 'BORN', 'BIRT', out);
         this._writeEvent(rec, 'DIED', 'DEAT', out);
 
-        // Shared Events (EVENT_REF) - Flattening Logic
+        // Shared Events (EVENT_REF)
         if (rec.data.EVENT_REF) {
             rec.data.EVENT_REF.forEach(ref => {
                 const evtId = ref.parsed[0];
@@ -167,25 +156,21 @@ export default class GedcomExporter {
             });
         }
 
-        // --- Associate Export (Best Effort) ---
+        // Associate Export
         if (rec.data.ASSOC) {
             rec.data.ASSOC.forEach(assoc => {
                 const targetId = assoc.parsed[0];
                 const role = assoc.parsed[1] || 'ASSOCIATE';
-                const startDate = assoc.parsed[2]; // FTT allows dates
-                const details = assoc.parsed[4];   // FTT allows details
+                const startDate = assoc.parsed[2]; 
+                const details = assoc.parsed[4]; 
 
-                // Basic Linkage
                 out.push(`1 ASSO @${targetId}@`);
                 out.push(`2 RELA ${role}`);
 
-                // Handle Data Loss
-                // GEDCOM 5.5.1 ASSO does not support DATE. We must log this.
                 if (startDate) {
                     this._log(rec.id, `ASSOC to ${targetId}: Date '${startDate}' stripped (Not supported in GEDCOM ASSO).`);
                 }
 
-                // Map Details to Note
                 if (details) {
                     out.push(`2 NOTE ${details}`);
                 }
@@ -234,14 +219,25 @@ export default class GedcomExporter {
             
             const place = f.parsed[1];
             if (place) {
-                // FTT: "City; Country" -> GED: "City, Country"
-                out.push(`2 PLAC ${place.replace(/;/g, ',')}`);
-                // CHECK FOR METADATA LOSS (Geocoding/Coordinates)
-                if (f.metadata && (f.metadata.geo || f.metadata.coords)) {
-                    // 5.5.1 has MAP.LATI/LONG but strictly for PLAC structures.
-                    // Simple exporters often skip this complexity.
-                    // We log the loss of high-fidelity geodata.
-                    this._log(rec.id, `${fttKey}: Coordinates/Historical name for '${place}' stripped.`);
+                // 1. Write the Display Name (Semicolons -> Commas)
+                // FTT: "Berlin; Ontario" -> GED: "Berlin, Ontario"
+                out.push(`2 PLAC ${place.replace(/;/g, ', ')}`);
+                
+                // 2. Preserve Coordinates (GEDCOM 5.5.1 MAP Structure)
+                if (f.metadata && f.metadata.coords) {
+                    const [lat, long] = f.metadata.coords.split(',').map(s => s.trim());
+                    if (lat && long) {
+                        out.push(`3 MAP`);
+                        out.push(`4 LATI ${lat}`);
+                        out.push(`4 LONG ${long}`);
+                    }
+                }
+
+                // 3. Preserve Historical/Modern Metadata (NOTE)
+                // FTT {=Modern} names are extracted to metadata.geo by the parser
+                if (f.metadata && f.metadata.geo) {
+                    // We attach this as a NOTE on the PLAC record to ensure it travels with the place data
+                    out.push(`3 NOTE Standardized/Modern Place: ${f.metadata.geo.replace(/;/g, ', ')}`);
                 }
             }
 
@@ -291,7 +287,6 @@ export default class GedcomExporter {
             events: [],
             hasMarr: false
         };
-
         ids.forEach(pid => {
             const prec = allRecords[pid];
             // Treat placeholders as Unknown sex for safety
@@ -314,8 +309,7 @@ export default class GedcomExporter {
     _gedDate(fttDate) {
         if (!fttDate) return null;
         const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
-        // ISO to GEDCOM conversion
+        
         const isoMatch = fttDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (isoMatch) {
             return `${parseInt(isoMatch[3])} ${months[parseInt(isoMatch[2])-1]} ${isoMatch[1]}`;
@@ -328,13 +322,10 @@ export default class GedcomExporter {
         
         if (/^\d{4}$/.test(fttDate)) return fttDate;
 
-        // Handle '?' suffix (Uncertain) same as '~' (Approx)
         if (fttDate.endsWith('~') || fttDate.endsWith('?')) {
             return `ABT ${fttDate.replace(/[~?]/g, '')}`;
         }
         
-        // FTT [A..B] is a "Window".
-        // GEDCOM BET A AND B implies roughly the same.
         const rangeMatch = fttDate.match(/^\[(.*?)\.\.(.*?)\]$/);
         if (rangeMatch) {
             const start = rangeMatch[1].trim();

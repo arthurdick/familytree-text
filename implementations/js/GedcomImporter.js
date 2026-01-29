@@ -338,12 +338,31 @@ export default class GedcomImporter {
     const evtNode = this._extractNode(parentNode, gedTag);
     if (evtNode) {
       const date = this._convertDate(this._extractTag(evtNode, 'DATE'));
-      const place = this._extractTag(evtNode, 'PLAC') || '';
-      const fttPlace = place.replace(/,/g, ';');
+      
+      // --- Place & Map Processing ---
+      let fttPlace = '';
+      const placNode = this._extractNode(evtNode, 'PLAC');
+      
+      if (placNode) {
+          // Standard FTT delimiter conversion (Comma -> Semicolon)
+          fttPlace = (placNode.value || '').replace(/,/g, ';');
+
+          // Check for Geocoordinates (MAP structure)
+          const mapNode = this._extractNode(placNode, 'MAP');
+          if (mapNode) {
+              const lat = this._extractTag(mapNode, 'LATI');
+              const long = this._extractTag(mapNode, 'LONG');
+              
+              if (lat && long) {
+                  // Append to place string in FTT format
+                  fttPlace += ` <${lat}, ${long}>`;
+              }
+          }
+      }
       
       out.push(`${fttKey}: ${date} | ${fttPlace}`);
 
-      // Citations
+      // --- Citations ---
       const sourNodes = evtNode.children.filter(c => c.tag === 'SOUR');
       sourNodes.forEach(s => {
         s.handled = true; // Mark handled
