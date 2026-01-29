@@ -369,7 +369,7 @@ export class RelationshipCalculator {
                     
                     // Revert to simple heuristic: 
                     // If Uncle has 2 parents recorded, and we only share 1 ancestor -> Half.
-                    // If Uncle has 1 parent recorded (missing data), and we share 1 -> Ambiguous (FIX).
+                    // If Uncle has 1 parent recorded (missing data), and we share 1 -> Ambiguous.
                     
                     const parentsUncle = this.lineageParents.get(uId) || [];
                     
