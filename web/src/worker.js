@@ -262,7 +262,7 @@ function convertToCytoscape(parsedData, ranks) {
         return scoreA - scoreB;
     });
 
-    function addNode(id, label, subLabel, type) {
+    function addNode(id, label, subLabel, type, privacy) {
         if (createdNodeIds.has(id)) return;
         const rank = ranks[id] !== undefined ? ranks[id] : 0;
 
@@ -272,6 +272,7 @@ function convertToCytoscape(parsedData, ranks) {
                 label,
                 subLabel,
                 type,
+                privacy, // Added privacy field to node data
                 elk: {
                     "org.eclipse.elk.layered.layerIndex": rank
                 }
@@ -283,7 +284,8 @@ function convertToCytoscape(parsedData, ranks) {
     function ensurePlaceholderNode(id) {
         if (!createdNodeIds.has(id)) {
             // Implicit/Placeholder node
-            addNode(id, id, "(Unknown)", "PLACEHOLDER");
+            // Placeholders default to OPEN
+            addNode(id, id, "(Unknown)", "PLACEHOLDER", "OPEN");
         }
     }
 
@@ -297,6 +299,8 @@ function convertToCytoscape(parsedData, ranks) {
         if (rec.type === "SOURCE" || rec.type === "EVENT") continue;
         let label = id;
         let subLabel = "";
+        let privacy = "OPEN"; // Default
+
         if (rec.type === "INDIVIDUAL" || rec.type === "PLACEHOLDER") {
             if (rec.data.NAME && rec.data.NAME.length > 0) {
                 label = rec.data.NAME[0].parsed[0] || id;
@@ -306,8 +310,12 @@ function convertToCytoscape(parsedData, ranks) {
             if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
                 subLabel = rec.data.BORN[0].parsed[0];
             }
+            // Extract Privacy Status
+            if (rec.data.PRIVACY && rec.data.PRIVACY.length > 0) {
+                privacy = rec.data.PRIVACY[0].parsed[0] || "OPEN";
+            }
         }
-        addNode(id, label, subLabel, rec.type);
+        addNode(id, label, subLabel, rec.type, privacy);
     }
 
     function getHub(p1, p2) {

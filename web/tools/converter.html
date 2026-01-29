@@ -45,6 +45,17 @@
                 text-align: center;
                 min-height: 20px;
             }
+
+            .checkbox-label {
+                font-size: 0.9rem;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+                user-select: none;
+                margin-top: 10px;
+                font-weight: normal;
+            }
         </style>
     </head>
     <body class="full-screen-app">
@@ -65,6 +76,13 @@
             <div class="controls">
                 <button id="btn-to-ftt" class="btn btn-primary">GEDCOM &rarr; FTT</button>
                 <button id="btn-to-ged" class="btn btn-primary">FTT &rarr; GEDCOM</button>
+                <label
+                    class="checkbox-label"
+                    title="Hide Private records and mask Living data (FTT -> GEDCOM only)"
+                >
+                    <input type="checkbox" id="chk-privacy" />
+                    Privacy Mode
+                </label>
             </div>
 
             <div class="panel">

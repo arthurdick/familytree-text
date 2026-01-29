@@ -167,6 +167,16 @@
                 border-top: 2px solid #dc3545;
                 background-color: #fff5f5;
             }
+
+            /* Checkbox style */
+            .checkbox-label {
+                font-size: 0.9rem;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+                user-select: none;
+            }
         </style>
     </head>
     <body>
@@ -175,6 +185,13 @@
                 <div id="toolbar">
                     <span style="font-weight: 600; color: #495057">FTT Editor</span>
                     <div id="toolbar-group">
+                        <label
+                            class="checkbox-label"
+                            title="Hide Private records and mask Living data"
+                        >
+                            <input type="checkbox" id="chk-privacy" />
+                            Privacy Mode
+                        </label>
                         <button id="btn-render" class="btn btn-primary" title="Ctrl+Enter">
                             Render Graph
                         </button>

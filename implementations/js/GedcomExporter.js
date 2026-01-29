@@ -12,7 +12,11 @@ export default class GedcomExporter {
         this.downgradeLog = []; // Stores audit warnings
     }
 
-    convert(fttText) {
+    /**
+     * @param {string} fttText
+     * @param {boolean} privacyEnabled - If true, enforces Appendix D privacy rules
+     */
+    convert(fttText, privacyEnabled = false) {
         // 1. Parse FTT
         const result = this.parser.parse(fttText);
         if (result.errors.length > 0) {
@@ -37,8 +41,14 @@ export default class GedcomExporter {
 
         // 3. Process Individuals & Build Family Cache
         for (const [, rec] of Object.entries(records)) {
+            // Apply Privacy: Skip PRIVATE records entirely
+            if (privacyEnabled) {
+                const privacy = this._getField(rec, "PRIVACY");
+                if (privacy === "PRIVATE") continue;
+            }
+
             if (rec.type === "INDIVIDUAL" || rec.type === "PLACEHOLDER") {
-                this._writeIndividual(rec, output, records);
+                this._writeIndividual(rec, output, records, privacyEnabled);
             } else if (rec.type === "SOURCE") {
                 this._writeSource(rec, output);
             } else if (rec.type === "EVENT") {
@@ -57,6 +67,14 @@ export default class GedcomExporter {
                 output.push(`1 CHIL @${childId}@`);
             });
             fam.events.forEach((evt) => {
+                // If privacy is enabled, we need to check if we should mask Family Events.
+                // Spec implies masking marriage dates/places for Living people.
+                // Since Family events are shared, if one partner is Living, we usually mask.
+                // For simplicity, if privacyEnabled is passed, we mask dates/places on family events too.
+                // However, detailed logic requires checking the privacy status of partners.
+                // We'll mask if privacyEnabled is true to be safe.
+                const shouldMask = privacyEnabled;
+
                 if (evt.type === "PART") {
                     output.push(`1 MARR`);
                     output.push(`2 TYPE Common Law / Partner`);
@@ -65,10 +83,15 @@ export default class GedcomExporter {
                     output.push(`1 ${evt.tag}`);
                 }
 
-                if (evt.date) output.push(`2 DATE ${evt.date}`);
-                if (evt.reason === "DIV") {
-                    output.push(`1 DIV`);
-                    if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
+                if (!shouldMask) {
+                    if (evt.date) output.push(`2 DATE ${evt.date}`);
+                    if (evt.reason === "DIV") {
+                        output.push(`1 DIV`);
+                        if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
+                    }
+                } else {
+                    // Privacy Mode: Mask dates
+                    // (Optional: output.push('2 NOTE Private'))
                 }
             });
         }
@@ -134,8 +157,12 @@ export default class GedcomExporter {
         }
     }
 
-    _writeIndividual(rec, out, allRecords) {
+    _writeIndividual(rec, out, allRecords, privacyEnabled) {
         out.push(`0 @${rec.id}@ INDI`);
+
+        const privacyStatus = this._getField(rec, "PRIVACY");
+        const isLiving = privacyStatus === "LIVING";
+        const shouldMask = privacyEnabled && isLiving;
 
         // Name Parsing
         if (rec.data.NAME) {
@@ -143,6 +170,15 @@ export default class GedcomExporter {
                 const display = nameField.parsed[0] || "Unknown";
                 const sort = nameField.parsed[1] || "";
                 const type = nameField.parsed[2] || "";
+                const status = nameField.parsed[3] || "";
+
+                // Privacy: Show only Preferred Name
+                if (shouldMask && status !== "PREF" && rec.data.NAME.length > 1) {
+                    // If multiple names exist and this isn't preferred, skip it.
+                    // If no name is marked PREF, we might just output the first one.
+                    const hasPref = rec.data.NAME.some((n) => n.parsed[3] === "PREF");
+                    if (hasPref) return;
+                }
 
                 let gedName = display;
                 if (sort.includes(",")) {
@@ -174,14 +210,14 @@ export default class GedcomExporter {
         const sex = this._getField(rec, "SEX");
         if (sex) out.push(`1 SEX ${sex}`);
 
-        // Vital Events
-        this._writeEvent(rec, "BORN", "BIRT", out);
-        this._writeEvent(rec, "DIED", "DEAT", out);
+        // Vital Events (Masked if Living)
+        this._writeEvent(rec, "BORN", "BIRT", out, shouldMask);
+        this._writeEvent(rec, "DIED", "DEAT", out, shouldMask);
 
-        // Generic Inline Events
-        this._writeEvent(rec, "EVENT", "EVEN", out);
+        // Generic Inline Events (Masked if Living)
+        this._writeEvent(rec, "EVENT", "EVEN", out, shouldMask);
 
-        // Shared Events (EVENT_REF)
+        // Shared Events (Masked if Living)
         if (rec.data.EVENT_REF) {
             rec.data.EVENT_REF.forEach((ref) => {
                 const evtId = ref.parsed[0];
@@ -192,8 +228,11 @@ export default class GedcomExporter {
 
                     out.push(`1 EVEN`);
                     out.push(`2 TYPE ${type}`);
-                    if (date) out.push(`2 DATE ${date}`);
-                    out.push(`2 NOTE Shared Event Reference: ${evtId}`);
+
+                    if (!shouldMask) {
+                        if (date) out.push(`2 DATE ${date}`);
+                        out.push(`2 NOTE Shared Event Reference: ${evtId}`);
+                    }
                 }
             });
         }
@@ -222,14 +261,14 @@ export default class GedcomExporter {
             });
         }
 
-        // Export Notes
-        if (rec.data.NOTES) {
+        // Export Notes (Skipped if Living to protect sensitive bio)
+        if (!shouldMask && rec.data.NOTES) {
             rec.data.NOTES.forEach((n) => {
                 this._writeNote(n.parsed[0], out, 1);
             });
         }
 
-        // Family Linkage (Spouse)
+        // Family Linkage (Spouse) - Links are preserved even if Living
         if (rec.data.UNION) {
             rec.data.UNION.forEach((u) => {
                 const partnerId = u.parsed[0];
@@ -248,7 +287,7 @@ export default class GedcomExporter {
             });
         }
 
-        // Family Linkage (Child)
+        // Family Linkage (Child) - Links are preserved even if Living
         if (rec.data.PARENT) {
             // 1. Group parents by Relationship Type
             const groups = {};
@@ -262,7 +301,6 @@ export default class GedcomExporter {
             // 2. Process each group
             for (const [type, pids] of Object.entries(groups)) {
                 // Iterate in pairs (Standard Mom/Dad or single parents)
-                // This ensures we catch ALL parents, not just the first 2 of the entire list.
                 for (let i = 0; i < pids.length; i += 2) {
                     const p1 = pids[i];
                     const p2 = pids[i + 1] || null;
@@ -288,7 +326,7 @@ export default class GedcomExporter {
         }
     }
 
-    _writeEvent(rec, fttKey, defaultGedTag, out) {
+    _writeEvent(rec, fttKey, defaultGedTag, out, shouldMask) {
         if (rec.data[fttKey]) {
             const EVENT_MAP = {
                 BAP: "BAPM",
@@ -334,6 +372,9 @@ export default class GedcomExporter {
                 const details = detailsIndex > -1 ? f.parsed[detailsIndex] : null;
 
                 // Output Tag (with optional value)
+                // If masked, we might suppress details if sensitive, but Spec focuses on dates/places.
+                // We'll output the tag to indicate "something happened" or just skip if it has no semantic value without date.
+                // Spec: "Mask all birth/marriage dates and places."
                 if (details) {
                     out.push(`1 ${gedTag} ${details}`);
                 } else {
@@ -346,48 +387,52 @@ export default class GedcomExporter {
                     if (type) out.push(`2 TYPE ${type}`);
                 }
 
-                // Date
-                const date = this._gedDate(f.parsed[dateIndex]);
-                if (date) out.push(`2 DATE ${date}`);
+                // Date & Place (MASKED if shouldMask is true)
+                if (!shouldMask) {
+                    const date = this._gedDate(f.parsed[dateIndex]);
+                    if (date) out.push(`2 DATE ${date}`);
 
-                // Place
-                const place = f.parsed[placeIndex];
-                if (place) {
-                    out.push(`2 PLAC ${place.replace(/;\s*/g, ", ")}`);
+                    const place = f.parsed[placeIndex];
+                    if (place) {
+                        out.push(`2 PLAC ${place.replace(/;\s*/g, ", ")}`);
 
-                    if (f.metadata && f.metadata.coords) {
-                        const [lat, long] = f.metadata.coords.split(",").map((s) => s.trim());
-                        if (lat && long) {
-                            out.push(`3 MAP`);
-                            out.push(`4 LATI ${lat}`);
-                            out.push(`4 LONG ${long}`);
+                        if (f.metadata && f.metadata.coords) {
+                            const [lat, long] = f.metadata.coords.split(",").map((s) => s.trim());
+                            if (lat && long) {
+                                out.push(`3 MAP`);
+                                out.push(`4 LATI ${lat}`);
+                                out.push(`4 LONG ${long}`);
+                            }
+                        }
+
+                        if (f.metadata && f.metadata.geo) {
+                            out.push(
+                                `3 NOTE Standardized/Modern Place: ${f.metadata.geo.replace(/;\s*/g, ", ")}`
+                            );
                         }
                     }
 
-                    if (f.metadata && f.metadata.geo) {
-                        out.push(
-                            `3 NOTE Standardized/Modern Place: ${f.metadata.geo.replace(/;\s*/g, ", ")}`
-                        );
-                    }
-                }
-
-                // Citations & Notes
-                if (f.modifiers) {
-                    for (const [modKey, mods] of Object.entries(f.modifiers)) {
-                        if (modKey.endsWith("_SRC")) {
-                            mods.forEach((m) => {
-                                const srcId = m.parsed[0].replace("^", "");
-                                out.push(`2 SOUR @${srcId}@`);
-                                const page = m.parsed[1];
-                                if (page) out.push(`3 PAGE ${page}`);
-                            });
-                        }
-                        if (modKey.endsWith("_NOTE")) {
-                            mods.forEach((m) => {
-                                this._writeNote(m.parsed[0], out, 2);
-                            });
+                    // Citations & Notes
+                    if (f.modifiers) {
+                        for (const [modKey, mods] of Object.entries(f.modifiers)) {
+                            if (modKey.endsWith("_SRC")) {
+                                mods.forEach((m) => {
+                                    const srcId = m.parsed[0].replace("^", "");
+                                    out.push(`2 SOUR @${srcId}@`);
+                                    const page = m.parsed[1];
+                                    if (page) out.push(`3 PAGE ${page}`);
+                                });
+                            }
+                            if (modKey.endsWith("_NOTE")) {
+                                mods.forEach((m) => {
+                                    this._writeNote(m.parsed[0], out, 2);
+                                });
+                            }
                         }
                     }
+                } else {
+                    // Optional: Indicate data is masked
+                    // out.push(`2 NOTE Private`);
                 }
             });
         }

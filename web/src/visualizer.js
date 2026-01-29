@@ -49,6 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const editor = document.getElementById("editor");
     const btnRender = document.getElementById("btn-render");
     const errorBox = document.getElementById("error-box");
+    const chkPrivacy = document.getElementById("chk-privacy");
 
     // File Menu Elements
     const btnFileMenu = document.getElementById("btn-file-menu");
@@ -313,6 +314,56 @@ document.addEventListener("DOMContentLoaded", () => {
         editor.scrollTop = scrollPos > 0 ? scrollPos : 0;
     }
 
+    // --- Privacy Filter Logic ---
+
+    function applyPrivacyFilter(elements) {
+        const filteredNodes = [];
+        const filteredEdges = [];
+        const excludedIds = new Set();
+
+        // Helper to reliably distinguish nodes from edges in the raw worker output
+        // (Worker output does not always include 'group' property explicitly)
+        const isEdge = (ele) =>
+            ele.group === "edges" || (ele.data && ele.data.source && ele.data.target);
+        const isNode = (ele) => !isEdge(ele);
+
+        // 1. Filter Nodes
+        elements.forEach((ele) => {
+            if (isNode(ele)) {
+                const type = ele.data.type;
+                if (type === "INDIVIDUAL" || type === "PLACEHOLDER") {
+                    const privacy = ele.data.privacy || "OPEN";
+
+                    if (privacy === "PRIVATE") {
+                        excludedIds.add(ele.data.id);
+                        // Do not add to filteredNodes
+                    } else if (privacy === "LIVING") {
+                        // Mask data for Living: Clear subLabel (dates/places)
+                        const clone = JSON.parse(JSON.stringify(ele));
+                        clone.data.subLabel = ""; // Clear dates
+                        filteredNodes.push(clone);
+                    } else {
+                        filteredNodes.push(ele);
+                    }
+                } else {
+                    // Always include helper nodes (Union, Hubs, etc)
+                    filteredNodes.push(ele);
+                }
+            }
+        });
+
+        // 2. Filter Edges
+        elements.forEach((ele) => {
+            if (isEdge(ele)) {
+                if (!excludedIds.has(ele.data.source) && !excludedIds.has(ele.data.target)) {
+                    filteredEdges.push(ele);
+                }
+            }
+        });
+
+        return [...filteredNodes, ...filteredEdges];
+    }
+
     // --- Worker Response Handler ---
     worker.onmessage = (e) => {
         const { type, payload } = e.data;
@@ -327,7 +378,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (type === "SUCCESS") {
-            const { elements, errors, warnings } = payload;
+            let { elements, errors, warnings } = payload;
+
+            // Apply Privacy Filter if enabled
+            if (chkPrivacy.checked) {
+                elements = applyPrivacyFilter(elements);
+            }
 
             // 1. Update UI Validation
             const hasErrors = errors && errors.length > 0;
@@ -484,6 +540,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 fileMenuContent.classList.remove("show");
             }
         }
+    });
+
+    // Re-render when Privacy Toggle changes
+    chkPrivacy.addEventListener("change", () => {
+        render();
     });
 
     // Shortcut: Ctrl+Enter / Cmd+Enter to Render
