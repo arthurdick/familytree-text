@@ -450,8 +450,8 @@ class ParseSession {
         const rawDate = record.data['BORN'][0].parsed[0];
         if (!rawDate) return "9999";
         
-        // Extract first 4 digits (Year)
-        const match = rawDate.match(/([0-9]{4})/);
+        // Extract longest valid ISO date match (YYYY, YYYY-MM, or YYYY-MM-DD)
+        const match = rawDate.match(/([0-9]{4}(?:-[0-9]{2})?(?:-[0-9]{2})?)/);
         return match ? match[1] : "9999";
     }
 
