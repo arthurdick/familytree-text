@@ -49,8 +49,10 @@ export default class GedcomExporter {
         // 4. Process Families
         for (const fam of this.famCache.values()) {
             output.push(`0 ${fam.id} FAM`);
-            if (fam.husb) output.push(`1 HUSB @${fam.husb}@`);
-            if (fam.wife) output.push(`1 WIFE @${fam.wife}@`);
+
+            fam.husbs.forEach((h) => output.push(`1 HUSB @${h}@`));
+            fam.wives.forEach((w) => output.push(`1 WIFE @${w}@`));
+
             fam.children.forEach((childId) => {
                 output.push(`1 CHIL @${childId}@`);
             });
@@ -424,22 +426,32 @@ export default class GedcomExporter {
         const famId = `@F${this.famCounter++}@`;
         const famObj = {
             id: famId,
-            husb: null,
-            wife: null,
+            husbs: [],
+            wives: [],
             children: [],
             events: [],
             hasMarr: false
         };
+
         ids.forEach((pid) => {
             const prec = allRecords[pid];
             const sex =
                 prec && prec.data.SEX && prec.data.SEX[0] ? prec.data.SEX[0].parsed[0] : "U";
 
-            if (sex === "M" && !famObj.husb) famObj.husb = pid;
-            else if (sex === "F" && !famObj.wife) famObj.wife = pid;
-            else {
-                if (!famObj.husb) famObj.husb = pid;
-                else famObj.wife = pid;
+            if (sex === "M") {
+                famObj.husbs.push(pid);
+            } else if (sex === "F") {
+                famObj.wives.push(pid);
+            } else {
+                // Fallback for Unknown/Other:
+                // Try to fill empty slots to create valid structure.
+                if (famObj.husbs.length === 0) {
+                    famObj.husbs.push(pid);
+                } else if (famObj.wives.length === 0) {
+                    famObj.wives.push(pid);
+                } else {
+                    famObj.husbs.push(pid);
+                }
             }
         });
 
