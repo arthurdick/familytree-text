@@ -6,7 +6,6 @@
 
 const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_\.-]*$/u;
 const KEY_PATTERN = /^([A-Z0-9_]+):(?:\s+(.*))?$/;
-const DATE_PATTERN = /^(\?|\.\.|-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?|\[(?:-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?)?\.\.(?:-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?)?\])$/;
 
 export default class FTTParser {
     constructor() {
@@ -722,7 +721,7 @@ class ParseSession {
                         indicesToCheck.forEach(idx => {
                             if (field.parsed.length > idx) {
                                 const dateVal = field.parsed[idx];
-                                if (dateVal && !DATE_PATTERN.test(dateVal)) {
+                                if (dateVal && !isValidFTTDate(dateVal)) {
                                     this._error('INVALID_DATE', `Invalid ISO 8601/EDTF Date "${dateVal}"`, field.line);
                                 }
                             }
@@ -749,4 +748,88 @@ class ParseSession {
     _warning(code, msg, line) {
         this.warnings.push(new FTTError(code, msg, line, 'WARNING'));
     }
+}
+
+/**
+ * EDTF / ISO 8601-2 Level 2 Validator for FTT
+ */
+function isValidFTTDate(dateStr) {
+    if (!dateStr) return false;
+    const str = dateStr.trim();
+
+    // 1. Special Literals
+    if (str === '?' || str === '..') return true; // Unknown or Open/Ongoing
+
+    // 2. Bounding Window (One of a set) [Start..End]
+    if (str.startsWith('[') && str.endsWith(']')) {
+        const content = str.slice(1, -1);
+        
+        // FTT Spec implies [Earliest..Latest] syntax
+        if (!content.includes('..')) return false; 
+
+        const parts = content.split('..');
+        if (parts.length !== 2) return false; // Too many segments
+
+        const [start, end] = parts;
+        
+        // Allow open bounds like [..1900] or [1900..]
+        // We validate sub-parts only if they are not empty string.
+        const validStart = !start || validateSimpleDate(start.trim());
+        const validEnd = !end || validateSimpleDate(end.trim());
+
+        return validStart && validEnd && (start || end); // At least one bound must exist
+    }
+
+    // 3. Simple Date (Point in Time)
+    return validateSimpleDate(str);
+}
+
+/**
+ * Validates a single EDTF date string (e.g. "1980-05-12?").
+ */
+function validateSimpleDate(str) {
+    // Structure: 
+    // ^ (-)? (YYYY or XXXX) -? (MM or XX)? -? (DD or XX)? ([?~]+)? $
+    const match = str.match(/^(-?)([\dX]{4})(?:-([\dX]{2})(?:-([\dX]{2}))?)?([?~]+)?$/);
+    if (!match) return false;
+
+    const [, neg, year, month, day, suffix] = match;
+
+    // 1. Year Check
+    // 4 digits or X. No specific logic needed beyond regex.
+    // (Negative years are allowed by regex).
+
+    // 2. Month Check
+    let isSeason = false;
+    if (month) {
+        if (!month.includes('X')) {
+            const m = parseInt(month, 10);
+            // Months: 01-12
+            // Seasons (Level 2): 21 (Spring), 22 (Summer), 23 (Autumn), 24 (Winter)
+            const isStandard = m >= 1 && m <= 12;
+            isSeason = m >= 21 && m <= 24;
+
+            if (!isStandard && !isSeason) return false;
+        }
+    }
+
+    // 3. Day Check
+    if (day) {
+        // Seasons cannot have days
+        if (isSeason) return false;
+
+        if (!day.includes('X')) {
+            const d = parseInt(day, 10);
+            if (d < 1 || d > 31) return false;
+
+            // Basic days-in-month check (if month is known and numeric)
+            if (month && !month.includes('X')) {
+                const m = parseInt(month, 10);
+                const maxDays = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Allow 29 for Feb (Leap safety)
+                if (m <= 12 && d > maxDays[m]) return false;
+            }
+        }
+    }
+
+    return true;
 }
