@@ -139,6 +139,9 @@ export default class GedcomExporter {
         this._writeEvent(rec, 'BORN', 'BIRT', out);
         this._writeEvent(rec, 'DIED', 'DEAT', out);
 
+        // Generic Inline Events
+        this._writeEvent(rec, 'EVENT', 'EVEN', out);
+
         // Shared Events (EVENT_REF)
         if (rec.data.EVENT_REF) {
             rec.data.EVENT_REF.forEach(ref => {
@@ -211,49 +214,60 @@ export default class GedcomExporter {
 
     _writeEvent(rec, fttKey, gedTag, out) {
         if (rec.data[fttKey]) {
-            const f = rec.data[fttKey][0];
-            out.push(`1 ${gedTag}`);
-            
-            const date = this._gedDate(f.parsed[0]);
-            if (date) out.push(`2 DATE ${date}`);
-            
-            const place = f.parsed[1];
-            if (place) {
-                // 1. Write the Display Name (Semicolons -> Commas)
-                // FTT: "Berlin; Ontario" -> GED: "Berlin, Ontario"
-                out.push(`2 PLAC ${place.replace(/;/g, ', ')}`);
+            rec.data[fttKey].forEach(f => {
+                out.push(`1 ${gedTag}`);
+
+                // Generic events usually have TYPE as first param, Vitals have DATE.
+                // We need to distinguish based on the fttKey.
+                let dateIndex = 0;
+                let placeIndex = 1;
+                let typeIndex = -1;
+
+                if (fttKey === 'EVENT') {
+                    // EVENT: TYPE | DATE | END | PLACE
+                    typeIndex = 0;
+                    dateIndex = 1;
+                    placeIndex = 3;
+                    
+                    const type = f.parsed[typeIndex];
+                    if (type) out.push(`2 TYPE ${type}`);
+                }
                 
-                // 2. Preserve Coordinates (GEDCOM 5.5.1 MAP Structure)
-                if (f.metadata && f.metadata.coords) {
-                    const [lat, long] = f.metadata.coords.split(',').map(s => s.trim());
-                    if (lat && long) {
-                        out.push(`3 MAP`);
-                        out.push(`4 LATI ${lat}`);
-                        out.push(`4 LONG ${long}`);
+                const date = this._gedDate(f.parsed[dateIndex]);
+                if (date) out.push(`2 DATE ${date}`);
+                
+                const place = f.parsed[placeIndex];
+                if (place) {
+                    out.push(`2 PLAC ${place.replace(/;\s*/g, ', ')}`);
+                    
+                    if (f.metadata && f.metadata.coords) {
+                        const [lat, long] = f.metadata.coords.split(',').map(s => s.trim());
+                        if (lat && long) {
+                            out.push(`3 MAP`);
+                            out.push(`4 LATI ${lat}`);
+                            out.push(`4 LONG ${long}`);
+                        }
+                    }
+
+                    if (f.metadata && f.metadata.geo) {
+                        out.push(`3 NOTE Standardized/Modern Place: ${f.metadata.geo.replace(/;\s*/g, ', ')}`);
                     }
                 }
 
-                // 3. Preserve Historical/Modern Metadata (NOTE)
-                // FTT {=Modern} names are extracted to metadata.geo by the parser
-                if (f.metadata && f.metadata.geo) {
-                    // We attach this as a NOTE on the PLAC record to ensure it travels with the place data
-                    out.push(`3 NOTE Standardized/Modern Place: ${f.metadata.geo.replace(/;/g, ', ')}`);
-                }
-            }
-
-            // Citations
-            if (f.modifiers) {
-                for (const [modKey, mods] of Object.entries(f.modifiers)) {
-                    if (modKey.endsWith('_SRC')) {
-                        mods.forEach(m => {
-                            const srcId = m.parsed[0].replace('^', '');
-                            out.push(`2 SOUR @${srcId}@`);
-                            const page = m.parsed[1];
-                            if(page) out.push(`3 PAGE ${page}`);
-                        });
+                // Citations
+                if (f.modifiers) {
+                    for (const [modKey, mods] of Object.entries(f.modifiers)) {
+                        if (modKey.endsWith('_SRC')) {
+                            mods.forEach(m => {
+                                const srcId = m.parsed[0].replace('^', '');
+                                out.push(`2 SOUR @${srcId}@`);
+                                const page = m.parsed[1];
+                                if(page) out.push(`3 PAGE ${page}`);
+                            });
+                        }
                     }
                 }
-            }
+            });
         }
     }
 
