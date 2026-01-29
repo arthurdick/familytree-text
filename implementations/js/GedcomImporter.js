@@ -240,6 +240,9 @@ export default class GedcomImporter {
     this._writeEvent(indi, 'BIRT', 'BORN', out);
     this._writeEvent(indi, 'DEAT', 'DIED', out);
 
+    // OTHER EVENTS (Standard Genealogical Events)
+    this._writeGenericEvents(indi, out);
+
     // PARENTS (FAMC)
     // We scan for FAMC nodes and mark them handled
     const famcNodes = indi.children.filter(c => c.tag === 'FAMC');
@@ -382,6 +385,53 @@ export default class GedcomImporter {
         out.push(`${fttKey}_SRC: ^${sId} | ${page}`);
       });
     }
+  }
+
+  _writeGenericEvents(indi, out) {
+    const EVENT_MAP = {
+      'BAPM': 'BAP', 'BURI': 'BUR', 'CREM': 'CREM', 'CONF': 'CONF',
+      'CENS': 'CENS', 'PROB': 'PROB', 'WILL': 'WILL', 'NATU': 'NAT',
+      'IMMI': 'IMM', 'EMIG': 'EMIG', 'EDUC': 'EDUC', 'OCCU': 'OCC',
+      'RETI': 'RET', 'RESI': 'RESI'
+    };
+
+    // Iterate over children to find matching tags
+    // We use a filter to handle multiple occurrences of the same event type (e.g. CENS)
+    const events = indi.children.filter(c => EVENT_MAP.hasOwnProperty(c.tag));
+
+    events.forEach(node => {
+      node.handled = true;
+      const fttType = EVENT_MAP[node.tag];
+      const date = this._convertDate(this._extractTag(node, 'DATE'));
+      
+      // Place Processing
+      let place = '';
+      const placNode = this._extractNode(node, 'PLAC');
+      if (placNode) {
+        place = (placNode.value || '').replace(/,/g, ';');
+        const mapNode = this._extractNode(placNode, 'MAP');
+        if (mapNode) {
+          const lat = this._extractTag(mapNode, 'LATI');
+          const long = this._extractTag(mapNode, 'LONG');
+          if (lat && long) place += ` <${lat}, ${long}>`;
+        }
+      }
+
+      const details = (node.value || '').replace(/\n/g, ' ').trim();
+      
+      // EVENT: [TYPE] | [START_DATE] | [END_DATE] | [PLACE] | [DETAILS]
+      // We assume date is start date, end date empty for now.
+      out.push(`EVENT: ${fttType} | ${date} || ${place} | ${details}`);
+      
+      // Citations
+      const sourNodes = node.children.filter(c => c.tag === 'SOUR');
+      sourNodes.forEach(s => {
+        s.handled = true;
+        const sId = s.value.replace(/@/g, '');
+        const page = this._extractTag(s, 'PAGE') || '';
+        out.push(`EVENT_SRC: ^${sId} | ${page}`);
+      });
+    });
   }
 
   // =========================================================================

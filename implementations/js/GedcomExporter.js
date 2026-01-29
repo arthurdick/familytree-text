@@ -283,30 +283,59 @@ export default class GedcomExporter {
         }
     }
 
-    _writeEvent(rec, fttKey, gedTag, out) {
+    _writeEvent(rec, fttKey, defaultGedTag, out) {
         if (rec.data[fttKey]) {
-            rec.data[fttKey].forEach(f => {
-                out.push(`1 ${gedTag}`);
+            const EVENT_MAP = {
+                'BAP': 'BAPM', 'BUR': 'BURI', 'CREM': 'CREM', 'CONF': 'CONF',
+                'CENS': 'CENS', 'PROB': 'PROB', 'WILL': 'WILL', 'NAT': 'NATU',
+                'IMM': 'IMMI', 'EMIG': 'EMIG', 'EDUC': 'EDUC', 'OCC': 'OCCU',
+                'RET': 'RETI', 'RESI': 'RESI'
+            };
 
-                // Generic events usually have TYPE as first param, Vitals have DATE.
-                // We need to distinguish based on the fttKey.
+            rec.data[fttKey].forEach(f => {
+                let gedTag = defaultGedTag;
+                let writeType = false;
+                let typeIndex = -1;
                 let dateIndex = 0;
                 let placeIndex = 1;
-                let typeIndex = -1;
+                let detailsIndex = -1;
 
                 if (fttKey === 'EVENT') {
-                    // EVENT: TYPE | DATE | END | PLACE
+                    // EVENT: TYPE | DATE | END | PLACE | DETAILS
                     typeIndex = 0;
                     dateIndex = 1;
                     placeIndex = 3;
+                    detailsIndex = 4;
                     
+                    const fttType = f.parsed[0];
+                    if (fttType && EVENT_MAP[fttType]) {
+                        gedTag = EVENT_MAP[fttType];
+                    } else {
+                        writeType = true;
+                    }
+                }
+
+                // Get details (e.g. Occupation value)
+                const details = (detailsIndex > -1) ? f.parsed[detailsIndex] : null;
+
+                // Output Tag (with optional value)
+                if (details) {
+                    out.push(`1 ${gedTag} ${details}`);
+                } else {
+                    out.push(`1 ${gedTag}`);
+                }
+
+                // Generic Type
+                if (writeType) {
                     const type = f.parsed[typeIndex];
                     if (type) out.push(`2 TYPE ${type}`);
                 }
                 
+                // Date
                 const date = this._gedDate(f.parsed[dateIndex]);
                 if (date) out.push(`2 DATE ${date}`);
                 
+                // Place
                 const place = f.parsed[placeIndex];
                 if (place) {
                     out.push(`2 PLAC ${place.replace(/;\s*/g, ', ')}`);
