@@ -328,7 +328,7 @@ export default class GedcomImporter {
         if(lines.length > 0) {
             out.push(`NOTES: ${lines[0]}`);
             for(let i=1; i<lines.length; i++) {
-                out.push(`  ${lines[i]}`);
+                out.push(`\n  ${lines[i]}`);
             }
         }
     });
