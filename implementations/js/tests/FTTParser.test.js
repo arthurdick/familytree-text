@@ -84,6 +84,26 @@ NOTES: Line 1.
       expect(raw).toBe('Line 1. Line 2. Line 3.'); 
     });
     
+    it('should preserve indentation beyond the first 2 spaces (Poetry Support)', () => {
+      const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: POET-01
+NOTES: The first line.
+  
+    An indented second line.
+  
+      A doubly-indented third line.
+`;
+      const result = parser.parse(input);
+      const notes = result.records['POET-01'].data.NOTES[0].raw;
+
+      // Verification:
+      // 1. Newlines preserved via blank lines
+      // 2. Extra spaces (2 and 4 respectively) are preserved
+      expect(notes).toContain('The first line.\n  An indented second line.\n    A doubly-indented third line.');
+    });
+    
     it('should demonstrate how explicit paragraph breaks are handled', () => {
       const input = `
 HEAD_FORMAT: FTT v0.1

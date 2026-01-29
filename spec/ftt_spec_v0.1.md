@@ -27,7 +27,7 @@
 To ensure unambiguous parsing without complex lookahead requirements, the structure is defined strictly by column position.
 
 * **Key Position:** All Keys (e.g., `NAME:`, `BORN:`) **must** appear at the start of the line (Column 0).
-* **Content Indentation:** Any line beginning with exactly **2 spaces** is treated as a continuation of the previous key's value.
+* **Content Indentation:** Any line beginning with **at least 2 spaces** is treated as a continuation of the previous key's value. The parser must strip the **first two spaces** as a continuation marker; any additional leading whitespace is preserved as literal content.
 * **Blank Lines (Paragraph Breaks):**
 * A line that is **empty** or contains **only whitespace** is treated as a Paragraph Break if it occurs between two indented content lines.
 * It does **not** terminate the current block.
@@ -431,7 +431,7 @@ To correctly handle keys, multi-line content, and inline delimiters, parsers mus
 * **If YES (Continuation):**
 * Strip the leading 2 spaces.
 * *Space Folding Rule:* Check the last character in the current buffer. If it is not a newline marker, append a single **Space character**.
-* Append the remaining line content.
+* Append the remaining content (including any additional spaces) to the buffer.
 
 4. **Fall-through (Safety):**
 * If a line contains non-whitespace text at Column 0 but was not recognized as a Key in Step 1, raise a **Syntax Error** (Invalid Indentation or Unknown Key).
