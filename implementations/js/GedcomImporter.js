@@ -50,6 +50,17 @@ export default class GedcomImporter {
       const tag = match[3];
       const rawValue = match[4] || '';
       const cleanId = id ? id.replace(/@/g, '') : null;
+      
+      // FTT v0.1 requires UTF-8. We explicitly reject legacy encodings.
+      if (level === 1 && tag === 'CHAR') {
+        const charValue = rawValue.trim().toUpperCase();
+        if (charValue === 'ANSEL' || charValue === 'IBMPC' || charValue === 'WINDOWS-1252') {
+          throw new Error(
+            `Unsupported Encoding: FTT requires UTF-8. Your file is encoded as ${charValue}. ` +
+            `Please export your GEDCOM as UTF-8 before importing.`
+          );
+        }
+      }
 
       // Handle multiline concatenation (CONT/CONC)
       if (tag === 'CONT' || tag === 'CONC') {
