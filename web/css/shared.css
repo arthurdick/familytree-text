@@ -1,143 +1,184 @@
 :root {
-  --primary: #0d6efd;
-  --primary-hover: #0b5ed7;
-  --secondary: #6c757d;
-  --secondary-hover: #5c636a;
-  --light: #f8f9fa;
-  --dark: #212529;
-  --border: #dee2e6;
-  --warning: #ffc107;
-  --error: #dc3545;
-  --bg-color: #f8f9fa;
-  --text-color: #212529;
+    --primary: #0d6efd;
+    --primary-hover: #0b5ed7;
+    --secondary: #6c757d;
+    --secondary-hover: #5c636a;
+    --light: #f8f9fa;
+    --dark: #212529;
+    --border: #dee2e6;
+    --warning: #ffc107;
+    --error: #dc3545;
+    --bg-color: #f8f9fa;
+    --text-color: #212529;
 }
 
 /* --- Base --- */
-body, html {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: var(--text-color);
-  background-color: var(--bg-color);
-  margin: 0;
-  padding: 0;
-  line-height: 1.6;
+body,
+html {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text-color);
+    background-color: var(--bg-color);
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
 }
 
 /* --- Typography --- */
-h1, h2, h3 { margin-top: 0; color: #333; }
-h1 { font-size: 1.8rem; display: flex; align-items: center; gap: 10px; }
+h1,
+h2,
+h3 {
+    margin-top: 0;
+    color: #333;
+}
+h1 {
+    font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
 
-p, li, dd, dt {
-  color: #333;
-  margin-bottom: 1rem; 
+p,
+li,
+dd,
+dt {
+    color: #333;
+    margin-bottom: 1rem;
 }
 
 /* Prevent shared.css from tinting text inside the specialized Markdown container */
-.markdown-body p, 
-.markdown-body li, 
-.markdown-body dd, 
+.markdown-body p,
+.markdown-body li,
+.markdown-body dd,
 .markdown-body dt {
-  color: inherit; /* Let the GitHub Markdown CSS handle the prose color */
+    color: inherit; /* Let the GitHub Markdown CSS handle the prose color */
 }
 
 code {
-  background-color: rgba(175, 184, 193, 0.2);
-  padding: 0.2em 0.4em;
-  border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 85%;
-  color: #24292f; /* Dark slate */
+    background-color: rgba(175, 184, 193, 0.2);
+    padding: 0.2em 0.4em;
+    border-radius: 6px;
+    font-family:
+        ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 85%;
+    color: #24292f; /* Dark slate */
 }
 
 pre code {
-  background: none;
-  padding: 0;
-  font-size: 100%;
-  color: inherit;
+    background: none;
+    padding: 0;
+    font-size: 100%;
+    color: inherit;
 }
 
 /* --- Components --- */
 .btn {
-  display: inline-block;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background-color 0.2s, transform 0.1s;
+    display: inline-block;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+        background-color 0.2s,
+        transform 0.1s;
 }
 
-.btn:active { transform: scale(0.98); }
+.btn:active {
+    transform: scale(0.98);
+}
 
-.btn-primary { background-color: var(--primary); color: white; }
-.btn-primary:hover { background-color: var(--primary-hover); }
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+}
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+}
 
-.btn-secondary { background-color: var(--secondary); color: white; }
-.btn-secondary:hover { background-color: var(--secondary-hover); }
+.btn-secondary {
+    background-color: var(--secondary);
+    color: white;
+}
+.btn-secondary:hover {
+    background-color: var(--secondary-hover);
+}
 
 .btn-outline {
-  background-color: transparent;
-  color: var(--primary);
-  border: 2px solid var(--primary);
+    background-color: transparent;
+    color: var(--primary);
+    border: 2px solid var(--primary);
 }
-.btn-outline:hover { background-color: var(--primary); color: white; }
+.btn-outline:hover {
+    background-color: var(--primary);
+    color: white;
+}
 
 .badge {
-  font-size: 0.75rem;
-  background-color: var(--warning);
-  color: #000;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  vertical-align: middle;
+    font-size: 0.75rem;
+    background-color: var(--warning);
+    color: #000;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
 }
 
 /* --- Layout Utilities --- */
 .full-screen-app {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .app-header {
-  padding: 15px 20px;
-  background: white;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+    padding: 15px 20px;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
 }
-.app-header h1 { margin: 0; font-size: 1.5rem; }
-.app-header p { margin: 5px 0 0; font-size: 0.9rem; }
+.app-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+.app-header p {
+    margin: 5px 0 0;
+    font-size: 0.9rem;
+}
 
 .panel-container {
-  display: flex;
-  flex: 1;
-  min-height: 0; /* Important for nested scrolling */
-  gap: 20px;
-  padding: 20px;
+    display: flex;
+    flex: 1;
+    min-height: 0; /* Important for nested scrolling */
+    gap: 20px;
+    padding: 20px;
 }
 
 /* Common form elements */
 textarea {
-  font-family: 'Consolas', 'Monaco', monospace;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  resize: none;
-  padding: 10px;
-  box-sizing: border-box;
+    font-family: "Consolas", "Monaco", monospace;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    resize: none;
+    padding: 10px;
+    box-sizing: border-box;
 }
-textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+textarea:focus {
+    outline: 2px solid var(--primary);
+    border-color: transparent;
+}
 
 .error-box {
-  color: #842029;
-  background-color: #f8d7da;
-  padding: 10px;
-  border: 1px solid #f5c6cb;
-  border-radius: 4px;
-  margin-top: 10px;
-  font-size: 0.9rem;
+    color: #842029;
+    background-color: #f8d7da;
+    padding: 10px;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    margin-top: 10px;
+    font-size: 0.9rem;
 }

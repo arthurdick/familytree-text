@@ -8,9 +8,9 @@ Every file must start with Global Metadata before the first ID.
 
 **Syntax Rules:**
 
-* **Comments:** `# This is a comment` (Ignored).
-* **Separators:** `ID:` starts a new record. `---` ends a block visually.
-* **Indentation:** Multiline values must be indented by **2 spaces**.
+- **Comments:** `# This is a comment` (Ignored).
+- **Separators:** `ID:` starts a new record. `---` ends a block visually.
+- **Indentation:** Multiline values must be indented by **2 spaces**.
 
 ```text
 HEAD_FORMAT:    FTT v0.1
@@ -28,16 +28,16 @@ HEAD_DATE:      2026-01-20
 
 IDs are **Case-Sensitive**.
 
-* **Forbidden:** Spaces, tabs, pipes (`|`), semicolons (`;`), and control characters.
-* **Standard IDs:** Must start with alphanumeric; letters, numbers, hyphens (`-`), underscores (`_`), and periods (`.`) allowed.
-* **Recommendation:** Use `[SURNAME]-[YYYY]-[INITIALS]` (e.g., `SMITH-1980-JS`).
+- **Forbidden:** Spaces, tabs, pipes (`|`), semicolons (`;`), and control characters.
+- **Standard IDs:** Must start with alphanumeric; letters, numbers, hyphens (`-`), underscores (`_`), and periods (`.`) allowed.
+- **Recommendation:** Use `[SURNAME]-[YYYY]-[INITIALS]` (e.g., `SMITH-1980-JS`).
 
-| Type | Sigil | Prefix Example | Usage |
-| --- | --- | --- | --- |
-| **Person** | *(None)* | `SMITH-1980` | Standard individual record. |
-| **Source** | `^` | `^SRC-CENSUS` | Bibliographic citation. |
-| **Event** | `&` | `&EVT-WWII` | Shared historical event. |
-| **Unknown** | `?` | `?UNK-FATHER` | Placeholder (Exempt from reciprocity checks). |
+| Type        | Sigil    | Prefix Example | Usage                                         |
+| ----------- | -------- | -------------- | --------------------------------------------- |
+| **Person**  | _(None)_ | `SMITH-1980`   | Standard individual record.                   |
+| **Source**  | `^`      | `^SRC-CENSUS`  | Bibliographic citation.                       |
+| **Event**   | `&`      | `&EVT-WWII`    | Shared historical event.                      |
+| **Unknown** | `?`      | `?UNK-FATHER`  | Placeholder (Exempt from reciprocity checks). |
 
 ---
 
@@ -45,14 +45,14 @@ IDs are **Case-Sensitive**.
 
 **Note:** Use double pipes `||` to skip empty fields in the sequence.
 
-| Key | Syntax / Format |
-| --- | --- |
-| **ID:** | `[Unique_ID]` |
-| **NAME:** | `[Display] \| [Sort_Key] \| [TYPE] \| [STATUS]` |
-| **SEX:** | `M`, `F`, `U` (Unknown), `O` (Other) |
-| **BORN:** | `[Date] \| [Place]` |
-| **DIED:** | `[Date] \| [Place]` |
-| **PRIVACY:** | `OPEN` (Default), `LIVING`, `PRIVATE` |
+| Key          | Syntax / Format                                 |
+| ------------ | ----------------------------------------------- |
+| **ID:**      | `[Unique_ID]`                                   |
+| **NAME:**    | `[Display] \| [Sort_Key] \| [TYPE] \| [STATUS]` |
+| **SEX:**     | `M`, `F`, `U` (Unknown), `O` (Other)            |
+| **BORN:**    | `[Date] \| [Place]`                             |
+| **DIED:**    | `[Date] \| [Place]`                             |
+| **PRIVACY:** | `OPEN` (Default), `LIVING`, `PRIVATE`           |
 
 **Example:**
 
@@ -71,8 +71,8 @@ DIED: 2020-01-01
 
 ### **Parent / Child**
 
-* **PARENT:** The **Source of Truth**. Defines the link *to* the ancestor.
-* **CHILD:** Display order only. *Must* contain a `PARENT` link pointing back (No "Ghost Children").
+- **PARENT:** The **Source of Truth**. Defines the link _to_ the ancestor.
+- **CHILD:** Display order only. _Must_ contain a `PARENT` link pointing back (No "Ghost Children").
 
 ```text
 PARENT: [ID] | [TYPE] | [START] | [END]
@@ -89,8 +89,8 @@ UNION: [ID] | [TYPE] | [START] | [END] | [END_REASON]
 
 ```
 
-* *Ongoing Union:* Use `..` in the End Date field.
-* *Uncertain End:* Use `?` in the End Date field.
+- _Ongoing Union:_ Use `..` in the End Date field.
+- _Uncertain End:_ Use `?` in the End Date field.
 
 ### **Associates**
 
@@ -107,12 +107,12 @@ ASSOC: [ID] | [ROLE] | [START] | [END] | [DETAILS]
 
 FTT uses specific syntax to handle historical uncertainty.
 
-| Concept | Syntax | Meaning |
-| --- | --- | --- |
-| **Exact** | `1904-05-12` | Specific date. |
-| **Approx** | `1904~` | About/Circa 1904. |
-| **Uncertain** | `1904?` | Maybe 1904 (Questionable). |
-| **Bounds** | `[1904..1908]` | **One single event** happened *sometime* between these dates. |
+| Concept       | Syntax         | Meaning                                                       |
+| ------------- | -------------- | ------------------------------------------------------------- |
+| **Exact**     | `1904-05-12`   | Specific date.                                                |
+| **Approx**    | `1904~`        | About/Circa 1904.                                             |
+| **Uncertain** | `1904?`        | Maybe 1904 (Questionable).                                    |
+| **Bounds**    | `[1904..1908]` | **One single event** happened _sometime_ between these dates. |
 
 ---
 
@@ -120,11 +120,11 @@ FTT uses specific syntax to handle historical uncertainty.
 
 Use semicolons `;` for hierarchy (Smallest -> Largest).
 
-* **Standard:** `City; Province; Country`
-* **Renamed:** `Berlin {=Kitchener}; Ontario; Canada`
-* *Text inside `{}` is for geocoding, text outside is for display.*
+- **Standard:** `City; Province; Country`
+- **Renamed:** `Berlin {=Kitchener}; Ontario; Canada`
+- _Text inside `{}` is for geocoding, text outside is for display._
 
-* **Coordinates:** `City; Country <51.04, -114.07>`
+- **Coordinates:** `City; Country <51.04, -114.07>`
 
 ---
 
@@ -158,9 +158,9 @@ BORN_NOTE: Date is calculated from age listed in certificate.
 
 ### **Relationship Types**
 
-* **Parent:** `BIO` (Biological), `ADO` (Adopted), `STE` (Step), `FOS` (Foster).
-* **Union:** `MARR` (Married), `PART` (Partner/Common Law).
-* **Union End:** `DIV` (Divorced), `SEP` (Separated), `WID` (Widowed), `ANN` (Annulled).
+- **Parent:** `BIO` (Biological), `ADO` (Adopted), `STE` (Step), `FOS` (Foster).
+- **Union:** `MARR` (Married), `PART` (Partner/Common Law).
+- **Union End:** `DIV` (Divorced), `SEP` (Separated), `WID` (Widowed), `ANN` (Annulled).
 
 ### **Name Types**
 
@@ -168,9 +168,9 @@ BORN_NOTE: Date is calculated from age listed in certificate.
 
 ### **Associate Roles**
 
-* **Religious:** `GODP` (Godparent), `OFFI` (Officiant).
-* **Legal:** `WITN` (Witness), `EXEC` (Executor), `GUAR` (Guardian).
-* **Social:** `NEIG` (Neighbor), `MAST` (Master), `APPR` (Apprentice).
+- **Religious:** `GODP` (Godparent), `OFFI` (Officiant).
+- **Legal:** `WITN` (Witness), `EXEC` (Executor), `GUAR` (Guardian).
+- **Social:** `NEIG` (Neighbor), `MAST` (Master), `APPR` (Apprentice).
 
 ### **Event Types**
 

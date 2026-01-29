@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import FTTParser from '../FTTParser.js';
-import { RelationshipCalculator, RelationText, getGender } from '../RelationshipCalculator.js';
+import { describe, it, expect, beforeEach } from "vitest";
+import FTTParser from "../FTTParser.js";
+import { RelationshipCalculator, RelationText } from "../RelationshipCalculator.js";
 
-describe('RelationshipCalculator', () => {
+describe("RelationshipCalculator", () => {
     let parser;
 
     beforeEach(() => {
@@ -16,9 +16,11 @@ describe('RelationshipCalculator', () => {
     function calc(fttData, idA, idB) {
         const fullData = `HEAD_FORMAT: FTT v0.1\n${fttData}`;
         const result = parser.parse(fullData);
-        
+
         if (result.errors.length > 0) {
-            throw new Error(`Parser Error: ${result.errors[0].message} (Line ${result.errors[0].line})`);
+            throw new Error(
+                `Parser Error: ${result.errors[0].message} (Line ${result.errors[0].line})`
+            );
         }
 
         const calculator = new RelationshipCalculator(result.records);
@@ -26,7 +28,7 @@ describe('RelationshipCalculator', () => {
         return rels;
     }
 
-    describe('Lineage', () => {
+    describe("Lineage", () => {
         const data = `
 ID: PARENT
 SEX: M
@@ -42,30 +44,30 @@ SEX: M
 PARENT: CHILD | BIO
 `;
 
-        it('should identify Parent', () => {
-            const rels = calc(data, 'PARENT', 'CHILD');
+        it("should identify Parent", () => {
+            const rels = calc(data, "PARENT", "CHILD");
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(0); // A is ancestor
             expect(rels[0].distB).toBe(1); // B is descendant (1 gen down)
         });
 
-        it('should identify Child', () => {
-            const rels = calc(data, 'CHILD', 'PARENT');
+        it("should identify Child", () => {
+            const rels = calc(data, "CHILD", "PARENT");
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(1);
             expect(rels[0].distB).toBe(0);
         });
 
-        it('should identify Grandparent', () => {
-            const rels = calc(data, 'PARENT', 'GRANDCHILD');
+        it("should identify Grandparent", () => {
+            const rels = calc(data, "PARENT", "GRANDCHILD");
             expect(rels[0].distA).toBe(0);
             expect(rels[0].distB).toBe(2);
         });
     });
 
-    describe('Siblings', () => {
+    describe("Siblings", () => {
         const data = `
 ID: DAD
 CHILD: ME
@@ -95,24 +97,24 @@ PARENT: DAD | BIO
 PARENT: OTHER-MOM | BIO
 `;
 
-        it('should identify Full Siblings', () => {
-            const rels = calc(data, 'ME', 'SIS');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify Full Siblings", () => {
+            const rels = calc(data, "ME", "SIS");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(1);
             expect(rels[0].distB).toBe(1);
             expect(rels[0].isHalf).toBe(false);
         });
 
-        it('should identify Half Siblings', () => {
-            const rels = calc(data, 'ME', 'HALF-BRO');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify Half Siblings", () => {
+            const rels = calc(data, "ME", "HALF-BRO");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(1);
             expect(rels[0].distB).toBe(1);
             expect(rels[0].isHalf).toBe(true);
         });
     });
 
-    describe('Unions', () => {
+    describe("Unions", () => {
         const data = `
 ID: HUSB
 SEX: M
@@ -123,14 +125,14 @@ SEX: F
 UNION: HUSB | MARR
 `;
 
-        it('should identify Spouse', () => {
-            const rels = calc(data, 'HUSB', 'WIFE');
-            expect(rels[0].type).toBe('UNION');
-            expect(rels[0].target).toBe('WIFE');
+        it("should identify Spouse", () => {
+            const rels = calc(data, "HUSB", "WIFE");
+            expect(rels[0].type).toBe("UNION");
+            expect(rels[0].target).toBe("WIFE");
         });
     });
 
-    describe('Cousins', () => {
+    describe("Cousins", () => {
         const data = `
 ID: G-PA
 CHILD: DAD
@@ -155,22 +157,22 @@ ID: COUSIN-KID
 PARENT: COUSIN | BIO
 `;
 
-        it('should identify 1st Cousins', () => {
-            const rels = calc(data, 'ME', 'COUSIN');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify 1st Cousins", () => {
+            const rels = calc(data, "ME", "COUSIN");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(2);
             expect(rels[0].distB).toBe(2);
         });
 
-        it('should identify 1st Cousin 1x Removed', () => {
-            const rels = calc(data, 'ME', 'COUSIN-KID');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify 1st Cousin 1x Removed", () => {
+            const rels = calc(data, "ME", "COUSIN-KID");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(2);
             expect(rels[0].distB).toBe(3);
         });
     });
 
-    describe('Affinal', () => {
+    describe("Affinal", () => {
         const data = `
 ID: HUSB
 SEX: M
@@ -196,30 +198,30 @@ SEX: M
 PARENT: FIL | BIO
 `;
 
-        it('should identify Father-in-Law (VIA_SPOUSE)', () => {
-            const rels = calc(data, 'HUSB', 'FIL');
-            expect(rels[0].type).toBe('AFFINAL');
-            expect(rels[0].subType).toBe('VIA_SPOUSE');
-            expect(rels[0].bloodRel.distA).toBe(1); 
+        it("should identify Father-in-Law (VIA_SPOUSE)", () => {
+            const rels = calc(data, "HUSB", "FIL");
+            expect(rels[0].type).toBe("AFFINAL");
+            expect(rels[0].subType).toBe("VIA_SPOUSE");
+            expect(rels[0].bloodRel.distA).toBe(1);
         });
 
-        it('should identify Son-in-Law (VIA_BLOOD_SPOUSE)', () => {
-            const rels = calc(data, 'FIL', 'HUSB');
-            expect(rels[0].type).toBe('AFFINAL');
-            expect(rels[0].subType).toBe('VIA_BLOOD_SPOUSE');
-            expect(rels[0].bloodRel.distA).toBe(0); 
+        it("should identify Son-in-Law (VIA_BLOOD_SPOUSE)", () => {
+            const rels = calc(data, "FIL", "HUSB");
+            expect(rels[0].type).toBe("AFFINAL");
+            expect(rels[0].subType).toBe("VIA_BLOOD_SPOUSE");
+            expect(rels[0].bloodRel.distA).toBe(0);
         });
 
-        it('should identify Brother-in-Law', () => {
-            const rels = calc(data, 'HUSB', 'BIL');
-            expect(rels[0].type).toBe('AFFINAL');
-            expect(rels[0].subType).toBe('VIA_SPOUSE');
-            expect(rels[0].bloodRel.distA).toBe(1); 
+        it("should identify Brother-in-Law", () => {
+            const rels = calc(data, "HUSB", "BIL");
+            expect(rels[0].type).toBe("AFFINAL");
+            expect(rels[0].subType).toBe("VIA_SPOUSE");
+            expect(rels[0].bloodRel.distA).toBe(1);
             expect(rels[0].bloodRel.distB).toBe(1);
         });
     });
 
-    describe('Step Relationships', () => {
+    describe("Step Relationships", () => {
         const data = `
 ID: STEP-DAD
 SEX: M
@@ -236,21 +238,21 @@ PARENT: MOM | BIO
 # No bio link to STEP-DAD
 `;
 
-        it('should identify Step-Father', () => {
-            const rels = calc(data, 'STEP-DAD', 'STEP-SON');
-            expect(rels[0].type).toBe('STEP_PARENT');
-            expect(rels[0].parentId).toBe('MOM');
+        it("should identify Step-Father", () => {
+            const rels = calc(data, "STEP-DAD", "STEP-SON");
+            expect(rels[0].type).toBe("STEP_PARENT");
+            expect(rels[0].parentId).toBe("MOM");
         });
 
-        it('should identify Step-Son', () => {
-            const rels = calc(data, 'STEP-SON', 'STEP-DAD');
-            expect(rels[0].type).toBe('STEP_CHILD');
-            expect(rels[0].parentId).toBe('MOM');
+        it("should identify Step-Son", () => {
+            const rels = calc(data, "STEP-SON", "STEP-DAD");
+            expect(rels[0].type).toBe("STEP_CHILD");
+            expect(rels[0].parentId).toBe("MOM");
         });
     });
 
-    describe('Step Siblings', () => {
-        it('should identify Step-Siblings', () => {
+    describe("Step Siblings", () => {
+        it("should identify Step-Siblings", () => {
             const data = `
 ID: DAD
 UNION: MOM | MARR
@@ -269,11 +271,11 @@ SEX: F
 PARENT: MOM | BIO
 # Parents are married, but no shared parents
 `;
-            const rels = calc(data, 'SON', 'DAUGHTER');
-            expect(rels[0].type).toBe('STEP_SIBLING');
+            const rels = calc(data, "SON", "DAUGHTER");
+            expect(rels[0].type).toBe("STEP_SIBLING");
         });
-        
-        it('should identify Foster Step-Siblings', () => {
+
+        it("should identify Foster Step-Siblings", () => {
             const data = `
 ID: DAD
 UNION: STEP-MOM | MARR
@@ -292,16 +294,16 @@ SEX: F
 PARENT: STEP-MOM | FOS
 # FOS is not in VALID_LINEAGE, so this fails the 'bioB' check in the original code.
 `;
-            const rels = calc(data, 'BIO-SON', 'FOSTER-DAUGHTER');
-            
+            const rels = calc(data, "BIO-SON", "FOSTER-DAUGHTER");
+
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('STEP_SIBLING');
-            expect(rels[0].parentA).toBe('DAD');
-            expect(rels[0].parentB).toBe('STEP-MOM');
+            expect(rels[0].type).toBe("STEP_SIBLING");
+            expect(rels[0].parentA).toBe("DAD");
+            expect(rels[0].parentB).toBe("STEP-MOM");
         });
     });
 
-    describe('Temporal Logic', () => {
+    describe("Temporal Logic", () => {
         const data = `
 ID: HUSB
 SEX: M
@@ -317,21 +319,21 @@ SEX: F
 UNION: HUSB | MARR | 2005 | .. |
 `;
 
-        it('should identify Current Spouse correctly', () => {
-            const rels = calc(data, 'HUSB', 'WIFE');
-            expect(rels[0].type).toBe('UNION');
-            expect(rels[0].target).toBe('WIFE');
+        it("should identify Current Spouse correctly", () => {
+            const rels = calc(data, "HUSB", "WIFE");
+            expect(rels[0].type).toBe("UNION");
+            expect(rels[0].target).toBe("WIFE");
         });
 
-        it('should identify Former Spouse correctly', () => {
-            const rels = calc(data, 'HUSB', 'EX-WIFE');
-            expect(rels[0].type).toBe('FORMER_UNION');
-            expect(rels[0].target).toBe('EX-WIFE');
-            expect(rels[0].reason).toBe('DIV');
+        it("should identify Former Spouse correctly", () => {
+            const rels = calc(data, "HUSB", "EX-WIFE");
+            expect(rels[0].type).toBe("FORMER_UNION");
+            expect(rels[0].target).toBe("EX-WIFE");
+            expect(rels[0].reason).toBe("DIV");
         });
     });
 
-    describe('Deep Step-Traversal', () => {
+    describe("Deep Step-Traversal", () => {
         const data = `
 ID: ME
 PARENT: MOM | BIO
@@ -347,19 +349,19 @@ SEX: M
 CHILD: STEP-DAD
 `;
 
-        it('should identify Step-Grandfather', () => {
+        it("should identify Step-Grandfather", () => {
             // Path: ME -> MOM -> (Spouse) STEP-DAD -> (Bio) STEP-GRANDPA
-            const rels = calc(data, 'STEP-GRANDPA', 'ME');
+            const rels = calc(data, "STEP-GRANDPA", "ME");
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].isStep).toBe(true);
             expect(rels[0].distA).toBe(0); // Ancestor
             expect(rels[0].distB).toBe(2); // 2 generations down (Grandparent level)
         });
     });
 
-    describe('Double Cousins (Topology Check)', () => {
-        it('should NOT identify as Double for standard 2nd Cousin 1x Removed', () => {
+    describe("Double Cousins (Topology Check)", () => {
+        it("should NOT identify as Double for standard 2nd Cousin 1x Removed", () => {
             const data = `
 ID: GG-PA
 UNION: GG-MA | MARR
@@ -397,15 +399,15 @@ CHILD: COUSIN-KID
 ID: COUSIN-KID
 PARENT: COUSIN | BIO
             `;
-            const rels = calc(data, 'ME', 'COUSIN-KID');
-            expect(rels[0].type).toBe('LINEAGE');
-            expect(rels[0].distA).toBe(3); 
+            const rels = calc(data, "ME", "COUSIN-KID");
+            expect(rels[0].type).toBe("LINEAGE");
+            expect(rels[0].distA).toBe(3);
             expect(rels[0].distB).toBe(4);
-            expect(rels[0].isDouble).toBe(false); 
+            expect(rels[0].isDouble).toBe(false);
         });
 
-        it('should identify Double 1st Cousins (4 shared ancestors)', () => {
-             const data = `
+        it("should identify Double 1st Cousins (4 shared ancestors)", () => {
+            const data = `
 # Family A Grandparents
 ID: GP1
 UNION: GP2 | MARR
@@ -456,9 +458,9 @@ ID: DOUBLE-COZ
 PARENT: UNCLE | BIO
 PARENT: AUNT | BIO
              `;
-             const rels = calc(data, 'ME', 'DOUBLE-COZ');
-             expect(rels[0].type).toBe('LINEAGE');
-             expect(rels[0].isDouble).toBe(true);
+            const rels = calc(data, "ME", "DOUBLE-COZ");
+            expect(rels[0].type).toBe("LINEAGE");
+            expect(rels[0].isDouble).toBe(true);
         });
 
         const topologyData = `
@@ -505,16 +507,16 @@ ID: GP4
 UNION: GP3 | MARR
 `;
 
-        it('should identify Double First Cousins (Legacy Test)', () => {
-            const rels = calc(topologyData, 'ME', 'COUSIN');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify Double First Cousins (Legacy Test)", () => {
+            const rels = calc(topologyData, "ME", "COUSIN");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(2);
             expect(rels[0].distB).toBe(2);
             expect(rels[0].isDouble).toBe(true);
         });
     });
 
-    describe('Half-Siblings (Missing Parent)', () => {
+    describe("Half-Siblings (Missing Parent)", () => {
         const data = `
 ID: DAD
 CHILD: ME
@@ -532,16 +534,16 @@ ID: OTHER-MOM
 CHILD: HALF-SIB
 `;
 
-        it('should identify Half-Sibling even with missing data', () => {
-            const rels = calc(data, 'ME', 'HALF-SIB');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify Half-Sibling even with missing data", () => {
+            const rels = calc(data, "ME", "HALF-SIB");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(1);
             expect(rels[0].distB).toBe(1);
             expect(rels[0].isHalf).toBe(true);
         });
     });
 
-    describe('Step-Siblings (Divorced Parents)', () => {
+    describe("Step-Siblings (Divorced Parents)", () => {
         const data = `
 ID: DAD
 UNION: MOM | MARR | 1990 | 1995 | DIV
@@ -560,15 +562,15 @@ PARENT: MOM | BIO
 # No relation to DAD
 `;
 
-        it('should identify Step-Siblings via Former Union', () => {
-            const rels = calc(data, 'SON', 'DAUGHTER');
+        it("should identify Step-Siblings via Former Union", () => {
+            const rels = calc(data, "SON", "DAUGHTER");
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('STEP_SIBLING');
+            expect(rels[0].type).toBe("STEP_SIBLING");
             expect(rels[0].parentsDivorced).toBe(true);
         });
     });
 
-    describe('Complex Double Cousins', () => {
+    describe("Complex Double Cousins", () => {
         const data = `
 ID: GP1
 UNION: GP2 | MARR
@@ -617,16 +619,16 @@ ID: COUSIN
 PARENT: BRO2 | BIO
 PARENT: HALF-SIS2 | BIO
 `;
-        it('should identify Double Cousins sharing 3 grandparents', () => {
-            const rels = calc(data, 'ME', 'COUSIN');
-            expect(rels[0].type).toBe('LINEAGE');
+        it("should identify Double Cousins sharing 3 grandparents", () => {
+            const rels = calc(data, "ME", "COUSIN");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(2);
-            expect(rels[0].ancestorIds.length).toBe(3); 
+            expect(rels[0].ancestorIds.length).toBe(3);
             expect(rels[0].isDouble).toBe(true);
         });
     });
 
-    describe('Widowhood Step-Siblings', () => {
+    describe("Widowhood Step-Siblings", () => {
         const data = `
 ID: DAD
 UNION: MOM | MARR | 1990 | 2000 | WID
@@ -644,16 +646,16 @@ ID: DAUGHTER
 PARENT: MOM | BIO
 # Dad is step-parent
 `;
-        it('should correctly identify Widowhood instead of Divorce', () => {
-            const rels = calc(data, 'SON', 'DAUGHTER');
+        it("should correctly identify Widowhood instead of Divorce", () => {
+            const rels = calc(data, "SON", "DAUGHTER");
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('STEP_SIBLING');
+            expect(rels[0].type).toBe("STEP_SIBLING");
             expect(rels[0].parentsDivorced).toBe(false);
-            expect(rels[0].unionReason).toBe('WID');
+            expect(rels[0].unionReason).toBe("WID");
         });
     });
 
-    describe('Co-Affinal (Co-In-Laws)', () => {
+    describe("Co-Affinal (Co-In-Laws)", () => {
         const data = `
 ID: HUSB1
 UNION: WIFE1 | MARR
@@ -673,20 +675,20 @@ ID: GP1
 CHILD: WIFE1
 CHILD: WIFE2
 `;
-        it('should identify Co-Brothers-in-Law (Spouses of Sisters)', () => {
-            const rels = calc(data, 'HUSB1', 'HUSB2');
+        it("should identify Co-Brothers-in-Law (Spouses of Sisters)", () => {
+            const rels = calc(data, "HUSB1", "HUSB2");
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('CO_AFFINAL');
-            expect(rels[0].subType).toBe('SPOUSES_ARE_RELATIVES'); 
-            expect(rels[0].spouseA).toBe('WIFE1');
-            expect(rels[0].spouseB).toBe('WIFE2');
-            
+            expect(rels[0].type).toBe("CO_AFFINAL");
+            expect(rels[0].subType).toBe("SPOUSES_ARE_RELATIVES");
+            expect(rels[0].spouseA).toBe("WIFE1");
+            expect(rels[0].spouseB).toBe("WIFE2");
+
             expect(rels[0].bloodRel.distA).toBe(1);
             expect(rels[0].bloodRel.distB).toBe(1);
         });
     });
 
-    describe('Multi-Path Lineage', () => {
+    describe("Multi-Path Lineage", () => {
         const data = `
 ID: CHILD
 PARENT: BIO-MOM | BIO
@@ -705,16 +707,16 @@ ID: GRANDMA
 CHILD: BIO-MOM
 CHILD: ADO-DAD
 `;
-        it('should distinguish Biological and Adoptive paths to ancestor', () => {
-            const rels = calc(data, 'GRANDMA', 'CHILD');
-            
-            const bioPath = rels.find(r => r.lineageB === 'BIO');
-            const adoPath = rels.find(r => r.lineageB === 'ADO');
-            
+        it("should distinguish Biological and Adoptive paths to ancestor", () => {
+            const rels = calc(data, "GRANDMA", "CHILD");
+
+            const bioPath = rels.find((r) => r.lineageB === "BIO");
+            const adoPath = rels.find((r) => r.lineageB === "ADO");
+
             expect(bioPath).toBeDefined();
             expect(bioPath.distA).toBe(0);
             expect(bioPath.distB).toBe(2);
-            
+
             expect(adoPath).toBeDefined();
             expect(adoPath.distA).toBe(0);
             expect(adoPath.distB).toBe(2);
@@ -722,7 +724,7 @@ CHILD: ADO-DAD
         });
     });
 
-    describe('Adoptive Parent Terminology', () => {
+    describe("Adoptive Parent Terminology", () => {
         const data = `
 ID: DAD
 NAME: DAD
@@ -734,32 +736,36 @@ NAME: Grandpa
 SEX: M
 `;
         it('should label Adoptive Parent correctly (not "Adopted Father")', () => {
-            const rels = calc(data, 'GRANDPA', 'DAD');
-            
+            const rels = calc(data, "GRANDPA", "DAD");
+
             // Check Relationship Object
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(0);
             expect(rels[0].distB).toBe(1);
             expect(rels[0].isAdoptive).toBe(true);
 
             // Check Text Generation
-            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
-            const desc = textGen.describe(rels[0], 'M', 'DAD', 'Grandpa');
-            
-            expect(desc.term).toBe('Adoptive Father');
-            expect(desc.term).not.toContain('Adopted');
+            const textGen = new RelationText(
+                parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records
+            );
+            const desc = textGen.describe(rels[0], "M", "DAD", "Grandpa");
+
+            expect(desc.term).toBe("Adoptive Father");
+            expect(desc.term).not.toContain("Adopted");
         });
 
-        it('should label Adopted Child correctly', () => {
-            const rels = calc(data, 'DAD', 'GRANDPA');
-            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
-            const desc = textGen.describe(rels[0], 'M', 'Grandpa', 'DAD');
-            
-            expect(desc.term).toBe('Adopted Son');
+        it("should label Adopted Child correctly", () => {
+            const rels = calc(data, "DAD", "GRANDPA");
+            const textGen = new RelationText(
+                parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records
+            );
+            const desc = textGen.describe(rels[0], "M", "Grandpa", "DAD");
+
+            expect(desc.term).toBe("Adopted Son");
         });
     });
 
-    describe('Double Cousins (Uncoupled Ancestors)', () => {
+    describe("Double Cousins (Uncoupled Ancestors)", () => {
         const data = `
 ID: TEST-ME
 NAME: Test Subject
@@ -798,23 +804,23 @@ SEX: M
 ID: GP-MATERNAL
 SEX: F
 `;
-        it('should identify Double Cousins when ancestors are NOT partners', () => {
-            const rels = calc(data, 'TEST-ME', 'COUSIN-X');
-            
+        it("should identify Double Cousins when ancestors are NOT partners", () => {
+            const rels = calc(data, "TEST-ME", "COUSIN-X");
+
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(2); // Grandchild
             expect(rels[0].distB).toBe(2); // Grandchild
-            expect(rels[0].isDouble).toBe(true); 
-            
+            expect(rels[0].isDouble).toBe(true);
+
             // Ensure we captured both ancestors
             expect(rels[0].ancestorIds).toHaveLength(2);
-            expect(rels[0].ancestorIds).toContain('GP-PATERNAL');
-            expect(rels[0].ancestorIds).toContain('GP-MATERNAL');
+            expect(rels[0].ancestorIds).toContain("GP-PATERNAL");
+            expect(rels[0].ancestorIds).toContain("GP-MATERNAL");
         });
     });
 
-    describe('Half-Avuncular (Half-Uncle)', () => {
+    describe("Half-Avuncular (Half-Uncle)", () => {
         const data = `
 ID: GRANDPA
 SEX: M
@@ -843,36 +849,38 @@ ID: ME
 SEX: M
 PARENT: DAD | BIO
 `;
-        it('should identify Half-Uncle correctly', () => {
+        it("should identify Half-Uncle correctly", () => {
             // Path: ME -> DAD -> GRANDPA -> UNCLE-HALF
             // They share GRANDPA, but have different grandmothers (GRANDMA-1 vs GRANDMA-2)
-            const rels = calc(data, 'UNCLE-HALF', 'ME');
-            
+            const rels = calc(data, "UNCLE-HALF", "ME");
+
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             // Uncle is 1 generation down from Grandpa
-            expect(rels[0].distA).toBe(1); 
+            expect(rels[0].distA).toBe(1);
             // Me is 2 generations down from Grandpa
-            expect(rels[0].distB).toBe(2); 
-            
+            expect(rels[0].distB).toBe(2);
+
             // CRITICAL CHECK: Must be identified as Half-Uncle
             expect(rels[0].isHalf).toBe(true);
-            
+
             // Ensure we identified only the single common ancestor
             expect(rels[0].ancestorIds).toHaveLength(1);
-            expect(rels[0].ancestorIds[0]).toBe('GRANDPA');
+            expect(rels[0].ancestorIds[0]).toBe("GRANDPA");
         });
 
-        it('should generate correct text for Half-Uncle', () => {
-            const rels = calc(data, 'UNCLE-HALF', 'ME');
-            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
-            const desc = textGen.describe(rels[0], 'M', 'ME', 'UNCLE-HALF');
-            
-            expect(desc.term).toBe('Half-Uncle');
+        it("should generate correct text for Half-Uncle", () => {
+            const rels = calc(data, "UNCLE-HALF", "ME");
+            const textGen = new RelationText(
+                parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records
+            );
+            const desc = textGen.describe(rels[0], "M", "ME", "UNCLE-HALF");
+
+            expect(desc.term).toBe("Half-Uncle");
         });
     });
 
-    describe('Direct Lineage vs Half-Blood', () => {
+    describe("Direct Lineage vs Half-Blood", () => {
         const data = `
 ID: POLY-DAD
 SEX: M
@@ -893,28 +901,30 @@ SEX: F
 ID: WIFE-2
 SEX: F
 `;
-        it('should NOT flag direct parents as Half, even with multiple step-parents', () => {
-            const rels = calc(data, 'BIO-MOM', 'POOR-KID');
-            
+        it("should NOT flag direct parents as Half, even with multiple step-parents", () => {
+            const rels = calc(data, "BIO-MOM", "POOR-KID");
+
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(0); // Ancestor
             expect(rels[0].distB).toBe(1); // Descendant
-            
+
             // CRITICAL CHECK: Must be false
-            expect(rels[0].isHalf).toBe(false); 
+            expect(rels[0].isHalf).toBe(false);
         });
 
         it('should generate correct text "Mother"', () => {
-            const rels = calc(data, 'BIO-MOM', 'POOR-KID');
-            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
-            const desc = textGen.describe(rels[0], 'F', 'POOR-KID', 'BIO-MOM');
-            
-            expect(desc.term).toBe('Mother');
+            const rels = calc(data, "BIO-MOM", "POOR-KID");
+            const textGen = new RelationText(
+                parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records
+            );
+            const desc = textGen.describe(rels[0], "F", "POOR-KID", "BIO-MOM");
+
+            expect(desc.term).toBe("Mother");
         });
     });
 
-    describe('Step-In-Laws', () => {
+    describe("Step-In-Laws", () => {
         const data = `
 HEAD_FORMAT: FTT v0.1
 ID: ME
@@ -936,7 +946,7 @@ SEX: M
 UNION: BIO-MOM | MARR
 `;
 
-        it('should identify Step-Father-in-law', () => {
+        it("should identify Step-Father-in-law", () => {
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
@@ -944,14 +954,14 @@ UNION: BIO-MOM | MARR
             // Path: STEP-FIL (A) -> Spouse (BioMom) -> Child (Wife) <- Spouse (Me, B)
             // A is Relative of B's Spouse. (VIA_BLOOD_SPOUSE)
             // A is Step-Father of Spouse.
-            const rels = calculator.calculate('STEP-FIL', 'ME');
-            const description = textGen.describe(rels[0], 'M', 'ME', 'STEP-FIL');
+            const rels = calculator.calculate("STEP-FIL", "ME");
+            const description = textGen.describe(rels[0], "M", "ME", "STEP-FIL");
 
-            expect(rels[0].type).toBe('AFFINAL');
-            expect(description.term).toBe('Step-Father-in-law');
+            expect(rels[0].type).toBe("AFFINAL");
+            expect(description.term).toBe("Step-Father-in-law");
         });
 
-        it('should identify Son-in-law (for step-child\'s spouse)', () => {
+        it("should identify Son-in-law (for step-child's spouse)", () => {
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
@@ -960,15 +970,15 @@ UNION: BIO-MOM | MARR
             // A is Spouse of B's Relative. (VIA_SPOUSE)
             // Wife is Step-Daughter of B.
             // A is Son-in-law.
-            const rels = calculator.calculate('ME', 'STEP-FIL');
-            const description = textGen.describe(rels[0], 'M', 'STEP-FIL', 'ME');
+            const rels = calculator.calculate("ME", "STEP-FIL");
+            const description = textGen.describe(rels[0], "M", "STEP-FIL", "ME");
 
-            expect(rels[0].type).toBe('AFFINAL');
-            expect(description.term).toBe('Son-in-law');
+            expect(rels[0].type).toBe("AFFINAL");
+            expect(description.term).toBe("Son-in-law");
         });
     });
 
-    describe('Ex-In-Laws', () => {
+    describe("Ex-In-Laws", () => {
         const data = `
 HEAD_FORMAT: FTT v0.1
 ID: ME
@@ -991,22 +1001,22 @@ ID: P1
 ID: P2
 `;
 
-        it('should identify Former Brother-in-law', () => {
+        it("should identify Former Brother-in-law", () => {
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
 
-            const rels = calculator.calculate('EX-BIL', 'ME');
-            
-            expect(rels[0].type).toBe('AFFINAL');
+            const rels = calculator.calculate("EX-BIL", "ME");
+
+            expect(rels[0].type).toBe("AFFINAL");
             expect(rels[0].isExUnion).toBe(true);
 
-            const description = textGen.describe(rels[0], 'M', 'ME', 'EX-BIL');
-            expect(description.term).toBe('Former Brother-in-law');
+            const description = textGen.describe(rels[0], "M", "ME", "EX-BIL");
+            expect(description.term).toBe("Former Brother-in-law");
         });
     });
 
-    describe('Combined: Former Step-Mother-in-law', () => {
+    describe("Combined: Former Step-Mother-in-law", () => {
         const data = `
 HEAD_FORMAT: FTT v0.1
 ID: ME
@@ -1027,7 +1037,7 @@ SEX: F
 UNION: BIO-DAD | MARR
 `;
 
-        it('should identify Former Step-Mother-in-law', () => {
+        it("should identify Former Step-Mother-in-law", () => {
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
@@ -1035,17 +1045,17 @@ UNION: BIO-DAD | MARR
             // A (STEP-MIL) -> Spouse (Dad) -> Child (Ex-Husb) <- Spouse (Me, B)
             // A is Step-Mother of Ex-Spouse.
             // A is Former Step-Mother-in-law.
-            const rels = calculator.calculate('STEP-MIL', 'ME');
-            const description = textGen.describe(rels[0], 'F', 'ME', 'STEP-MIL');
+            const rels = calculator.calculate("STEP-MIL", "ME");
+            const description = textGen.describe(rels[0], "F", "ME", "STEP-MIL");
 
-            expect(rels[0].type).toBe('AFFINAL');
+            expect(rels[0].type).toBe("AFFINAL");
             expect(rels[0].isExUnion).toBe(true);
-            expect(description.term).toBe('Former Step-Mother-in-law');
+            expect(description.term).toBe("Former Step-Mother-in-law");
         });
     });
-    
-    describe('Half-Blood Logic', () => {
-        it('should NOT label siblings as Half-Blood just because one has a missing parent record', () => {
+
+    describe("Half-Blood Logic", () => {
+        it("should NOT label siblings as Half-Blood just because one has a missing parent record", () => {
             const data = `
 HEAD_FORMAT: FTT v0.1
 
@@ -1064,15 +1074,15 @@ PARENT: DAD | BIO
 `;
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'BROTHER-INCOMPLETE');
-            
-            expect(rels[0].type).toBe('LINEAGE');
+            const rels = calculator.calculate("ME", "BROTHER-INCOMPLETE");
+
+            expect(rels[0].type).toBe("LINEAGE");
             // We expect the system to give the benefit of the doubt (Full/Ambiguous)
             // rather than asserting "Half" without proof.
             expect(rels[0].isHalf).toBe(false);
         });
-        
-        it('should correctly label True Half-Siblings when both sets of parents diverge', () => {
+
+        it("should correctly label True Half-Siblings when both sets of parents diverge", () => {
             const data = `
 HEAD_FORMAT: FTT v0.1
 
@@ -1090,14 +1100,14 @@ PARENT: STEPMOM | BIO
 `;
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'HALF-BRO');
-            
+            const rels = calculator.calculate("ME", "HALF-BRO");
+
             expect(rels[0].isHalf).toBe(true);
         });
     });
-    
-    describe('Regression: Cousin Half-Blood Logic', () => {
-        it('should NOT label cousins as Half-Blood if only one ancestor is recorded (Missing Data)', () => {
+
+    describe("Regression: Cousin Half-Blood Logic", () => {
+        it("should NOT label cousins as Half-Blood if only one ancestor is recorded (Missing Data)", () => {
             const data = `
 HEAD_FORMAT: FTT v0.1
 
@@ -1137,14 +1147,14 @@ PARENT: COUSIN | BIO
             // Ancestor: GG-PA (Count = 1)
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'COUSIN-KID');
+            const rels = calculator.calculate("ME", "COUSIN-KID");
             const rel = rels[0];
-            
-            expect(rel.type).toBe('LINEAGE');
-            expect(rel.isHalf).toBe(false); 
+
+            expect(rel.type).toBe("LINEAGE");
+            expect(rel.isHalf).toBe(false);
         });
-        
-        it('should label cousins as Half-Blood if the ancestor has MULTIPLE unions', () => {
+
+        it("should label cousins as Half-Blood if the ancestor has MULTIPLE unions", () => {
             const data = `
 HEAD_FORMAT: FTT v0.1
 
@@ -1173,14 +1183,14 @@ PARENT: PARENT-B | BIO
 `;
             const result = parser.parse(data);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'COUSIN');
+            const rels = calculator.calculate("ME", "COUSIN");
             const rel = rels[0];
             expect(rel.isHalf).toBe(true);
         });
     });
-    
-    describe('Deep Affinal (Counter-In-Laws)', () => {
-        it('should identify the Father of a Brother-in-law', () => {
+
+    describe("Deep Affinal (Counter-In-Laws)", () => {
+        it("should identify the Father of a Brother-in-law", () => {
             const data = `
 HEAD_FORMAT: FTT v0.1
 # ME -> SIS -> BIL -> BIL-DAD
@@ -1213,19 +1223,19 @@ CHILD: BIL
             const textGen = new RelationText(result.records);
 
             // Path: ME -> SIS (Sibling) -> BIL (Spouse) -> BIL-DAD (Parent)
-            const rels = calculator.calculate('BIL-DAD', 'ME');
+            const rels = calculator.calculate("BIL-DAD", "ME");
 
             expect(rels).not.toHaveLength(0);
-            expect(rels[0].type).not.toBe('NONE');
-            
+            expect(rels[0].type).not.toBe("NONE");
+
             // We want a type that indicates extended affinity
-            expect(rels[0].type).toBe('EXTENDED_AFFINAL'); 
-            
-            const desc = textGen.describe(rels[0], 'M', 'BIL-DAD', 'ME');
-            expect(desc.term).toBe('Father of Brother-in-law');
+            expect(rels[0].type).toBe("EXTENDED_AFFINAL");
+
+            const desc = textGen.describe(rels[0], "M", "BIL-DAD", "ME");
+            expect(desc.term).toBe("Father of Brother-in-law");
         });
-        
-        it('should identify the Great-Grandfather of a Brother-in-law', () => {
+
+        it("should identify the Great-Grandfather of a Brother-in-law", () => {
             // Data Setup: ME -> SIS -> BIL -> BIL-DAD -> BIL-G-DAD -> BIL-GG-DAD
             const data = `
 HEAD_FORMAT: FTT v0.1
@@ -1263,20 +1273,20 @@ SEX: M
             const textGen = new RelationText(result.records);
 
             // Calculate ME -> Great-Grandfather of BIL
-            const rels = calculator.calculate('BIL-GG-DAD', 'ME');
-            
+            const rels = calculator.calculate("BIL-GG-DAD", "ME");
+
             expect(rels).not.toHaveLength(0);
-            expect(rels[0].type).toBe('EXTENDED_AFFINAL');
-            
-            const desc = textGen.describe(rels[0], 'M', 'BIL-GG-DAD', 'ME');
-            
+            expect(rels[0].type).toBe("EXTENDED_AFFINAL");
+
+            const desc = textGen.describe(rels[0], "M", "BIL-GG-DAD", "ME");
+
             // This proves the logic is generalized to N steps
-            expect(desc.term).toBe('Great-Grandfather of Brother-in-law');
+            expect(desc.term).toBe("Great-Grandfather of Brother-in-law");
         });
     });
-    
-    describe('Endogamy & Redundancy Filter', () => {
-        it('should return BOTH Cousin and In-Law relationships (Collateral)', () => {
+
+    describe("Endogamy & Redundancy Filter", () => {
+        it("should return BOTH Cousin and In-Law relationships (Collateral)", () => {
             const data = `
 # Grandparents share ME and COUSIN-BIL
 ID: GP
@@ -1317,15 +1327,15 @@ CHILD: COUSIN-BIL
             // 2. Affinal: Brother-in-Law (Wife's Brother)
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'COUSIN-BIL');
+            const rels = calculator.calculate("ME", "COUSIN-BIL");
 
             expect(rels).toHaveLength(2);
-            
-            const types = rels.map(r => r.type).sort();
-            expect(types).toEqual(['AFFINAL', 'LINEAGE']);
+
+            const types = rels.map((r) => r.type).sort();
+            expect(types).toEqual(["AFFINAL", "LINEAGE"]);
         });
 
-        it('should suppress In-Law relationship if Direct Lineage exists (Regression)', () => {
+        it("should suppress In-Law relationship if Direct Lineage exists (Regression)", () => {
             const data = `
 ID: DAD
 UNION: MOM | MARR
@@ -1343,17 +1353,17 @@ PARENT: MOM | BIO
             // EXPECTATION: The calculator should filter out the Affinal link because Direct Lineage exists.
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('CHILD', 'MOM');
+            const rels = calculator.calculate("CHILD", "MOM");
 
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(1); // Child
             expect(rels[0].distB).toBe(0); // Parent
         });
     });
-    
-    describe('Ambiguous Sibling Heuristic', () => {
-        it('should label siblings as Ambiguous if one has 2 parents and the other has 1', () => {
+
+    describe("Ambiguous Sibling Heuristic", () => {
+        it("should label siblings as Ambiguous if one has 2 parents and the other has 1", () => {
             const data = `
 ID: DAD
 ID: MOM
@@ -1370,21 +1380,21 @@ PARENT: DAD | BIO
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
-            
-            const rels = calculator.calculate('ME', 'BRO-MISSING-DATA');
-            const desc = textGen.describe(rels[0], 'M', 'BRO-MISSING-DATA', 'ME');
 
-            expect(rels[0].type).toBe('LINEAGE');
-            expect(rels[0].isHalf).toBe(false);      // Not definitely half
-            expect(rels[0].isAmbiguous).toBe(true);  // But definitely ambiguous
-            
+            const rels = calculator.calculate("ME", "BRO-MISSING-DATA");
+            const desc = textGen.describe(rels[0], "M", "BRO-MISSING-DATA", "ME");
+
+            expect(rels[0].type).toBe("LINEAGE");
+            expect(rels[0].isHalf).toBe(false); // Not definitely half
+            expect(rels[0].isAmbiguous).toBe(true); // But definitely ambiguous
+
             // Check Text Output
-            expect(desc.term).toContain('Brother (Ambiguous)');
+            expect(desc.term).toContain("Brother (Ambiguous)");
         });
     });
-    
-    describe('Ambiguous Avuncular Heuristic', () => {
-        it('should label Uncle as Ambiguous if he is missing a mother record while the Sibling has one', () => {
+
+    describe("Ambiguous Avuncular Heuristic", () => {
+        it("should label Uncle as Ambiguous if he is missing a mother record while the Sibling has one", () => {
             const data = `
 ID: GRANDPA
 ID: GRANDMA
@@ -1405,20 +1415,20 @@ PARENT: DAD | BIO
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
-            
-            const rels = calculator.calculate('UNCLE-MISSING-DATA', 'ME');
-            const desc = textGen.describe(rels[0], 'M', 'UNCLE-MISSING-DATA', 'ME');
 
-            expect(rels[0].type).toBe('LINEAGE');
-            expect(rels[0].isHalf).toBe(false);      // Not definitely half
-            expect(rels[0].isAmbiguous).toBe(true);  // Definitely ambiguous
-            
-            expect(desc.term).toBe('Uncle (Ambiguous)');
+            const rels = calculator.calculate("UNCLE-MISSING-DATA", "ME");
+            const desc = textGen.describe(rels[0], "M", "UNCLE-MISSING-DATA", "ME");
+
+            expect(rels[0].type).toBe("LINEAGE");
+            expect(rels[0].isHalf).toBe(false); // Not definitely half
+            expect(rels[0].isAmbiguous).toBe(true); // Definitely ambiguous
+
+            expect(desc.term).toBe("Uncle (Ambiguous)");
         });
     });
-    
-    describe('Implicit Step-Siblings (Shared Sibling Bridge)', () => {
-        it('should identify Step-Siblings if parents share a child but have no explicit UNION', () => {
+
+    describe("Implicit Step-Siblings (Shared Sibling Bridge)", () => {
+        it("should identify Step-Siblings if parents share a child but have no explicit UNION", () => {
             const data = `
 ID: DAD
 ID: MOM
@@ -1437,14 +1447,14 @@ PARENT: MOM | BIO
 `;
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'STEP-SIS');
-            
+            const rels = calculator.calculate("ME", "STEP-SIS");
+
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('STEP_SIBLING');
+            expect(rels[0].type).toBe("STEP_SIBLING");
         });
     });
-    
-    describe('Robustness: Missing Parent + Remarriage', () => {
+
+    describe("Robustness: Missing Parent + Remarriage", () => {
         const data = `
 # Grandpa married twice
 ID: GRANDPA
@@ -1476,19 +1486,19 @@ ID: COUSIN-AMBIGUOUS
 PARENT: UNCLE-INCOMPLETE | BIO
 `;
 
-        it('should NOT assume Half-Cousin status just because an ancestor remarried (Missing Data)', () => {
+        it("should NOT assume Half-Cousin status just because an ancestor remarried (Missing Data)", () => {
             // Shared Ancestors: Only GRANDPA (Count=1)
             // Grandpa has 2 spouses.
-            const rels = calc(data, 'ME', 'COUSIN-AMBIGUOUS');
-            
-            expect(rels[0].type).toBe('LINEAGE');
+            const rels = calc(data, "ME", "COUSIN-AMBIGUOUS");
+
+            expect(rels[0].type).toBe("LINEAGE");
             // We expect the system to give the benefit of the doubt
-            expect(rels[0].isHalf).toBe(false); 
+            expect(rels[0].isHalf).toBe(false);
         });
     });
-    
-    describe('Step and Half-Removed relationships', () => {
-        it('should correctly identify Step-Cousins (Recursive Step Logic)', () => {
+
+    describe("Step and Half-Removed relationships", () => {
+        it("should correctly identify Step-Cousins (Recursive Step Logic)", () => {
             const data = `
 ID: ME
 PARENT: DAD | BIO
@@ -1503,15 +1513,15 @@ ID: STEP-COUSIN
 PARENT: STEP-UNCLE | BIO
 ID: STEP-GP
 `;
-            const rels = calc(data, 'ME', 'STEP-COUSIN');
-            expect(rels[0].type).toBe('LINEAGE');
+            const rels = calc(data, "ME", "STEP-COUSIN");
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].isStep).toBe(true);
             expect(rels[0].distA).toBe(2); // Step-Grandchild
             expect(rels[0].distB).toBe(2); // Grandchild
         });
 
-        it('should correctly textually formatting Half-Cousins with Removal', () => {
-             const data = `
+        it("should correctly textually formatting Half-Cousins with Removal", () => {
+            const data = `
 ID: SHARED-GP
 UNION: W1 | MARR
 UNION: W2 | MARR
@@ -1533,19 +1543,21 @@ PARENT: DAD | BIO
 ID: HALF-COZ-KID
 PARENT: HALF-COZ | BIO
 `;
-            const rels = calc(data, 'ME', 'HALF-COZ-KID');
+            const rels = calc(data, "ME", "HALF-COZ-KID");
             expect(rels[0].isHalf).toBe(true);
-            
-            const textGen = new RelationText(parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records);
-            const desc = textGen.describe(rels[0], 'M', 'HALF-COZ-KID', 'ME');
-            
+
+            const textGen = new RelationText(
+                parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`).records
+            );
+            const desc = textGen.describe(rels[0], "M", "HALF-COZ-KID", "ME");
+
             // Confirms the original string concatenation works as intended
-            expect(desc.term).toBe('Half-1st Cousin 1x Removed');
+            expect(desc.term).toBe("Half-1st Cousin 1x Removed");
         });
     });
-    
+
     describe('The "Third Parent" Problem (Cousins)', () => {
-        it('should identify Full Cousins correctly even if an ancestor has a Step-Parent listed first', () => {
+        it("should identify Full Cousins correctly even if an ancestor has a Step-Parent listed first", () => {
             const data = `
 # Ancestors
 ID: GRANDMA
@@ -1580,26 +1592,26 @@ PARENT: AUNT | BIO
 `;
             const parser = new FTTParser();
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
-            
+
             if (result.errors.length > 0) {
                 throw new Error(result.errors[0].message);
             }
 
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('ME', 'COUSIN');
-            
+            const rels = calculator.calculate("ME", "COUSIN");
+
             // Basic Cousin Check
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('LINEAGE');
+            expect(rels[0].type).toBe("LINEAGE");
             expect(rels[0].distA).toBe(2); // Grandchild
             expect(rels[0].distB).toBe(2); // Grandchild
-            
+
             // Expected Behavior: isHalf should be false (Full First Cousins).
-            expect(rels[0].isHalf).toBe(false); 
+            expect(rels[0].isHalf).toBe(false);
         });
     });
-    
-    describe('Widowed Step-Parent Logic', () => {
+
+    describe("Widowed Step-Parent Logic", () => {
         const data = `
 ID: BIO-DAD
 SEX: M
@@ -1616,33 +1628,33 @@ PARENT: BIO-DAD | BIO
 # No biological link to STEP-MOM
 `;
 
-        it('should identify Widowed Step-Parent as current Step-Parent', () => {
+        it("should identify Widowed Step-Parent as current Step-Parent", () => {
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             if (result.errors.length > 0) throw new Error(result.errors[0].message);
 
             const calculator = new RelationshipCalculator(result.records);
-            const rels = calculator.calculate('STEP-MOM', 'ME');
+            const rels = calculator.calculate("STEP-MOM", "ME");
 
             expect(rels).toHaveLength(1);
-            expect(rels[0].type).toBe('STEP_PARENT');
-            expect(rels[0].parentId).toBe('BIO-DAD');
+            expect(rels[0].type).toBe("STEP_PARENT");
+            expect(rels[0].parentId).toBe("BIO-DAD");
 
-            expect(rels[0].isEx).toBe(false); 
+            expect(rels[0].isEx).toBe(false);
         });
 
         it('should generate correct "Step-Mother" text instead of "Former"', () => {
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
             const textGen = new RelationText(result.records);
-            
-            const rels = calculator.calculate('STEP-MOM', 'ME');
-            const desc = textGen.describe(rels[0], 'F', 'ME', 'STEP-MOM');
+
+            const rels = calculator.calculate("STEP-MOM", "ME");
+            const desc = textGen.describe(rels[0], "F", "ME", "STEP-MOM");
 
             // Should be "Step-Mother", NOT "Former Step-Mother"
-            expect(desc.term).toBe('Step-Mother');
+            expect(desc.term).toBe("Step-Mother");
         });
     });
-    
+
     describe('"Ghost" Lineage: Intra-Family Adoption', () => {
         const data = `
 # The Ancestors
@@ -1668,24 +1680,23 @@ PARENT: BIO-DAD | BIO
 PARENT: UNCLE-DAD | ADO
 `;
 
-        it('should detect BOTH the Adoptive Father and Natural Uncle relationships', () => {
+        it("should detect BOTH the Adoptive Father and Natural Uncle relationships", () => {
             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
             const calculator = new RelationshipCalculator(result.records);
-            const textGen = new RelationText(result.records);
-            
-            const rels = calculator.calculate('UNCLE-DAD', 'CHILD');
+
+            const rels = calculator.calculate("UNCLE-DAD", "CHILD");
 
             expect(rels).toHaveLength(2);
 
-            const adoPath = rels.find(r => r.distA === 0 && r.distB === 1 && r.isAdoptive);
+            const adoPath = rels.find((r) => r.distA === 0 && r.distB === 1 && r.isAdoptive);
             expect(adoPath).toBeDefined();
 
-            const unclePath = rels.find(r => r.distA === 1 && r.distB === 2 && !r.isAdoptive);
+            const unclePath = rels.find((r) => r.distA === 1 && r.distB === 2 && !r.isAdoptive);
             expect(unclePath).toBeDefined();
         });
     });
-    
-    describe('Pedigree Collapse (Double Relationship via Endogamy)', () => {
+
+    describe("Pedigree Collapse (Double Relationship via Endogamy)", () => {
         const data = `
 # Common Ancestor
 ID: GGP
@@ -1728,23 +1739,23 @@ PARENT: COUSIN-PARENT | BIO
 `;
 
         it('A "Double Cousin" relationship requires the individuals to share common ancestors from two distinct lines', () => {
-             // Setup
-             const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
-             const calculator = new RelationshipCalculator(result.records);
-             
-             // Execution
-             const rels = calculator.calculate('ME', 'TARGET-COUSIN');
-             
-             // Baseline Assertions (Standard 2nd Cousin properties)
-             expect(rels).toHaveLength(1);
-             expect(rels[0].type).toBe('LINEAGE');
-             expect(rels[0].distA).toBe(3); // Great-Grandchild
-             expect(rels[0].distB).toBe(3); // Great-Grandchild
-             expect(rels[0].isDouble).toBe(false); 
+            // Setup
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const calculator = new RelationshipCalculator(result.records);
+
+            // Execution
+            const rels = calculator.calculate("ME", "TARGET-COUSIN");
+
+            // Baseline Assertions (Standard 2nd Cousin properties)
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe("LINEAGE");
+            expect(rels[0].distA).toBe(3); // Great-Grandchild
+            expect(rels[0].distB).toBe(3); // Great-Grandchild
+            expect(rels[0].isDouble).toBe(false);
         });
     });
-    
-    describe('Duplicate Step-Lineage via Spouses', () => {
+
+    describe("Duplicate Step-Lineage via Spouses", () => {
         const data = `
 # The Parents (Married, creating Step-Sibling link between ME and STEP-BRO)
 ID: DAD
@@ -1767,25 +1778,25 @@ ID: STEP-GREAT-NEPHEW
 PARENT: STEP-NEPHEW | BIO
 `;
 
-        it('should return a single deduplicated Step-Relationship for Step-Grand-Nephew', () => {
+        it("should return a single deduplicated Step-Relationship for Step-Grand-Nephew", () => {
             // Calculate relationship from STEP-GREAT-NEPHEW to ME
-            const rels = calc(data, 'STEP-GREAT-NEPHEW', 'ME');
+            const rels = calc(data, "STEP-GREAT-NEPHEW", "ME");
 
             expect(rels).toHaveLength(1);
 
             const rel = rels[0];
-            expect(rel.type).toBe('LINEAGE');
+            expect(rel.type).toBe("LINEAGE");
             expect(rel.isStep).toBe(true);
-            
+
             // Verify Distances
             // STEP-GREAT-NEPHEW is 3 generations down from Common Ancestor Pair (STEP-MOM/DAD)
-            expect(rel.distA).toBe(3); 
+            expect(rel.distA).toBe(3);
             // ME is 1 generation down from Common Ancestor Pair
             expect(rel.distB).toBe(1);
         });
     });
-    
-    describe('Mixed Lineage Pruning (Adoptive Grandparents)', () => {
+
+    describe("Mixed Lineage Pruning (Adoptive Grandparents)", () => {
         const data = `
 ID: ME
 SEX: M
@@ -1806,20 +1817,20 @@ ID: GRANDMA-ADOPTIVE
 SEX: F
 `;
 
-        it('should identify DAD only as Father, pruning the redundant Adoptive Uncle relationship', () => {
+        it("should identify DAD only as Father, pruning the redundant Adoptive Uncle relationship", () => {
             // Without the fix, the calculator sees two paths:
             // 1. Direct: DAD -> ME (Bio)
             // 2. Common Ancestor (Grandpa): DAD is Child (Ado) & ME is Grandchild (Ado pathway).
             //    This creates a false "Adoptive Uncle" relationship if not pruned.
-            const rels = calc(data, 'DAD', 'ME');
+            const rels = calc(data, "DAD", "ME");
 
             expect(rels).toHaveLength(1);
-            
+
             const rel = rels[0];
-            expect(rel.type).toBe('LINEAGE');
+            expect(rel.type).toBe("LINEAGE");
             expect(rel.distA).toBe(0); // DAD is Ancestor (0 steps up)
             expect(rel.distB).toBe(1); // ME is Descendant (1 step down)
-            
+
             // Ensure the primary relationship is purely recognized as biological father
             // The fact that Dad *has* adoptive parents shouldn't make him an "Adoptive Father" to ME.
             expect(rel.isAdoptive).toBe(false);

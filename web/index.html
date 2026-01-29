@@ -1,119 +1,171 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FamilyTree-Text (FTT) Project</title>
-    <link rel="stylesheet" href="./css/shared.css">
-    <style>
-        /* Homepage-specific styles */
-        body { background-color: white; }
-        
-        .hero {
-            background-color: var(--light);
-            padding: 4rem 2rem;
-            text-align: center;
-            border-bottom: 1px solid var(--border);
-        }
-        .hero h1 { justify-content: center; font-size: 2.5rem; margin-bottom: 0.5rem; }
-        .hero p.tagline { font-size: 1.25rem; max-width: 600px; margin: 0 auto 2rem auto; }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>FamilyTree-Text (FTT) Project</title>
+        <link rel="stylesheet" href="./css/shared.css" />
+        <style>
+            /* Homepage-specific styles */
+            body {
+                background-color: white;
+            }
 
-        .tools-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 2rem;
-            max-width: 1100px; 
-            margin: -3rem auto 3rem auto;
-            padding: 0 1rem;
-        }
+            .hero {
+                background-color: var(--light);
+                padding: 4rem 2rem;
+                text-align: center;
+                border-bottom: 1px solid var(--border);
+            }
+            .hero h1 {
+                justify-content: center;
+                font-size: 2.5rem;
+                margin-bottom: 0.5rem;
+            }
+            .hero p.tagline {
+                font-size: 1.25rem;
+                max-width: 600px;
+                margin: 0 auto 2rem auto;
+            }
 
-        .tool-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border: 1px solid var(--border);
-            text-align: center;
-            transition: transform 0.2s;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-        .tool-card:hover { transform: translateY(-5px); }
-        .tool-card h2 { color: var(--primary); margin-top: 0; }
+            .tools-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 2rem;
+                max-width: 1100px;
+                margin: -3rem auto 3rem auto;
+                padding: 0 1rem;
+            }
 
-        .info-section { max-width: 800px; margin: 0 auto 4rem auto; padding: 0 2rem; }
-        .info-section h3 { border-bottom: 2px solid var(--light); padding-bottom: 0.5rem; margin-top: 2rem; }
+            .tool-card {
+                background: white;
+                padding: 2rem;
+                border-radius: 8px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                border: 1px solid var(--border);
+                text-align: center;
+                transition: transform 0.2s;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }
+            .tool-card:hover {
+                transform: translateY(-5px);
+            }
+            .tool-card h2 {
+                color: var(--primary);
+                margin-top: 0;
+            }
 
-        footer {
-            background: var(--light);
-            text-align: center;
-            padding: 2rem;
-            margin-top: auto;
-            border-top: 1px solid var(--border);
-            color: var(--secondary);
-            font-size: 0.9rem;
-        }
-    </style>
-</head>
-<body>
+            .info-section {
+                max-width: 800px;
+                margin: 0 auto 4rem auto;
+                padding: 0 2rem;
+            }
+            .info-section h3 {
+                border-bottom: 2px solid var(--light);
+                padding-bottom: 0.5rem;
+                margin-top: 2rem;
+            }
 
-    <section class="hero">
-        <h1>FamilyTree-Text (FTT)</h1>
-        <p class="tagline">Data durability through human-readable, machine-parseable UTF-8 plain text.</p>
-        
-        <div style="margin-top: 1rem;">
-            <a href="spec.html" class="btn btn-outline">Read Specification</a>
-            <a href="https://github.com/arthurdick/familytree-text" class="btn btn-outline" target="_blank">View on GitHub</a>
-        </div>
-    </section>
+            footer {
+                background: var(--light);
+                text-align: center;
+                padding: 2rem;
+                margin-top: auto;
+                border-top: 1px solid var(--border);
+                color: var(--secondary);
+                font-size: 0.9rem;
+            }
+        </style>
+    </head>
+    <body>
+        <section class="hero">
+            <h1>FamilyTree-Text (FTT)</h1>
+            <p class="tagline">
+                Data durability through human-readable, machine-parseable UTF-8 plain text.
+            </p>
 
-    <div class="tools-grid">
-        <div class="tool-card">
-            <div>
-                <h2>Graph Visualizer</h2>
-                <p>Write FTT code in the browser and instantly render an interactive genealogy graph.</p>
+            <div style="margin-top: 1rem">
+                <a href="spec.html" class="btn btn-outline">Read Specification</a>
+                <a
+                    href="https://github.com/arthurdick/familytree-text"
+                    class="btn btn-outline"
+                    target="_blank"
+                    >View on GitHub</a
+                >
             </div>
-            <a href="tools/visualizer.html" class="btn btn-primary" style="margin-top:15px;">Launch Visualizer</a>
-        </div>
+        </section>
 
-        <div class="tool-card">
-            <div>
-                <h2>Relationship Calculator</h2>
-                <p>Input your FTT data and two IDs to calculate the exact kinship between individuals.</p>
+        <div class="tools-grid">
+            <div class="tool-card">
+                <div>
+                    <h2>Graph Visualizer</h2>
+                    <p>
+                        Write FTT code in the browser and instantly render an interactive genealogy
+                        graph.
+                    </p>
+                </div>
+                <a href="tools/visualizer.html" class="btn btn-primary" style="margin-top: 15px"
+                    >Launch Visualizer</a
+                >
             </div>
-            <a href="tools/relationship.html" class="btn btn-primary" style="margin-top:15px;">Launch Calculator</a>
-        </div>
 
-        <div class="tool-card">
-            <div>
-                <h2>Format Bridge</h2>
-                <p>Import existing data from GEDCOM 5.5.1 or export your FTT tree for use in other software.</p>
+            <div class="tool-card">
+                <div>
+                    <h2>Relationship Calculator</h2>
+                    <p>
+                        Input your FTT data and two IDs to calculate the exact kinship between
+                        individuals.
+                    </p>
+                </div>
+                <a href="tools/relationship.html" class="btn btn-primary" style="margin-top: 15px"
+                    >Launch Calculator</a
+                >
             </div>
-            <a href="tools/converter.html" class="btn btn-primary" style="margin-top:15px;">Launch Converter</a>
+
+            <div class="tool-card">
+                <div>
+                    <h2>Format Bridge</h2>
+                    <p>
+                        Import existing data from GEDCOM 5.5.1 or export your FTT tree for use in
+                        other software.
+                    </p>
+                </div>
+                <a href="tools/converter.html" class="btn btn-primary" style="margin-top: 15px"
+                    >Launch Converter</a
+                >
+            </div>
         </div>
-    </div>
 
-    <section class="info-section">
-        <h3>What is FTT?</h3>
-        <p>
-            <strong>FamilyTree-Text (FTT)</strong> is a proposed standard for storing genealogical data. 
-            Unlike GEDCOM (which can be verbose) or database blobs (which are opaque), FTT is designed 
-            to be written and read like a simple text document.
-        </p>
+        <section class="info-section">
+            <h3>What is FTT?</h3>
+            <p>
+                <strong>FamilyTree-Text (FTT)</strong> is a proposed standard for storing
+                genealogical data. Unlike GEDCOM (which can be verbose) or database blobs (which are
+                opaque), FTT is designed to be written and read like a simple text document.
+            </p>
 
-        <h3>Core Principles</h3>
-        <ul>
-            <li><strong>Human Readability:</strong> You can open an <code>.ftt</code> file in Notepad and understand it without software.</li>
-            <li><strong>Git Friendliness:</strong> The line-based structure allows for clean "diffs," making it perfect for version-controlling family history.</li>
-            <li><strong>Data Durability:</strong> No binary encoding or complex XML schemas. Just UTF-8 text.</li>
-        </ul>
-    </section>
+            <h3>Core Principles</h3>
+            <ul>
+                <li>
+                    <strong>Human Readability:</strong> You can open an <code>.ftt</code> file in
+                    Notepad and understand it without software.
+                </li>
+                <li>
+                    <strong>Git Friendliness:</strong> The line-based structure allows for clean
+                    "diffs," making it perfect for version-controlling family history.
+                </li>
+                <li>
+                    <strong>Data Durability:</strong> No binary encoding or complex XML schemas.
+                    Just UTF-8 text.
+                </li>
+            </ul>
+        </section>
 
-    <footer>
-        <p>FTT Reference Implementation v0.1 &copy; 2026 Arthur Dick.</p>
-        <p>Released under the MIT License.</p>
-    </footer>
-
-</body>
+        <footer>
+            <p>FTT Reference Implementation v0.1 &copy; 2026 Arthur Dick.</p>
+            <p>Released under the MIT License.</p>
+        </footer>
+    </body>
 </html>

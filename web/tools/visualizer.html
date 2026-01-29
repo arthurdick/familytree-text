@@ -1,149 +1,203 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>FTT Visualizer</title>
-  <link rel="stylesheet" href="../css/shared.css">
-  <style>
-        /* Visualizer-specific Layout */
-        body { overflow: hidden; }
-        
-        #container { display: flex; height: 100vh; }
-        
-        /* Editor Pane */
-        #editor-pane {
-            width: 35%;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border);
-            background: var(--light);
-        }
-        
-        #toolbar {
-            padding: 10px 15px;
-            background: #e9ecef;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+    <head>
+        <meta charset="UTF-8" />
+        <title>FTT Visualizer</title>
+        <link rel="stylesheet" href="../css/shared.css" />
+        <style>
+            /* Visualizer-specific Layout */
+            body {
+                overflow: hidden;
+            }
 
-        #toolbar-group { display: flex; gap: 10px; align-items: center; }
+            #container {
+                display: flex;
+                height: 100vh;
+            }
 
-        /* Dropdown Menu Styles */
-        .dropdown { position: relative; display: inline-block; }
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            right: 0;
-            background-color: white;
-            min-width: 160px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.1);
-            z-index: 10;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            margin-top: 5px;
-        }
-        .dropdown-content button {
-            color: var(--dark);
-            padding: 10px 16px;
-            text-decoration: none;
-            display: block;
-            background: none;
-            width: 100%;
-            text-align: left;
-            border: none;
-            font-weight: normal;
-        }
-        .dropdown-content button:hover { background-color: var(--light); }
-        .dropdown-divider { height: 1px; background-color: var(--border); margin: 4px 0; }
-        .show { display: block; }
+            /* Editor Pane */
+            #editor-pane {
+                width: 35%;
+                display: flex;
+                flex-direction: column;
+                border-right: 1px solid var(--border);
+                background: var(--light);
+            }
 
-        #editor {
-            flex-grow: 1;
-            width: 100%;
-            border: none;
-            outline: none;
-            padding: 20px;
-            font-size: 13px;
-            line-height: 1.5;
-        }
+            #toolbar {
+                padding: 10px 15px;
+                background: #e9ecef;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
 
-        #editor::selection { background-color: #ffe8cc; color: #000; }
+            #toolbar-group {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
 
-        /* Graph Pane */
-        #cy {
-            width: 65%;
-            background: #ffffff;
-            background-image: radial-gradient(var(--border) 1px, transparent 1px);
-            background-size: 20px 20px;
-        }
-        
-        #error-box { display: none; max-height: 120px; overflow-y: auto; border-radius: 0; border-top: 1px solid #f5c6cb; border-left: 0; border-right: 0; border-bottom: 0; margin-top: 0; }
-        
-        /* Error/Warning Row Styles */
-        .msg-header {
-            padding: 6px 8px;
-            font-weight: bold;
-            border-bottom: 1px solid #ccc;
-            background-color: #f8f9fa;
-            font-size: 0.85rem;
-        }
-        .msg-row {
-            padding: 6px 8px;
-            cursor: pointer;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-            font-size: 0.85rem;
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-        }
-        .msg-row.error:hover { background-color: #fff5f5; }
-        .msg-row.warning:hover { background-color: #fff9db; }
+            /* Dropdown Menu Styles */
+            .dropdown {
+                position: relative;
+                display: inline-block;
+            }
+            .dropdown-content {
+                display: none;
+                position: absolute;
+                right: 0;
+                background-color: white;
+                min-width: 160px;
+                box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.1);
+                z-index: 10;
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                margin-top: 5px;
+            }
+            .dropdown-content button {
+                color: var(--dark);
+                padding: 10px 16px;
+                text-decoration: none;
+                display: block;
+                background: none;
+                width: 100%;
+                text-align: left;
+                border: none;
+                font-weight: normal;
+            }
+            .dropdown-content button:hover {
+                background-color: var(--light);
+            }
+            .dropdown-divider {
+                height: 1px;
+                background-color: var(--border);
+                margin: 4px 0;
+            }
+            .show {
+                display: block;
+            }
 
-        .msg-line { font-weight: bold; font-family: monospace; min-width: 30px; }
-        .msg-row.error .msg-line { color: #dc3545; }
-        .msg-row.warning .msg-line { color: #d68b00; }
+            #editor {
+                flex-grow: 1;
+                width: 100%;
+                border: none;
+                outline: none;
+                padding: 20px;
+                font-size: 13px;
+                line-height: 1.5;
+            }
 
-        .msg-code { color: #666; font-size: 0.8em; font-weight: bold; }
-        .msg-text { color: #333; flex: 1; }
+            #editor::selection {
+                background-color: #ffe8cc;
+                color: #000;
+            }
 
-        .msg-critical {
-            padding: 8px;
-            color: #dc3545;
-            font-weight: bold;
-            border-top: 2px solid #dc3545;
-            background-color: #fff5f5;
-        }
-  </style>
-</head>
-<body>
-  <div id="container">
-    <div id="editor-pane">
-      <div id="toolbar">
-        <span style="font-weight:600; color:#495057;">FTT Editor</span>
-        <div id="toolbar-group">
-            <button id="btn-render" class="btn btn-primary" title="Ctrl+Enter">Render Graph</button>
-            
-            <div class="dropdown">
-                <button id="btn-file-menu" class="btn btn-secondary">File ▼</button>
-                <div id="file-menu-content" class="dropdown-content">
-                    <button id="btn-open">Open File...</button>
-                    <button id="btn-save">Save as .ftt</button>
-                    <div class="dropdown-divider"></div>
-                    <button id="btn-export-png">Export Image (.png)</button>
+            /* Graph Pane */
+            #cy {
+                width: 65%;
+                background: #ffffff;
+                background-image: radial-gradient(var(--border) 1px, transparent 1px);
+                background-size: 20px 20px;
+            }
+
+            #error-box {
+                display: none;
+                max-height: 120px;
+                overflow-y: auto;
+                border-radius: 0;
+                border-top: 1px solid #f5c6cb;
+                border-left: 0;
+                border-right: 0;
+                border-bottom: 0;
+                margin-top: 0;
+            }
+
+            /* Error/Warning Row Styles */
+            .msg-header {
+                padding: 6px 8px;
+                font-weight: bold;
+                border-bottom: 1px solid #ccc;
+                background-color: #f8f9fa;
+                font-size: 0.85rem;
+            }
+            .msg-row {
+                padding: 6px 8px;
+                cursor: pointer;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+                font-size: 0.85rem;
+                display: flex;
+                align-items: baseline;
+                gap: 8px;
+            }
+            .msg-row.error:hover {
+                background-color: #fff5f5;
+            }
+            .msg-row.warning:hover {
+                background-color: #fff9db;
+            }
+
+            .msg-line {
+                font-weight: bold;
+                font-family: monospace;
+                min-width: 30px;
+            }
+            .msg-row.error .msg-line {
+                color: #dc3545;
+            }
+            .msg-row.warning .msg-line {
+                color: #d68b00;
+            }
+
+            .msg-code {
+                color: #666;
+                font-size: 0.8em;
+                font-weight: bold;
+            }
+            .msg-text {
+                color: #333;
+                flex: 1;
+            }
+
+            .msg-critical {
+                padding: 8px;
+                color: #dc3545;
+                font-weight: bold;
+                border-top: 2px solid #dc3545;
+                background-color: #fff5f5;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container">
+            <div id="editor-pane">
+                <div id="toolbar">
+                    <span style="font-weight: 600; color: #495057">FTT Editor</span>
+                    <div id="toolbar-group">
+                        <button id="btn-render" class="btn btn-primary" title="Ctrl+Enter">
+                            Render Graph
+                        </button>
+
+                        <div class="dropdown">
+                            <button id="btn-file-menu" class="btn btn-secondary">File ▼</button>
+                            <div id="file-menu-content" class="dropdown-content">
+                                <button id="btn-open">Open File...</button>
+                                <button id="btn-save">Save as .ftt</button>
+                                <div class="dropdown-divider"></div>
+                                <button id="btn-export-png">Export Image (.png)</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-      </div>
-      
-      <input type="file" id="file-input" accept=".ftt,.txt" style="display: none;">
 
-      <textarea id="editor" spellcheck="false"></textarea>
-      <div id="error-box" class="error-box"></div>
-    </div>
-    <div id="cy"></div>
-  </div>
-  <script type="module" src="../src/visualizer.js"></script>
-</body>
+                <input type="file" id="file-input" accept=".ftt,.txt" style="display: none" />
+
+                <textarea id="editor" spellcheck="false"></textarea>
+                <div id="error-box" class="error-box"></div>
+            </div>
+            <div id="cy"></div>
+        </div>
+        <script type="module" src="../src/visualizer.js"></script>
+    </body>
 </html>

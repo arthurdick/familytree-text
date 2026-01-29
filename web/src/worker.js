@@ -1,4 +1,4 @@
-import FTTParser from '../../implementations/js/FTTParser.js';
+import FTTParser from "../../implementations/js/FTTParser.js";
 
 const parser = new FTTParser();
 
@@ -7,10 +7,10 @@ self.onmessage = (e) => {
     try {
         const result = parser.parse(fttContent);
         const ranks = calculateGenerations(result.records);
-        const elements = convertToCytoscape(result, ranks); 
+        const elements = convertToCytoscape(result, ranks);
 
         self.postMessage({
-            type: 'SUCCESS',
+            type: "SUCCESS",
             payload: {
                 elements,
                 errors: result.errors,
@@ -19,7 +19,7 @@ self.onmessage = (e) => {
         });
     } catch (err) {
         self.postMessage({
-            type: 'CRITICAL_ERROR',
+            type: "CRITICAL_ERROR",
             payload: { message: err.message }
         });
     }
@@ -29,7 +29,7 @@ function calculateGenerations(records) {
     const idToRank = {};
     const parent = new Map();
     const rank = new Map();
-    Object.keys(records).forEach(id => {
+    Object.keys(records).forEach((id) => {
         parent.set(id, id);
         rank.set(id, 0);
     });
@@ -55,29 +55,29 @@ function calculateGenerations(records) {
             }
         }
     }
-    Object.values(records).forEach(rec => {
+    Object.values(records).forEach((rec) => {
         if (rec.data.UNION) {
-            rec.data.UNION.forEach(u => {
+            rec.data.UNION.forEach((u) => {
                 const partner = u.parsed[0];
                 if (records[partner]) union(rec.id, partner);
             });
         }
     });
     const clusterMap = new Map();
-    Object.keys(records).forEach(id => clusterMap.set(id, find(id)));
+    Object.keys(records).forEach((id) => clusterMap.set(id, find(id)));
     // Add implicit parents to cluster logic to avoid crashes
     // (Ideally implicit parents are handled, but for rank calc we focus on records.
     //  Implicit parents will default to rank 0 later if not found here.)
-    
+
     const uniqueClusters = new Set(clusterMap.values());
     const clusterGraph = new Map();
-    uniqueClusters.forEach(cId => {
+    uniqueClusters.forEach((cId) => {
         clusterGraph.set(cId, { parents: new Set(), rank: 0 });
     });
-    Object.values(records).forEach(child => {
+    Object.values(records).forEach((child) => {
         if (child.data.PARENT) {
             const childCluster = clusterMap.get(child.id);
-            child.data.PARENT.forEach(p => {
+            child.data.PARENT.forEach((p) => {
                 const parentId = p.parsed[0];
                 if (records[parentId]) {
                     const parentCluster = clusterMap.get(parentId);
@@ -98,18 +98,18 @@ function calculateGenerations(records) {
         let maxParentRank = -1;
         const node = clusterGraph.get(cId);
         if (node && node.parents.size > 0) {
-            node.parents.forEach(pId => {
+            node.parents.forEach((pId) => {
                 const pRank = getRank(pId);
                 if (pRank > maxParentRank) maxParentRank = pRank;
             });
         }
         visiting.delete(cId);
-        const myRank = maxParentRank + 2; 
+        const myRank = maxParentRank + 2;
         memo.set(cId, myRank);
         return myRank;
     }
-    uniqueClusters.forEach(cId => getRank(cId));
-    Object.keys(records).forEach(id => {
+    uniqueClusters.forEach((cId) => getRank(cId));
+    Object.keys(records).forEach((id) => {
         const cId = clusterMap.get(id);
         idToRank[id] = memo.get(cId) || 0;
     });
@@ -117,10 +117,10 @@ function calculateGenerations(records) {
 }
 
 function calculateNodeVisualOrder(records, ranks, allNodeIds) {
-    const visualOrder = new Map(); 
+    const visualOrder = new Map();
     const idsByRank = new Map();
     // 1. Group IDs by Rank (Including implicit ones which default to 0)
-    allNodeIds.forEach(id => {
+    allNodeIds.forEach((id) => {
         const r = ranks[id] || 0;
         if (!idsByRank.has(r)) idsByRank.set(r, []);
         idsByRank.get(r).push(id);
@@ -129,10 +129,10 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
 
     for (let r = 0; r <= maxRank; r++) {
         const ids = idsByRank.get(r) || [];
-        
+
         ids.forEach((id, index) => {
             const rec = records[id];
-            
+
             // Base Score (preserves stability for nodes with no other constraints)
             let score = index * 0.0001;
 
@@ -141,7 +141,7 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
                 let parentScoreSum = 0;
                 let parentCount = 0;
 
-                rec.data.PARENT.forEach(p => {
+                rec.data.PARENT.forEach((p) => {
                     const pId = p.parsed[0];
                     if (visualOrder.has(pId)) {
                         parentScoreSum += visualOrder.get(pId);
@@ -150,24 +150,24 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
                 });
 
                 if (parentCount > 0) {
-                    score += (parentScoreSum / parentCount);
+                    score += parentScoreSum / parentCount;
                 }
 
                 // Scan ALL parents for the best explicit index
-                let bestIndex = Infinity; 
+                let bestIndex = Infinity;
                 let foundExplicit = false;
 
-                rec.data.PARENT.forEach(p => {
+                rec.data.PARENT.forEach((p) => {
                     const pId = p.parsed[0];
                     const parentRec = records[pId];
                     if (parentRec && parentRec.data.CHILD) {
                         // Find the entry for this child in this parent's list
-                        const childEntry = parentRec.data.CHILD.find(c => c.parsed[0] === id);
+                        const childEntry = parentRec.data.CHILD.find((c) => c.parsed[0] === id);
                         if (childEntry) {
                             const idx = parentRec.data.CHILD.indexOf(childEntry);
                             // Check if this entry is from an Explicit CHILD tag or Implicitly appended
                             const isExplicit = !childEntry.isImplicit;
-                            
+
                             if (isExplicit) {
                                 if (!foundExplicit) {
                                     // First explicit found: prioritized immediately
@@ -186,10 +186,10 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
                 });
 
                 if (bestIndex !== Infinity) {
-                    score += (bestIndex + 1);
+                    score += bestIndex + 1;
                 }
             } else {
-                score += (index * 100);
+                score += index * 100;
             }
             visualOrder.set(id, score);
         });
@@ -214,21 +214,24 @@ function convertToCytoscape(parsedData, ranks) {
     // A. Fill from Explicit Records (Manifests)
     for (const [id, rec] of Object.entries(records)) {
         if (rec.data.CHILD) {
-            parentToChildren.set(id, rec.data.CHILD.map(c => c.parsed[0]));
+            parentToChildren.set(
+                id,
+                rec.data.CHILD.map((c) => c.parsed[0])
+            );
         }
     }
 
     // B. Fill from Scanning Children (Find implicit parents)
     for (const [childId, childRec] of Object.entries(records)) {
         if (childRec.data.PARENT) {
-            childRec.data.PARENT.forEach(p => {
+            childRec.data.PARENT.forEach((p) => {
                 const parentId = p.parsed[0];
                 allNodeIds.add(parentId); // Ensure implicit parent is in node list
 
                 if (!parentToChildren.has(parentId)) {
                     parentToChildren.set(parentId, []);
                 }
-                
+
                 // If parent is implicit (not in records), we must manually build the child list
                 if (!records[parentId]) {
                     const list = parentToChildren.get(parentId);
@@ -243,11 +246,11 @@ function convertToCytoscape(parsedData, ranks) {
     // C. Sort children of Implicit Parents (by Date)
     for (const [pId, children] of parentToChildren) {
         if (!records[pId]) {
-             children.sort((a, b) => {
-                 const dA = records[a]?.data.BORN?.[0]?.parsed[0] || "9999";
-                 const dB = records[b]?.data.BORN?.[0]?.parsed[0] || "9999";
-                 return dA.localeCompare(dB);
-             });
+            children.sort((a, b) => {
+                const dA = records[a]?.data.BORN?.[0]?.parsed[0] || "9999";
+                const dB = records[b]?.data.BORN?.[0]?.parsed[0] || "9999";
+                return dA.localeCompare(dB);
+            });
         }
     }
 
@@ -262,12 +265,15 @@ function convertToCytoscape(parsedData, ranks) {
     function addNode(id, label, subLabel, type) {
         if (createdNodeIds.has(id)) return;
         const rank = ranks[id] !== undefined ? ranks[id] : 0;
-        
+
         elements.push({
             data: {
-                id, label, subLabel, type,
-                elk: { 
-                    'org.eclipse.elk.layered.layerIndex': rank
+                id,
+                label,
+                subLabel,
+                type,
+                elk: {
+                    "org.eclipse.elk.layered.layerIndex": rank
                 }
             }
         });
@@ -277,7 +283,7 @@ function convertToCytoscape(parsedData, ranks) {
     function ensurePlaceholderNode(id) {
         if (!createdNodeIds.has(id)) {
             // Implicit/Placeholder node
-            addNode(id, id, '(Unknown)', 'PLACEHOLDER');
+            addNode(id, id, "(Unknown)", "PLACEHOLDER");
         }
     }
 
@@ -288,13 +294,13 @@ function convertToCytoscape(parsedData, ranks) {
             ensurePlaceholderNode(id);
             continue;
         }
-        if (rec.type === 'SOURCE' || rec.type === 'EVENT') continue;
+        if (rec.type === "SOURCE" || rec.type === "EVENT") continue;
         let label = id;
         let subLabel = "";
-        if (rec.type === 'INDIVIDUAL' || rec.type === 'PLACEHOLDER') {
+        if (rec.type === "INDIVIDUAL" || rec.type === "PLACEHOLDER") {
             if (rec.data.NAME && rec.data.NAME.length > 0) {
                 label = rec.data.NAME[0].parsed[0] || id;
-                const prefName = rec.data.NAME.find(n => n.parsed[3] === 'PREF');
+                const prefName = rec.data.NAME.find((n) => n.parsed[3] === "PREF");
                 if (prefName) label = prefName.parsed[0];
             }
             if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
@@ -311,22 +317,26 @@ function convertToCytoscape(parsedData, ranks) {
         if (!isPair && soloToHubId[key]) return soloToHubId[key];
 
         const hubId = isPair ? `union_${unionCounter++}` : `solo_${unionCounter++}`;
-        const type = isPair ? (records[p1]?.data.UNION ? 'UNION_NODE' : 'IMPLICIT_NODE') : 'SOLO_NODE';
+        const type = isPair
+            ? records[p1]?.data.UNION
+                ? "UNION_NODE"
+                : "IMPLICIT_NODE"
+            : "SOLO_NODE";
 
         if (isPair) pairToHubId[key] = hubId;
         else soloToHubId[key] = hubId;
 
         const p1Rank = ranks[p1] || 0;
         const hubRank = p1Rank + 1;
-        
+
         // Hubs should generally sit "between" the parents visual priority if possible,
         // but simple rank placement is usually enough.
         elements.push({
-            data: { id: hubId, type: type, elk: { 'org.eclipse.elk.layered.layerIndex': hubRank } }
+            data: { id: hubId, type: type, elk: { "org.eclipse.elk.layered.layerIndex": hubRank } }
         });
-        elements.push({ data: { source: p1, target: hubId }, classes: 'spouse-edge' });
-        if (isPair) elements.push({ data: { source: p2, target: hubId }, classes: 'spouse-edge' });
-        
+        elements.push({ data: { source: p1, target: hubId }, classes: "spouse-edge" });
+        if (isPair) elements.push({ data: { source: p2, target: hubId }, classes: "spouse-edge" });
+
         return hubId;
     }
 
@@ -334,7 +344,7 @@ function convertToCytoscape(parsedData, ranks) {
     for (const id of sortedNodeIds) {
         const rec = records[id];
         if (rec && rec.data.UNION) {
-            rec.data.UNION.forEach(u => {
+            rec.data.UNION.forEach((u) => {
                 const partnerId = u.parsed[0];
                 if (!partnerId) return;
                 ensurePlaceholderNode(partnerId);
@@ -352,21 +362,21 @@ function convertToCytoscape(parsedData, ranks) {
         const parentRec = records[parentId] || { data: {} };
         // Mock for implicit
 
-        children.forEach(childId => {
+        children.forEach((childId) => {
             const childRec = records[childId];
             if (!childRec || !childRec.data.PARENT) return;
 
-            const myParentTag = childRec.data.PARENT.find(p => p.parsed[0] === parentId);
+            const myParentTag = childRec.data.PARENT.find((p) => p.parsed[0] === parentId);
             if (!myParentTag) return;
 
-            const relationType = (myParentTag.parsed[1] || 'BIO').toUpperCase();
-            const isBio = relationType === 'BIO';
+            const relationType = (myParentTag.parsed[1] || "BIO").toUpperCase();
+            const isBio = relationType === "BIO";
 
             // Resolve Partner
             let partnerId = null;
             if (parentRec.data.UNION) {
-                partnerId = parentRec.data.UNION.find(u => 
-                    childRec.data.PARENT.some(p => p.parsed[0] === u.parsed[0])
+                partnerId = parentRec.data.UNION.find((u) =>
+                    childRec.data.PARENT.some((p) => p.parsed[0] === u.parsed[0])
                 )?.parsed[0];
             }
 
@@ -386,7 +396,7 @@ function convertToCytoscape(parsedData, ranks) {
                 createdLineageEdges.add(edgeKey);
                 elements.push({
                     data: { source: hubId, target: childId, edgeType: relationType },
-                    classes: isBio ? 'lineage-edge' : 'non-bio-edge'
+                    classes: isBio ? "lineage-edge" : "non-bio-edge"
                 });
             }
         });
@@ -396,14 +406,14 @@ function convertToCytoscape(parsedData, ranks) {
     for (const id of sortedNodeIds) {
         const rec = records[id];
         if (rec && rec.data.ASSOC) {
-            rec.data.ASSOC.forEach(assoc => {
+            rec.data.ASSOC.forEach((assoc) => {
                 const targetId = assoc.parsed[0];
-                const role = assoc.parsed[1] || 'ASSOC';
+                const role = assoc.parsed[1] || "ASSOC";
                 if (!targetId) return;
                 ensurePlaceholderNode(targetId);
                 elements.push({
                     data: { source: id, target: targetId, label: role },
-                    classes: 'assoc-edge'
+                    classes: "assoc-edge"
                 });
             });
         }

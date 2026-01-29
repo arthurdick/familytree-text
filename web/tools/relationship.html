@@ -1,93 +1,137 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>FTT Relationship Calculator</title>
-    <link rel="stylesheet" href="../css/shared.css">
-    <style>
-        /* Specific Layout Overrides */
-        .panel-left { flex: 1; display: flex; flex-direction: column; gap: 15px; }
-        .input-group { display: flex; flex-direction: column; gap: 5px; height: 100%; }
-        
-        .input-header { display: flex; justify-content: space-between; align-items: center; }
-        label { font-weight: 600; font-size: 0.9rem; }
-        textarea { height: 100%; }
+    <head>
+        <meta charset="UTF-8" />
+        <title>FTT Relationship Calculator</title>
+        <link rel="stylesheet" href="../css/shared.css" />
+        <style>
+            /* Specific Layout Overrides */
+            .panel-left {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+            .input-group {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+                height: 100%;
+            }
 
-        .panel-right {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            background: white;
-            padding: 20px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
+            .input-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            label {
+                font-weight: 600;
+                font-size: 0.9rem;
+            }
+            textarea {
+                height: 100%;
+            }
 
-        .id-inputs { display: flex; gap: 10px; align-items: flex-end; }
-        .id-field { flex: 1; }
-        
-        input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
+            .panel-right {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+                background: white;
+                padding: 20px;
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            }
 
-        #result-box {
-            flex: 1;
-            padding: 20px;
-            border: 2px dashed var(--border);
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            flex-direction: column;
-            font-size: 1.1rem;
-        }
+            .id-inputs {
+                display: flex;
+                gap: 10px;
+                align-items: flex-end;
+            }
+            .id-field {
+                flex: 1;
+            }
 
-        .relationship-term {
-            font-size: 2rem;
-            font-weight: bold;
-            color: var(--primary);
-            margin: 10px 0;
-            display: block;
-        }
+            input[type="text"] {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
 
-        .path-detail {
-            margin-top: 15px;
-            font-size: 0.9rem;
-            color: #666;
-            text-align: left;
-            width: 100%;
-            background: #f1f3f5;
-            padding: 10px;
-            border-radius: 4px;
-            white-space: pre-wrap;
-        }
+            #result-box {
+                flex: 1;
+                padding: 20px;
+                border: 2px dashed var(--border);
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                flex-direction: column;
+                font-size: 1.1rem;
+            }
 
-        .meta { font-size: 0.85rem; color: #adb5bd; margin-top: auto; }
-    </style>
-</head>
-<body class="full-screen-app">
+            .relationship-term {
+                font-size: 2rem;
+                font-weight: bold;
+                color: var(--primary);
+                margin: 10px 0;
+                display: block;
+            }
 
-    <header class="app-header">
-        <h1>FTT Relationship Calculator</h1>
-        <p>Enter FamilyTree-Text data and two IDs to calculate their kinship.</p>
-    </header>
+            .path-detail {
+                margin-top: 15px;
+                font-size: 0.9rem;
+                color: #666;
+                text-align: left;
+                width: 100%;
+                background: #f1f3f5;
+                padding: 10px;
+                border-radius: 4px;
+                white-space: pre-wrap;
+            }
 
-    <div class="panel-container">
-        <div class="panel-left">
-            <div class="input-group">
-                <div class="input-header">
-                    <label for="ftt-source">FTT Data Source:</label>
-                    <button id="btn-open-file" class="btn btn-secondary" style="font-size:12px; padding:4px 10px;">📂 Open File</button>
-                    <input type="file" id="file-input" accept=".ftt,.txt" style="display: none;">
-                </div>
-                <textarea id="ftt-source" spellcheck="false" placeholder="Paste .ftt content here...">HEAD_FORMAT: FTT v0.1
+            .meta {
+                font-size: 0.85rem;
+                color: #adb5bd;
+                margin-top: auto;
+            }
+        </style>
+    </head>
+    <body class="full-screen-app">
+        <header class="app-header">
+            <h1>FTT Relationship Calculator</h1>
+            <p>Enter FamilyTree-Text data and two IDs to calculate their kinship.</p>
+        </header>
+
+        <div class="panel-container">
+            <div class="panel-left">
+                <div class="input-group">
+                    <div class="input-header">
+                        <label for="ftt-source">FTT Data Source:</label>
+                        <button
+                            id="btn-open-file"
+                            class="btn btn-secondary"
+                            style="font-size: 12px; padding: 4px 10px"
+                        >
+                            📂 Open File
+                        </button>
+                        <input
+                            type="file"
+                            id="file-input"
+                            accept=".ftt,.txt"
+                            style="display: none"
+                        />
+                    </div>
+                    <textarea
+                        id="ftt-source"
+                        spellcheck="false"
+                        placeholder="Paste .ftt content here..."
+                    >
+HEAD_FORMAT: FTT v0.1
 HEAD_TITLE: Sample Tree
 
 ID: GRANDPA
@@ -116,33 +160,32 @@ UNION: WIFE | MARR
 
 ID: WIFE
 NAME: Mary Stuart
-SEX: F</textarea>
+SEX: F</textarea
+                    >
+                </div>
+            </div>
+
+            <div class="panel-right">
+                <div class="id-inputs">
+                    <div class="id-field">
+                        <label for="id1">Person 1 ID (From)</label>
+                        <input type="text" id="id1" placeholder="e.g. GRANDPA" />
+                    </div>
+                    <div class="id-field">
+                        <label for="id2">Person 2 ID (To)</label>
+                        <input type="text" id="id2" placeholder="e.g. ME" />
+                    </div>
+                    <button id="btn-calc" class="btn btn-primary">Calculate</button>
+                </div>
+
+                <div id="result-box">
+                    <span style="color: #ccc">Enter IDs and click Calculate</span>
+                </div>
+
+                <div class="meta">Powered by FTTParser.js</div>
             </div>
         </div>
 
-        <div class="panel-right">
-            <div class="id-inputs">
-                <div class="id-field">
-                    <label for="id1">Person 1 ID (From)</label>
-                    <input type="text" id="id1" placeholder="e.g. GRANDPA">
-                </div>
-                <div class="id-field">
-                    <label for="id2">Person 2 ID (To)</label>
-                    <input type="text" id="id2" placeholder="e.g. ME">
-                </div>
-                <button id="btn-calc" class="btn btn-primary">Calculate</button>
-            </div>
-
-            <div id="result-box">
-                <span style="color:#ccc;">Enter IDs and click Calculate</span>
-            </div>
-            
-            <div class="meta">
-                Powered by FTTParser.js
-            </div>
-        </div>
-    </div>
-
-    <script type="module" src="../src/relationship.js"></script>
-</body>
+        <script type="module" src="../src/relationship.js"></script>
+    </body>
 </html>

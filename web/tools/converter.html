@@ -1,48 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>FTT <-> GEDCOM Converter</title>
-    <link rel="stylesheet" href="../css/shared.css">
-    <style>
-        .workspace { display: flex; gap: 20px; flex: 1; min-height: 0; padding: 20px; }
-        .panel { flex: 1; display: flex; flex-direction: column; }
-        
-        label { font-weight: bold; margin-bottom: 5px; display: block; }
-        textarea { flex: 1; }
-        
-        .controls { display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 150px; }
-        .controls button { width: 100%; }
-        
-        #error-msg { color: var(--error); margin-top: 10px; font-weight: bold; text-align: center; min-height: 20px; }
-    </style>
-</head>
-<body class="full-screen-app">
-    <header class="app-header">
-        <h1>Format Bridge <span class="badge">Experimental</span></h1>
-        <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">Supports: <strong>GEDCOM 5.5.1</strong> &harr; <strong>FTT v0.1</strong></div>
-        <p>Convert legacy GEDCOM files to FTT, or export FTT back to standard GEDCOM.</p>
-    </header>
+    <head>
+        <meta charset="UTF-8" />
+        <title>FTT <-> GEDCOM Converter</title>
+        <link rel="stylesheet" href="../css/shared.css" />
+        <style>
+            .workspace {
+                display: flex;
+                gap: 20px;
+                flex: 1;
+                min-height: 0;
+                padding: 20px;
+            }
+            .panel {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+            }
 
-    <div class="workspace">
-        <div class="panel">
-            <label for="input-area">Input Data</label>
-            <textarea id="input-area" placeholder="Paste GEDCOM or FTT data here..."></textarea>
+            label {
+                font-weight: bold;
+                margin-bottom: 5px;
+                display: block;
+            }
+            textarea {
+                flex: 1;
+            }
+
+            .controls {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 10px;
+                min-width: 150px;
+            }
+            .controls button {
+                width: 100%;
+            }
+
+            #error-msg {
+                color: var(--error);
+                margin-top: 10px;
+                font-weight: bold;
+                text-align: center;
+                min-height: 20px;
+            }
+        </style>
+    </head>
+    <body class="full-screen-app">
+        <header class="app-header">
+            <h1>Format Bridge <span class="badge">Experimental</span></h1>
+            <div style="font-size: 0.9rem; color: #666; margin-top: 5px">
+                Supports: <strong>GEDCOM 5.5.1</strong> &harr; <strong>FTT v0.1</strong>
+            </div>
+            <p>Convert legacy GEDCOM files to FTT, or export FTT back to standard GEDCOM.</p>
+        </header>
+
+        <div class="workspace">
+            <div class="panel">
+                <label for="input-area">Input Data</label>
+                <textarea id="input-area" placeholder="Paste GEDCOM or FTT data here..."></textarea>
+            </div>
+
+            <div class="controls">
+                <button id="btn-to-ftt" class="btn btn-primary">GEDCOM &rarr; FTT</button>
+                <button id="btn-to-ged" class="btn btn-primary">FTT &rarr; GEDCOM</button>
+            </div>
+
+            <div class="panel">
+                <label for="output-area">Converted Output</label>
+                <textarea
+                    id="output-area"
+                    readonly
+                    placeholder="Result will appear here..."
+                ></textarea>
+            </div>
         </div>
 
-        <div class="controls">
-            <button id="btn-to-ftt" class="btn btn-primary">GEDCOM &rarr; FTT</button>
-            <button id="btn-to-ged" class="btn btn-primary">FTT &rarr; GEDCOM</button>
-        </div>
+        <div id="error-msg"></div>
 
-        <div class="panel">
-            <label for="output-area">Converted Output</label>
-            <textarea id="output-area" readonly placeholder="Result will appear here..."></textarea>
-        </div>
-    </div>
-    
-    <div id="error-msg"></div>
-
-    <script type="module" src="../src/converter.js"></script>
-</body>
+        <script type="module" src="../src/converter.js"></script>
+    </body>
 </html>

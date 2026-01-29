@@ -1,17 +1,17 @@
-import GedcomImporter from '../../implementations/js/GedcomImporter.js';
-import GedcomExporter from '../../implementations/js/GedcomExporter.js';
+import GedcomImporter from "../../implementations/js/GedcomImporter.js";
+import GedcomExporter from "../../implementations/js/GedcomExporter.js";
 
-const inputArea = document.getElementById('input-area');
-const outputArea = document.getElementById('output-area');
-const errorMsg = document.getElementById('error-msg');
+const inputArea = document.getElementById("input-area");
+const outputArea = document.getElementById("output-area");
+const errorMsg = document.getElementById("error-msg");
 
 function clearError() {
-    errorMsg.textContent = '';
-    outputArea.value = '';
+    errorMsg.textContent = "";
+    outputArea.value = "";
 }
 
 // GEDCOM -> FTT
-document.getElementById('btn-to-ftt').addEventListener('click', () => {
+document.getElementById("btn-to-ftt").addEventListener("click", () => {
     clearError();
     const data = inputArea.value;
     if (!data.trim()) return;
@@ -26,7 +26,7 @@ document.getElementById('btn-to-ftt').addEventListener('click', () => {
 });
 
 // FTT -> GEDCOM
-document.getElementById('btn-to-ged').addEventListener('click', () => {
+document.getElementById("btn-to-ged").addEventListener("click", () => {
     clearError();
     const data = inputArea.value;
     if (!data.trim()) return;
