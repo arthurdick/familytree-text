@@ -4,7 +4,7 @@
  * const result = parser.parse(fileContentString);
  */
 
-const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
+const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_\.-]*$/u;
 const KEY_PATTERN = /^([A-Z0-9_]+):(?:\s+(.*))?$/;
 const DATE_PATTERN = /^(\?|\.\.|-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?|\[(?:-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?)?\.\.(?:-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?)?\])$/;
 

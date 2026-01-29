@@ -88,13 +88,15 @@ FTT uses a **Semantic Sigil System** to differentiate between record types. The 
 #### **3.2.1 Standard IDs (People)**
 
 * **Sigil:** None. The ID must start with a valid alphanumeric character.
-* **Allowed Characters:** Any Unicode Letter (`\p{L}`), any Unicode Number (`\p{N}`), and the standard Hyphen-Minus (`-`).
-* **Scope:** This supports international naming conventions in native scripts.
+* **Allowed Characters:** Any Unicode Letter (`\p{L}`), any Unicode Number (`\p{N}`), the standard Hyphen-Minus (`-`), Underscore (`_`), and Period (`.`).
+* **Scope:** This supports international naming conventions in native scripts and compatibility with other software ID schemes.
 * **Examples:**
   * `DOUGLAS-1904` (Latin)
   * `ГОРБАЧЕВ-1931` (Cyrillic)
   * `MÜLLER-1890` (Latin Extended)
   * `田中-1950` (CJK)
+  * `Smith_John_1` (Underscore)
+  * `J.Doe.1990` (Period)
 
 #### **3.2.2 Source IDs (The `^` Sigil)**
 

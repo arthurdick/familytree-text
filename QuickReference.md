@@ -29,7 +29,7 @@ HEAD_DATE:      2026-01-20
 IDs are **Case-Sensitive**.
 
 * **Forbidden:** Spaces, tabs, pipes (`|`), semicolons (`;`), and control characters.
-* **Standard IDs:** Must start with alphanumeric; only letters, numbers, and hyphens (`-`) allowed.
+* **Standard IDs:** Must start with alphanumeric; letters, numbers, hyphens (`-`), underscores (`_`), and periods (`.`) allowed.
 * **Recommendation:** Use `[SURNAME]-[YYYY]-[INITIALS]` (e.g., `SMITH-1980-JS`).
 
 | Type | Sigil | Prefix Example | Usage |
