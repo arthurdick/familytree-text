@@ -6,7 +6,7 @@
 
 const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}-]*$/u;
 const KEY_PATTERN = /^([A-Z0-9_]+):(?:\s+(.*))?$/;
-const DATE_PATTERN = /^(\?|\.\.|\[.*\.\..*\]|-?[\dX]+(?:-\d{2})?(?:-\d{2})?[?~]?)$/;
+const DATE_PATTERN = /^(\?|\.\.|-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?|\[(?:-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?)?\.\.(?:-?[\dX]{4}(?:-[\dX]{2}(?:-[\dX]{2})?)?[?~]?)?\])$/;
 
 export default class FTTParser {
     constructor() {
