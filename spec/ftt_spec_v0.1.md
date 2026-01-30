@@ -267,13 +267,14 @@ To define the Surname and Given Name explicitly, users **must** use the second p
 
 Records starting with `^SRC` define a reusable bibliography entry.
 
-| Key       | Repeatable | Description         | Example                     |
-| --------- | ---------- | ------------------- | --------------------------- |
-| `ID:`     | **No**     | Source Anchor.      | `^SRC-CENSUS-1921`          |
-| `TITLE:`  | No         | Title of source.    | 1921 Census of Canada       |
-| `AUTHOR:` | Yes        | Author/Agency.      | Library and Archives Canada |
-| `URL:`    | Yes        | Direct link.        | `https://...`               |
-| `NOTES:`  | Yes        | Transcript/Details. | Text                        |
+| Key       | Repeatable | Description                               | Example                     |
+| --------- | ---------- | ----------------------------------------- | --------------------------- |
+| `ID:`     | **No**     | Source Anchor.                            | `^SRC-CENSUS-1921`          |
+| `TITLE:`  | **No**     | Title of source.                          | 1921 Census of Canada       |
+| `AUTHOR:` | **Yes**    | Author/Agency.                            | Library and Archives Canada |
+| `REPO:`   | **Yes**    | Repository. Physical or digital location. | The National Archives       |
+| `URL:`    | **Yes**    | Direct link.                              | `https://...`               |
+| `NOTES:`  | **Yes**    | Transcript/Details.                       | Text                        |
 
 ---
 

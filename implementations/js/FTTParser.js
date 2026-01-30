@@ -36,6 +36,7 @@ const KNOWN_KEYS = new Set([
     // Source Record Keys
     "TITLE",
     "AUTHOR",
+    "REPO",
     "URL",
     // Shared Event Record Keys
     "TYPE",

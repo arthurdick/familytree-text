@@ -137,8 +137,8 @@ Citations and Notes are attached to specific fields by **strict adjacency**.
 ```text
 ID:     ^SRC-CENSUS-21
 TITLE:  1921 Census of Canada
+REPO:   Library and Archives Canada
 URL:    https://...
-
 ```
 
 ### **Citing a Source (Inline)**
