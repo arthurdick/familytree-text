@@ -181,6 +181,10 @@ To preserve the historical name and political jurisdiction recorded in source do
 
 Exact geographic coordinates may be appended to the end of the string using angle brackets containing a comma-separated pair of decimal numbers: `<Latitude, Longitude>`. Text within angle brackets that does not conform to a numeric format (e.g., `<Private>`) must be treated as part of the display string, not as coordinates.
 
+**Example:**
+
+- `SS Titanic; At Sea {=North Atlantic Ocean} <41.7269, -49.9483>`
+
 #### **4.1.3 Standardized Jurisdictions (Bottom-Up)**
 
 To ensure maximum interoperability and consistency across different trees, researchers should follow a "Bottom-Up" layering strategy when defining place hierarchies. While different regions utilize different administrative layers, the order must always proceed from the **most specific** (smallest) unit to the **most general** (largest) unit.
