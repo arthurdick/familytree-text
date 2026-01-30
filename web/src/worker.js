@@ -307,8 +307,12 @@ function convertToCytoscape(parsedData, ranks) {
                 const prefName = rec.data.NAME.find((n) => n.parsed[3] === "PREF");
                 if (prefName) label = prefName.parsed[0];
             }
-            if (rec.data.BORN && rec.data.BORN[0].parsed[0]) {
-                subLabel = rec.data.BORN[0].parsed[0];
+            if (rec.data.BORN && rec.data.BORN.length > 0) {
+                const prefBorn = rec.data.BORN.find((b) => (b.parsed[2] || "").trim() === "PREF");
+                const targetBorn = prefBorn || rec.data.BORN[0];
+                if (targetBorn && targetBorn.parsed[0]) {
+                    subLabel = targetBorn.parsed[0];
+                }
             }
             // Extract Privacy Status
             if (rec.data.PRIVACY && rec.data.PRIVACY.length > 0) {
