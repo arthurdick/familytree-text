@@ -7,6 +7,43 @@
 const STANDARD_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_.-]*$/u;
 const KEY_PATTERN = /^([A-Z0-9_]+):(?:\s+(.*))?$/;
 
+// Whitelist of valid FTT v0.1 Keys
+const KNOWN_KEYS = new Set([
+    // Global Metadata
+    "HEAD_FORMAT",
+    "HEAD_TITLE",
+    "HEAD_ROOT",
+    "HEAD_AUTHOR",
+    "HEAD_DATE",
+    "HEAD_COPYRIGHT",
+    // Record Anchors
+    "ID",
+    // Individual Record Keys
+    "PRIVACY",
+    "NAME",
+    "SEX",
+    "BORN",
+    "DIED",
+    "EVENT",
+    "EVENT_REF",
+    "PARENT",
+    "CHILD",
+    "UNION",
+    "ASSOC",
+    "MEDIA",
+    "SRC",
+    "NOTES",
+    // Source Record Keys
+    "TITLE",
+    "AUTHOR",
+    "URL",
+    // Shared Event Record Keys
+    "TYPE",
+    "START_DATE",
+    "END_DATE",
+    "PLACE"
+]);
+
 // Errors defined as Critical/Fatal in FTT Spec v0.1
 const FATAL_CODES = new Set([
     "SYNTAX_INDENT",
@@ -218,6 +255,13 @@ class ParseSession {
     // =========================================================================
 
     _handleNewKey(key, inlineValue, lineNum) {
+        // VALIDATION: Unknown Key Check
+        // Spec 8.1.4: "If a line contains... text... not recognized as a Key... raise a Syntax Error"
+        if (!this._isValidKey(key)) {
+            this._error("SYNTAX_INVALID", `Unknown Key "${key}" encountered at Column 0.`, lineNum);
+            return;
+        }
+
         this.currentKey = key;
         this.bufferStartLine = lineNum;
 
@@ -270,6 +314,20 @@ class ParseSession {
         } else {
             this._error("CTX_ORPHAN", `Key ${key} found outside of a record block.`, lineNum);
         }
+    }
+
+    _isValidKey(key) {
+        // 1. Extensions (Start with _) are always valid as user-defined tags
+        if (key.startsWith("_")) return true;
+
+        // 2. Modifiers (End with _SRC or _NOTE)
+        if (key.endsWith("_SRC") || key.endsWith("_NOTE")) {
+            const baseKey = key.replace(/_(SRC|NOTE)$/, "");
+            return baseKey.startsWith("_") || KNOWN_KEYS.has(baseKey);
+        }
+
+        // 3. Known Standard Keys
+        return KNOWN_KEYS.has(key);
     }
 
     _createField(record, key, lineNum) {

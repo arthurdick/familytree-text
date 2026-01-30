@@ -63,10 +63,10 @@ NAME: John ||| PREF
 HEAD_FORMAT: FTT v0.1
 
 ID: A
-NOTE: This is a pipe \\| character
+NOTES: This is a pipe \\| character
 `;
             const result = parser.parse(input);
-            const note = result.records["A"].data.NOTE[0].parsed[0];
+            const note = result.records["A"].data.NOTES[0].parsed[0];
             expect(note).toBe("This is a pipe | character");
         });
 
@@ -524,6 +524,68 @@ PARENT: MOM | BIO
 
             // Validation should pass as it is a Directed Acyclic Graph
             expect(result.errors.filter((e) => e.code === "CIRCULAR_LINEAGE")).toHaveLength(0);
+        });
+    });
+
+    describe("Strict Syntax (Unknown Keys)", () => {
+        it("should throw a fatal SYNTAX_INVALID error when an unknown key is encountered", () => {
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: PERSON-01
+NAME: John Doe
+INVALID_KEY: Some data here
+`;
+            const result = parser.parse(input);
+
+            // 1. Check for the specific error code defined in the spec
+            expect(result.errors).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        code: "SYNTAX_INVALID",
+                        severity: "FATAL"
+                    })
+                ])
+            );
+
+            // 2. Ensure parsing halted and no records were returned (Fatal Error behavior)
+            expect(Object.keys(result.records)).toHaveLength(0);
+        });
+
+        it("should allow user-defined extension keys starting with an underscore", () => {
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: PERSON-01
+NAME: John Doe
+_EYE_COLOR: Blue
+`;
+            const result = parser.parse(input);
+
+            // Extensions should not trigger syntax errors
+            expect(result.errors).toHaveLength(0);
+            expect(result.records["PERSON-01"].data["_EYE_COLOR"]).toBeDefined();
+            expect(result.records["PERSON-01"].data["_EYE_COLOR"][0].raw).toBe("Blue");
+        });
+
+        it("should allow valid modifier keys (SRC/NOTE) immediately following their target", () => {
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: A
+BORN: 1980
+BORN_SRC: ^SRC-1
+BORN_NOTE: Research note
+
+ID: ^SRC-1
+`;
+            const result = parser.parse(input);
+
+            // Modifiers are part of the recognized key logic
+            expect(result.errors).toHaveLength(0);
+            const born = result.records["A"].data.BORN[0];
+            expect(born.modifiers["BORN_SRC"]).toBeDefined();
+            expect(born.modifiers["BORN_NOTE"]).toBeDefined();
         });
     });
 });
