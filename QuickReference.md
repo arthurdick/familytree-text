@@ -28,6 +28,7 @@ HEAD_DATE:      2026-01-20
 
 IDs are **Case-Sensitive**.
 
+- **ID Persistence:** Once an ID is used in a published tree, **it should never change**.
 - **Forbidden:** Spaces, tabs, pipes (`|`), semicolons (`;`), and control characters.
 - **Standard IDs:** Must start with alphanumeric; letters, numbers, hyphens (`-`), underscores (`_`), and periods (`.`) allowed.
 - **Recommendation:** Use `[SURNAME]-[YYYY]-[INITIALS]` (e.g., `SMITH-1980-JS`).
@@ -118,13 +119,15 @@ FTT uses specific syntax to handle historical uncertainty.
 
 ## **6. Places & Coordinates**
 
-Use semicolons `;` for hierarchy (Smallest -> Largest).
+Use semicolons `;` for hierarchy ordered from the smallest unit to the largest.
 
-- **Standard:** `City; Province; Country`
-- **Renamed:** `Berlin {=Kitchener}; Ontario; Canada`
-- _Text inside `{}` is for geocoding, text outside is for display._
+- **Standardizing (Bottom-Up):** Always start with the most specific location and move to the most general.
+- _Example:_ `Specific Site; City; County; State; Country`.
 
-- **Coordinates:** `City; Country <51.04, -114.07>`
+- **Historical/Renamed:** `Berlin {=Kitchener}; Ontario; Canada`.
+- _Logic:_ Use the jurisdiction name as it existed at the time of the event. Text inside `{}` is for modern geocoding; text outside is for display.
+
+- **Coordinates:** `City; Country <51.04, -114.07>`.
 
 ---
 

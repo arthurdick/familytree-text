@@ -74,6 +74,9 @@ To ensure consistent linking across different parsers and manual data entry, the
     \* _Requirement:_ When parsing a file, the parser must normalize all captured IDs to NFC before storing them in memory or performing lookups.
 - **Uniqueness:** Every ID within a single `.ftt` file must be unique. An ID serves as a global anchor for a specific entity; therefore, the same ID string cannot be used to initialize multiple record blocks.
 
+* **ID Persistence:** Once an ID has been used in a published or shared tree, it **must never be changed**.
+* **Best Practice:** If a person's information changes (e.g., a surname is corrected), update the `NAME:` fields, but do not alter the `ID:`.
+
 - **Forbidden Characters:** To ensure clean parsing, IDs **must not** contain:
     _ Whitespace (Spaces, Tabs).
     _ Pipe characters `|`.
@@ -161,15 +164,40 @@ Places must be entered as strings using **semicolons** to denote hierarchy, orde
 
 #### **4.1.1 Historical Accuracy & Geocoding**
 
-To preserve the historical name recorded in source documents while ensuring modern geocodability, use the **Curly Brace Equivalence `{=...}**` syntax.
+To preserve the historical name and political jurisdiction recorded in source documents while ensuring modern geocodability, the primary place string **must** reflect the jurisdiction at the time of the event. Use the **Curly Brace Equivalence** `{=...}` syntax to provide the modern equivalent for geocoding purposes.
 
-- **Syntax:** `[Historical Name] {= [Modern Name]}`
-- **Behavior:** Parsers must treat text _outside_ the braces as the display value, and text _inside_ the braces as the target for map lookups.
-- **Placement:** The tag applies strictly to the specific hierarchy unit immediately preceding it.
+- **Principle of Historical Jurisdictions**: The place hierarchy (e.g., Town, County, Province) must match the administrative boundaries as they existed on the date of the event.
+- **Syntax**: `[Historical Name] {= [Modern Name]}`.
+- **Behavior**: Parsers must treat text _outside_ the braces as the display value and the official historical jurisdiction, and text _inside_ the braces as the target for map lookups and modern geocoding.
+- **Placement**: The tag applies strictly to the specific hierarchy unit immediately preceding it.
+
+**Examples:**
+
+- `Berlin {=Kitchener}; Ontario; Canada` (City renamed)
+- `Lwów {=Lviv}; Poland {=Ukraine}` (Jurisdictional boundary change)
 
 #### **4.1.2 Coordinates**
 
 Exact geographic coordinates may be appended to the end of the string using angle brackets containing a comma-separated pair of decimal numbers: `<Latitude, Longitude>`. Text within angle brackets that does not conform to a numeric format (e.g., `<Private>`) must be treated as part of the display string, not as coordinates.
+
+#### **4.1.3 Standardized Jurisdictions (Bottom-Up)**
+
+To ensure maximum interoperability and consistency across different trees, researchers should follow a "Bottom-Up" layering strategy when defining place hierarchies. While different regions utilize different administrative layers, the order must always proceed from the **most specific** (smallest) unit to the **most general** (largest) unit.
+
+**Recommended Layering:**
+
+1. **Specific Site:** Building, farm name, or cemetery.
+2. **Local Unit:** Street address, neighborhood, or village.
+3. **Primary Jurisdiction:** City, town, township, or parish.
+4. **Secondary Jurisdiction:** County, district, or hundred.
+5. **State/Province:** Primary sub-national division.
+6. **Country:** Sovereign nation.
+
+**Regional Examples:**
+
+- **North America:** `123 Main St; Calgary; Alberta; Canada`
+- **United Kingdom:** `St. Mary's Church; Bury St Edmunds; Suffolk; England; United Kingdom`
+- **Ireland:** `Ballymore; Killare; Westmeath; Ireland`
 
 #### **Examples**
 
