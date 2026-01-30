@@ -140,8 +140,8 @@ FTT uses a **Semantic Sigil System** to differentiate between record types. The 
 | `NAME:`           | **Yes**    | Name entry.                                     | `[Display_String] \| [Sort_Key] \| [TYPE] \| [STATUS]`         |
 | `SEX:`            | No         | Individual sex.                                 | `M`, `F`, `U`, or `O`                                          |
 | **Vital Events**  |            |                                                 |                                                                |
-| `BORN:`           | Yes        | Date and location of birth.                     | `[DATE] \| [PLACE]`                                            |
-| `DIED:`           | Yes        | Date and location of death.                     | `[DATE] \| [PLACE]`                                            |
+| `BORN:`           | Yes        | Date and location of birth.                     | `[DATE] \| [PLACE] \| [STATUS]`                                |
+| `DIED:`           | Yes        | Date and location of death.                     | `[DATE] \| [PLACE] \| [STATUS]`                                |
 | **Life & Bio**    |            |                                                 |                                                                |
 | `EVENT:`          | **Yes**    | **Inline** Life Event.                          | `[TYPE] \| [START_DATE] \| [END_DATE] \| [PLACE] \| [DETAILS]` |
 | `EVENT_REF:`      | **Yes**    | **Linked** Shared Event.                        | `[&EVT-ID] \| [ROLE] \| [DETAILS]`                             |
@@ -777,3 +777,15 @@ Parsers should recognize these standard codes to enable interoperability (e.g., 
 | `NEIG` | **Neighbor**    | Individual enumerated adjacently in a census/record. |
 | `ENSL` | **Enslaved By** | The subject was enslaved by the target ID.           |
 | `OWNR` | **Enslaver**    | The subject held the target ID in slavery.           |
+
+---
+
+### **Appendix F: Vital Status Vocabulary**
+
+To distinguish between primary and alternate facts (e.g., conflicting birth dates found in different sources), the optional `[STATUS]` field in `BORN` and `DIED` keys uses the following standard codes.
+
+| Code    | Meaning          | Description                                                                   |
+| ------- | ---------------- | ----------------------------------------------------------------------------- |
+| `PREF`  | **Preferred**    | This fact is the primary conclusion and should be used in charts/displays.    |
+| _Empty_ | **Alternate**    | An alternate or disproven fact retained for research purposes (Default).      |
+| `QUES`  | **Questionable** | The fact is highly doubtful or disproven (often used with explanatory Notes). |

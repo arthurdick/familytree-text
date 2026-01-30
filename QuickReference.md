@@ -51,8 +51,8 @@ IDs are **Case-Sensitive**.
 | **ID:**      | `[Unique_ID]`                                   |
 | **NAME:**    | `[Display] \| [Sort_Key] \| [TYPE] \| [STATUS]` |
 | **SEX:**     | `M`, `F`, `U` (Unknown), `O` (Other)            |
-| **BORN:**    | `[Date] \| [Place]`                             |
-| **DIED:**    | `[Date] \| [Place]`                             |
+| **BORN:**    | `[Date] \| [Place] \| [STATUS]`                 |
+| **DIED:**    | `[Date] \| [Place] \| [STATUS]`                 |
 | **PRIVACY:** | `OPEN` (Default), `LIVING`, `PRIVATE`           |
 
 **Example:**
@@ -61,7 +61,7 @@ IDs are **Case-Sensitive**.
 ID: SMITH-01
 NAME: Dr. John Smith | Smith, John | BIRTH | PREF
 SEX:  M
-BORN: 1980-05-12 | Calgary; Alberta; Canada
+BORN: 1980-05-12 | Calgary; Alberta; Canada | PREF
 DIED: 2020-01-01
 
 ```
@@ -164,6 +164,10 @@ BORN_NOTE: Date is calculated from age listed in certificate.
 - **Parent:** `BIO` (Biological), `ADO` (Adopted), `STE` (Step), `FOS` (Foster).
 - **Union:** `MARR` (Married), `PART` (Partner/Common Law).
 - **Union End:** `DIV` (Divorced), `SEP` (Separated), `WID` (Widowed), `ANN` (Annulled).
+
+### **Vital & Name Status**
+
+- **Status:** `PREF` (Preferred/Primary fact), `QUES` (Questionable/Disproven).
 
 ### **Name Types**
 

@@ -757,6 +757,7 @@ class ParseSession {
                 "UNK"
             ]),
             NAME_STATUS: new Set(["PREF"]),
+            VITAL_STATUS: new Set(["PREF", "QUES"]),
             ASSOC_ROLES: new Set([
                 "GODP",
                 "GODC",
@@ -800,6 +801,15 @@ class ParseSession {
                     this._warning("NONSTD_VOCAB", `Non-standard NAME Type "${type}"`, f.line);
                 if (status && !VALID.NAME_STATUS.has(status))
                     this._error("INVALID_VOCAB", `Invalid NAME Status "${status}"`, f.line);
+            });
+
+            ["BORN", "DIED"].forEach((key) => {
+                record.data[key]?.forEach((f) => {
+                    const status = (f.parsed[2] || "").trim();
+                    if (status && !VALID.VITAL_STATUS.has(status)) {
+                        this._error("INVALID_VOCAB", `Invalid ${key} Status "${status}"`, f.line);
+                    }
+                });
             });
 
             record.data["ASSOC"]?.forEach((f) => {
