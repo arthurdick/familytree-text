@@ -155,6 +155,7 @@ FTT uses a **Semantic Sigil System** to differentiate between record types. The 
 | `SRC:`            | **Yes**    | **Record-Level Source.**                        | `[^SRC-ID]`                                                    |
 | `NOTES:`          | Yes        | **Record-Level Note.**                          | General narrative/biography.                                   |
 | `*_SRC:`          | Yes        | **Field-Level Citation.**                       | `[^SRC-ID] \| [Detail]` (See Sec 8.2)                          |
+| `*_QUAL:`         | **No**     | **Field-Level Quality.**                        | `[EVIDENCE] \| [INFO] \| [SOURCE]` (See Appx G)                |
 | `*_NOTE:`         | Yes        | **Field-Level Note.**                           | Research notes specific to the preceding field.                |
 | `_[TAG]:`         | Yes        | User-Defined Extension.                         | Custom tags must start with `_`.                               |
 
@@ -494,16 +495,19 @@ To ensure consistent data interpretation and prevent "floating" metadata, attrib
 - `SRC:` entries are aggregated into the record's global bibliography list.
 - `NOTES:` entries are concatenated into the main biographical narrative.
 
-#### **8.2.2 Field-Level Modifiers (`*_SRC` & `*_NOTE`)**
+#### **8.2.2 Field-Level Modifiers (`*_SRC`, `*_QUAL` & `*_NOTE`)**
 
-Specific fields (e.g., `BORN`, `NAME`, `OCC`) may be modified by Citation keys and Note keys. These are collectively known as **Modifiers**.
+Specific fields (e.g., `BORN`, `NAME`, `DIED`) may be modified by Citation keys, Quality assessments, and Note keys. These are collectively known as **Modifiers**.
 
 - **Naming Convention:**
 - **Citation:** The key must match the target key + `_SRC` (e.g., `BORN` → `BORN_SRC`).
+- **Quality:** The key must match the target key + `_QUAL` (e.g., `BORN` → `BORN_QUAL`).
 - **Note:** The key must match the target key + `_NOTE` (e.g., `BORN` → `BORN_NOTE`).
 
 - **Repeatability (Stacking):**
-- Modifiers are **Repeatable**. Users may attach multiple sources or multiple notes to a single field instance.
+- **Citations & Notes:** Are **Repeatable**. Users may attach multiple sources or multiple notes to a single field instance.
+- **Quality:** Is **Non-Repeatable**. A specific fact assertion should have a single aggregate quality assessment. If sources conflict, the `*_QUAL` field represents the researcher's conclusion about the _combined_ evidence for that specific fact.
+
 - **Aggregation Rule:** Parsers must collect _all_ valid modifiers found in the block and attach them as a list to the target field. Valid modifiers are not mutually exclusive; they accumulate.
 
 - **The Modifier Block Rule:**
@@ -515,13 +519,14 @@ Specific fields (e.g., `BORN`, `NAME`, `OCC`) may be modified by Citation keys a
 
 #### **8.2.3 Parsing Example (Stacked Modifiers)**
 
-**Valid Structure (Multiple Sources):**
-In this example, the birth event is supported by two distinct citations and has a specific note attached.
+**Valid Structure (Multiple Sources with Quality Assessment):**
+In this example, the birth event is supported by two distinct citations, has a specific note, and includes a quality assessment of the evidence.
 
 ```text
 BORN: 1980-05-12 | Calgary; AB
 BORN_SRC: ^SRC-BIRTH-CERT | Certificate #12345
 BORN_SRC: ^SRC-FAMILY-BIBLE | Page 42, Row 3
+BORN_QUAL: DIRECT | PRIM | ORIG
 BORN_NOTE: Date calculated from age at death in bible record.
 
 DIED: ...
@@ -784,8 +789,49 @@ Parsers should recognize these standard codes to enable interoperability (e.g., 
 
 To distinguish between primary and alternate facts (e.g., conflicting birth dates found in different sources), the optional `[STATUS]` field in `BORN` and `DIED` keys uses the following standard codes.
 
-| Code    | Meaning          | Description                                                                   |
-| ------- | ---------------- | ----------------------------------------------------------------------------- |
-| `PREF`  | **Preferred**    | This fact is the primary conclusion and should be used in charts/displays.    |
-| _Empty_ | **Alternate**    | An alternate or disproven fact retained for research purposes (Default).      |
-| `QUES`  | **Questionable** | The fact is highly doubtful or disproven (often used with explanatory Notes). |
+| Code    | Meaning       | Description                                                                |
+| ------- | ------------- | -------------------------------------------------------------------------- |
+| `PREF`  | **Preferred** | This fact is the primary conclusion and should be used in charts/displays. |
+| _Empty_ | **Alternate** | An alternate or disproven fact retained for research purposes (Default).   |
+
+---
+
+## **Appendix G: Evidence Quality Vocabulary**
+
+To support the Genealogical Proof Standard (GPS), the `*_QUAL` modifier uses a three-part pipe-delimited format to classify the nature of the data.
+
+**Syntax:** `*_QUAL: [EVIDENCE_TYPE] | [INFO_SOURCE] | [EVIDENCE_SOURCE]`
+
+### **G.1 Evidence Class ([EVIDENCE_TYPE])**
+
+Defines how the information answers the specific research question.
+
+| Code       | Label        | Description                                                                                              |
+| ---------- | ------------ | -------------------------------------------------------------------------------------------------------- |
+| `DIRECT`   | **Direct**   | Explicitly answers the question (e.g., a Birth Certificate for a birth date).                            |
+| `INDIRECT` | **Indirect** | Requires combining with other facts to deduce the answer (e.g., an Obituary listing the deceased's age). |
+| `NEG`      | **Negative** | An inference drawn from the _absence_ of a record where one was expected.                                |
+
+### **G.2 Information Source ([INFO_SOURCE])**
+
+Defines the proximity of the informant to the event.
+
+| Code   | Label         | Description                                                                                     |
+| ------ | ------------- | ----------------------------------------------------------------------------------------------- |
+| `PRIM` | **Primary**   | Informant was an eyewitness or participant (e.g., Mother reporting a birth).                    |
+| `SEC`  | **Secondary** | Informant heard about the event from others (e.g., Grandchild reporting a grandparent's birth). |
+| `UNK`  | **Unknown**   | The informant is not identified in the source.                                                  |
+
+### **G.3 Source Provenance ([EVIDENCE_SOURCE])**
+
+Defines the nature of the physical or digital record.
+
+| Code    | Label          | Description                                                  |
+| ------- | -------------- | ------------------------------------------------------------ |
+| `ORIG`  | **Original**   | The first recorded instance (or a digital image thereof).    |
+| `DERIV` | **Derivative** | A transcription, abstract, index, or compilation.            |
+| `AUTH`  | **Authored**   | A synthesized work (e.g., a family history book or article). |
+
+**Example:**
+_A birth date derived from an indexed census record._
+`BORN_QUAL: INDIRECT | SEC | DERIV`

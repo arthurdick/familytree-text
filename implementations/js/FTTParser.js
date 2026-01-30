@@ -307,7 +307,7 @@ class ParseSession {
         if (this.currentRecordId) {
             const record = this.records.get(this.currentRecordId);
 
-            if (key.endsWith("_SRC") || key.endsWith("_NOTE")) {
+            if (key.endsWith("_SRC") || key.endsWith("_QUAL") || key.endsWith("_NOTE")) {
                 this._attachModifier(record, key, lineNum);
             } else {
                 this._createField(record, key, lineNum);
@@ -321,9 +321,9 @@ class ParseSession {
         // 1. Extensions (Start with _) are always valid as user-defined tags
         if (key.startsWith("_")) return true;
 
-        // 2. Modifiers (End with _SRC or _NOTE)
-        if (key.endsWith("_SRC") || key.endsWith("_NOTE")) {
-            const baseKey = key.replace(/_(SRC|NOTE)$/, "");
+        // 2. Modifiers (End with _SRC, _QUAL, or _NOTE)
+        if (key.endsWith("_SRC") || key.endsWith("_QUAL") || key.endsWith("_NOTE")) {
+            const baseKey = key.replace(/_(SRC|QUAL|NOTE)$/, "");
             return baseKey.startsWith("_") || KNOWN_KEYS.has(baseKey);
         }
 
@@ -351,7 +351,7 @@ class ParseSession {
     }
 
     _attachModifier(record, modKey, lineNum) {
-        const baseKey = modKey.replace(/_(SRC|NOTE)$/, "");
+        const baseKey = modKey.replace(/_(SRC|QUAL|NOTE)$/, "");
 
         if (!this.lastFieldRef || this.lastFieldRef.key !== baseKey) {
             this._error(
@@ -757,7 +757,7 @@ class ParseSession {
                 "UNK"
             ]),
             NAME_STATUS: new Set(["PREF"]),
-            VITAL_STATUS: new Set(["PREF", "QUES"]),
+            VITAL_STATUS: new Set(["PREF"]),
             ASSOC_ROLES: new Set([
                 "GODP",
                 "GODC",

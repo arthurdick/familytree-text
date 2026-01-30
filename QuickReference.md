@@ -167,7 +167,8 @@ BORN_NOTE: Date is calculated from age listed in certificate.
 
 ### **Vital & Name Status**
 
-- **Status:** `PREF` (Preferred/Primary fact), `QUES` (Questionable/Disproven).
+- **Status:** `PREF` (Preferred/Primary fact).
+- _Note:_ Use `*_QUAL` to denote questionable or disproven facts.
 
 ### **Name Types**
 
