@@ -14,7 +14,7 @@
 - **File Extension:** `.ftt` (preferred) or `.txt`.
 - **Record Separator:** Records are identified by the `ID:` anchor.
 - **Comments:** Any line beginning with the hash character `#` at column 0 must be ignored.
-- **Visual Separators:** A horizontal rule `---` acts as a **block terminator**. Parsers must terminate the current field/record block immediately upon encountering this line, and then ignore the line itself.
+- **Visual Separators:** A horizontal rule `---` acts as an **optional visual block terminator**. It is intended for human readability to help researchers visually distinguish records within a plain text editor. Parsers must terminate the current field/record block immediately upon encountering this line, and then ignore the line itself.
 - **Escaping:** The backslash `\` is the escape character. The parser should strip the backslash and treat the following character as a string literal rather than a control character.
 - `\|` for literal pipe characters.
 - `\\` for literal backslashes.
@@ -34,7 +34,7 @@ To ensure unambiguous parsing without complex lookahead requirements, the struct
 
 - **Block Scope & Termination:**
 - A field's content block continues as long as subsequent lines are **indented** or **blank**.
-- The block is **terminated** immediately upon encountering a line that contains non-whitespace characters at **Column 0** (e.g., a new Key, a Record Separator `ID:`, or a visual separator `---`).
+- The block is **terminated** immediately upon encountering a line that contains non-whitespace characters at **Column 0** (e.g., a new Key, a Record Separator `ID:`, or an optional visual separator `---`).
 
 ### **1.2 Pipe-Delimited Field Parsing**
 

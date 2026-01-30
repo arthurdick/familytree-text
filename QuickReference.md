@@ -9,7 +9,7 @@ Every file must start with Global Metadata before the first ID.
 **Syntax Rules:**
 
 - **Comments:** `# This is a comment` (Ignored).
-- **Separators:** `ID:` starts a new record. `---` ends a block visually.
+- **Separators:** `ID:` starts a new record. `---` acts as an **optional** visual separator to improve readability.
 - **Indentation:** Multiline values must be indented by **2 spaces**.
 
 ```text
