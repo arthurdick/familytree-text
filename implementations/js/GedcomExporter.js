@@ -255,7 +255,7 @@ export default class GedcomExporter {
                     );
                 }
 
-                if (details) {
+                if (details && !shouldMask) {
                     out.push(`2 NOTE ${details}`);
                 }
             });
