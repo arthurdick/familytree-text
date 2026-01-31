@@ -381,14 +381,31 @@ export default class GedcomImporter {
 
             out.push(`${fttKey}: ${date} | ${fttPlace}`);
 
-            // --- Citations ---
+            // --- Citations & Quality ---
             const sourNodes = evtNode.children.filter((c) => c.tag === "SOUR");
+            let bestQuay = -1;
+
             sourNodes.forEach((s) => {
                 s.handled = true; // Mark handled
                 const sId = s.value.replace(/@/g, "");
                 const page = this._extractTag(s, "PAGE") || "";
+
+                // Check for QUAY in the citation
+                const quayNode = s.children.find((c) => c.tag === "QUAY");
+                if (quayNode) {
+                    quayNode.handled = true;
+                    const qVal = parseInt(quayNode.value, 10);
+                    if (!isNaN(qVal) && qVal > bestQuay) bestQuay = qVal;
+                }
+
                 out.push(`${fttKey}_SRC: ^${sId} | ${page}`);
             });
+
+            // Map Best Quality to FTT _QUAL
+            if (bestQuay !== -1) {
+                const qualStr = this._convertQuayToFtt(String(bestQuay));
+                if (qualStr) out.push(`${fttKey}_QUAL: ${qualStr}`);
+            }
         }
     }
 
@@ -440,15 +457,47 @@ export default class GedcomImporter {
             // We assume date is start date, end date empty for now.
             out.push(`EVENT: ${fttType} | ${date} || ${place} | ${details}`);
 
-            // Citations
+            // Citations & Quality
             const sourNodes = node.children.filter((c) => c.tag === "SOUR");
+            let bestQuay = -1;
+
             sourNodes.forEach((s) => {
                 s.handled = true;
                 const sId = s.value.replace(/@/g, "");
                 const page = this._extractTag(s, "PAGE") || "";
+
+                // Check for QUAY in the citation
+                const quayNode = s.children.find((c) => c.tag === "QUAY");
+                if (quayNode) {
+                    quayNode.handled = true;
+                    const qVal = parseInt(quayNode.value, 10);
+                    if (!isNaN(qVal) && qVal > bestQuay) bestQuay = qVal;
+                }
+
                 out.push(`EVENT_SRC: ^${sId} | ${page}`);
             });
+
+            // Map Best Quality to FTT _QUAL (Generic Event uses EVENT_QUAL)
+            if (bestQuay !== -1) {
+                const qualStr = this._convertQuayToFtt(String(bestQuay));
+                if (qualStr) out.push(`EVENT_QUAL: ${qualStr}`);
+            }
         });
+    }
+
+    _convertQuayToFtt(quay) {
+        switch (quay.trim()) {
+            case "3":
+                return "DIRECT | PRIM | ORIG"; // Direct and primary evidence
+            case "2":
+                return "DIRECT | SEC | DERIV"; // Secondary evidence / recorded later
+            case "1":
+                return "INDIRECT | UNK | DERIV"; // Questionable reliability
+            case "0":
+                return "UNK | UNK | UNK"; // Unreliable or estimated
+            default:
+                return null;
+        }
     }
 
     // =========================================================================
