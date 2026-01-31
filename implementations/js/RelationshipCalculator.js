@@ -50,8 +50,7 @@ export class RelationshipCalculator {
                     const endDate = u.parsed[3];
                     const endReason = u.parsed[4];
 
-                    const isEnded =
-                        !!endReason || (!!endDate && endDate !== ".." && endDate !== "?");
+                    const isEnded = !!endReason || (!!endDate && endDate !== "..");
 
                     sMap.set(partnerId, {
                         active: !isEnded,
