@@ -119,18 +119,21 @@ BORN: 1990-05-12
 EVENT: EVT1 | 1990-06 || Test
 # Range
 EVENT: EVT2 | [1900..1910] || Test
-# Approx
+# Estimated
 EVENT: EVT3 | 1950? || Test
+# About
+EVENT: EVT4 | 1951~ || Test
 # Before/After
-EVENT: EVT4 | [..1900] || Test
-EVENT: EVT5 | [1900..] || Test
+EVENT: EVT5 | [..1900] || Test
+EVENT: EVT6 | [1900..] || Test
 `;
             const gedcom = convertWithHeader(input);
 
             expect(gedcom).toContain("2 DATE 12 MAY 1990");
             expect(gedcom).toContain("2 DATE JUN 1990");
             expect(gedcom).toContain("2 DATE BET 1900 AND 1910");
-            expect(gedcom).toContain("2 DATE ABT 1950");
+            expect(gedcom).toContain("2 DATE EST 1950");
+            expect(gedcom).toContain("2 DATE ABT 1951");
             expect(gedcom).toContain("2 DATE BEF 1900");
             expect(gedcom).toContain("2 DATE AFT 1900");
         });
