@@ -202,8 +202,17 @@ export default class GedcomExporter {
             out.push(`1 NOTE This is a synthesized placeholder record from FTT.`);
         }
 
-        const sex = this._getField(rec, "SEX");
-        if (sex) out.push(`1 SEX ${sex}`);
+        if (rec.data.SEX && rec.data.SEX.length > 0) {
+            const sexObj = rec.data.SEX[0];
+            const sexVal = sexObj.parsed[0];
+            out.push(`1 SEX ${sexVal}`);
+
+            if (!shouldMask && sexObj.modifiers && sexObj.modifiers.SEX_NOTE) {
+                sexObj.modifiers.SEX_NOTE.forEach((note) => {
+                    this._writeNote(note.parsed[0], out, 2);
+                });
+            }
+        }
 
         this._writeEvent(rec, "BORN", "BIRT", out, shouldMask);
         this._writeEvent(rec, "DIED", "DEAT", out, shouldMask);
@@ -242,6 +251,12 @@ export default class GedcomExporter {
                 }
                 if (details && !shouldMask) {
                     out.push(`2 NOTE ${details}`);
+                }
+
+                if (!shouldMask && assoc.modifiers && assoc.modifiers.ASSOC_NOTE) {
+                    assoc.modifiers.ASSOC_NOTE.forEach((n) => {
+                        this._writeNote(n.parsed[0], out, 2);
+                    });
                 }
             });
         }

@@ -169,17 +169,7 @@ export default class GedcomImporter {
         if (auth) out.push(`AUTHOR: ${auth.replace(/\n/g, " ")}`);
 
         // Record-Level Notes
-        const noteNodes = rec.children.filter((c) => c.tag === "NOTE");
-        noteNodes.forEach((n) => {
-            n.handled = true;
-            const lines = n.value.split("\n");
-            if (lines.length > 0) {
-                out.push(`NOTES: ${lines[0]}`);
-                for (let i = 1; i < lines.length; i++) {
-                    out.push(`\n  ${lines[i]}`);
-                }
-            }
-        });
+        this._writeNotesFrom(rec, "NOTES", out, true);
     }
 
     _writeIndividual(indi, out) {
@@ -248,8 +238,12 @@ export default class GedcomImporter {
         }
 
         // SEX
-        const sex = this._extractTag(indi, "SEX");
-        if (sex) out.push(`SEX:  ${sex}`);
+        const sexNode = indi.children.find((c) => c.tag === "SEX");
+        if (sexNode) {
+            sexNode.handled = true;
+            out.push(`SEX:  ${sexNode.value}`);
+            this._writeNotesFrom(sexNode, "SEX", out);
+        }
 
         // VITAL EVENTS
         this._writeEvent(indi, "BIRT", "BORN", out);
@@ -352,17 +346,7 @@ export default class GedcomImporter {
         });
 
         // Record-Level Notes
-        const noteNodes = indi.children.filter((c) => c.tag === "NOTE");
-        noteNodes.forEach((n) => {
-            n.handled = true;
-            const lines = n.value.split("\n");
-            if (lines.length > 0) {
-                out.push(`NOTES: ${lines[0]}`);
-                for (let i = 1; i < lines.length; i++) {
-                    out.push(`\n  ${lines[i]}`);
-                }
-            }
-        });
+        this._writeNotesFrom(indi, "NOTES", out, true);
     }
 
     _writeEvent(parentNode, gedTag, fttKey, out) {
@@ -478,13 +462,14 @@ export default class GedcomImporter {
         });
     }
 
-    _writeNotesFrom(node, fttKey, out) {
+    _writeNotesFrom(node, fttKey, out, isRecordLevel = false) {
         const noteNodes = node.children.filter((c) => c.tag === "NOTE");
         noteNodes.forEach((n) => {
             n.handled = true;
             const lines = n.value.split("\n");
+            const key = isRecordLevel ? "NOTES" : `${fttKey}_NOTE`;
             if (lines.length > 0) {
-                out.push(`${fttKey}_NOTE: ${lines[0]}`);
+                out.push(`${key}: ${lines[0]}`);
                 for (let i = 1; i < lines.length; i++) {
                     out.push(`\n  ${lines[i]}`);
                 }
