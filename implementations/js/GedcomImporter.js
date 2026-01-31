@@ -168,7 +168,7 @@ export default class GedcomImporter {
         const auth = this._extractTag(rec, "AUTH");
         if (auth) out.push(`AUTHOR: ${auth.replace(/\n/g, " ")}`);
 
-        // Source Notes
+        // Record-Level Notes
         const noteNodes = rec.children.filter((c) => c.tag === "NOTE");
         noteNodes.forEach((n) => {
             n.handled = true;
@@ -211,34 +211,28 @@ export default class GedcomImporter {
                 if (typeNode) {
                     typeNode.handled = true;
                     const rawType = typeNode.value.toUpperCase().trim();
-
-                    // Map GEDCOM types to FTT vocabulary where possible
                     if (rawType === "AKA" || rawType === "ALIAS") type = "AKA";
                     else if (rawType === "BIRTH" || rawType === "MAIDEN" || rawType === "NEE")
                         type = "BIRTH";
                     else if (rawType === "MARRIED") type = "MARR";
                     else if (rawType === "NICK" || rawType === "NICKNAME") type = "NICK";
                     else if (rawType === "IMMIGRANT") type = "IMM";
-                    else type = rawType; // Preserve unknown types as custom
+                    else type = rawType;
                 } else {
-                    // Heuristic: If it is the *first* name and has no type, default to 'BIRTH'.
-                    // Subsequent names without types are left blank (Generic).
                     if (index === 0) type = "BIRTH";
                 }
 
                 // 3. Determine Status
-                // Default: First name listed is 'PREF', others are standard.
                 let status = index === 0 ? "PREF" : "";
 
                 // 4. Output Main Name Line
                 out.push(`NAME: ${display} | ${sortKey} | ${type} | ${status}`);
 
-                // 5. Handle Sub-Tags & Nicknames
+                // 5. Handle Sub-Tags, Nicknames, & Notes
                 this._markTagHandled(nameNode, "SURN");
                 this._markTagHandled(nameNode, "GIVN");
-                this._markTagHandled(nameNode, "_PREF"); // Common non-standard tag
+                this._markTagHandled(nameNode, "_PREF");
 
-                // If a NICK tag is nested inside NAME, export it as a separate NICK record
                 const nickNode = nameNode.children.find((c) => c.tag === "NICK");
                 if (nickNode) {
                     nickNode.handled = true;
@@ -247,6 +241,9 @@ export default class GedcomImporter {
                         out.push(`NAME: ${nickVal} || NICK |`);
                     }
                 }
+
+                // Capture Name Notes (NAME_NOTE)
+                this._writeNotesFrom(nameNode, "NAME", out);
             });
         }
 
@@ -258,17 +255,14 @@ export default class GedcomImporter {
         this._writeEvent(indi, "BIRT", "BORN", out);
         this._writeEvent(indi, "DEAT", "DIED", out);
 
-        // OTHER EVENTS (Standard Genealogical Events)
+        // OTHER EVENTS
         this._writeGenericEvents(indi, out);
 
         // PARENTS (FAMC)
-        // We scan for FAMC nodes and mark them handled
         const famcNodes = indi.children.filter((c) => c.tag === "FAMC");
         famcNodes.forEach((famc) => {
-            famc.handled = true; // Mark FAMC as handled
+            famc.handled = true;
 
-            // Check for Pedigree (PEDI)
-            // GEDCOM values: 'adopted', 'birth', 'foster', 'sealing'
             let relType = "BIO";
             const pediVal = this._extractTag(famc, "PEDI");
             if (pediVal) {
@@ -280,39 +274,39 @@ export default class GedcomImporter {
             const famId = famc.value.replace(/@/g, "");
             const fam = this.families.get(famId);
             if (fam) {
-                // We are implicitly "using" the HUSB/WIFE pointers in the FAM record here
                 this._markTagHandled(fam, "HUSB");
                 this._markTagHandled(fam, "WIFE");
 
-                // Also claim "my" own CHIL slot in this family to prevent false "Unhandled" warnings.
                 const myChilNode = fam.children.find(
                     (c) => c.tag === "CHIL" && c.value.replace(/@/g, "") === indi.id
                 );
-                if (myChilNode) {
-                    myChilNode.handled = true;
-                }
+                if (myChilNode) myChilNode.handled = true;
 
-                // Check structural parent links
                 const husbId = this._peekTag(fam, "HUSB")?.replace(/@/g, "");
                 const wifeId = this._peekTag(fam, "WIFE")?.replace(/@/g, "");
-                if (husbId) out.push(`PARENT: ${husbId} | ${relType}`);
-                if (wifeId) out.push(`PARENT: ${wifeId} | ${relType}`);
+
+                // Output links & Append notes to each link
+                if (husbId) {
+                    out.push(`PARENT: ${husbId} | ${relType}`);
+                    this._writeNotesFrom(famc, "PARENT", out);
+                }
+                if (wifeId) {
+                    out.push(`PARENT: ${wifeId} | ${relType}`);
+                    this._writeNotesFrom(famc, "PARENT", out);
+                }
             }
         });
 
         // SPOUSES (FAMS)
         const famsNodes = indi.children.filter((c) => c.tag === "FAMS");
         famsNodes.forEach((fams) => {
-            fams.handled = true; // Mark FAMS as handled
+            fams.handled = true;
             const famId = fams.value.replace(/@/g, "");
             const fam = this.families.get(famId);
             if (fam) {
                 this._markTagHandled(fam, "HUSB");
                 this._markTagHandled(fam, "WIFE");
 
-                // Handle Children to preserve order and silence audit warnings
-                // 1. Mark CHIL tags in the family as handled
-                // 2. Generate CHILD: lines in FTT to preserve the specific birth order from GEDCOM
                 const chilNodes = fam.children.filter((c) => c.tag === "CHIL");
                 chilNodes.forEach((childNode) => {
                     childNode.handled = true;
@@ -328,7 +322,6 @@ export default class GedcomImporter {
                 else if (indi.id === wifeId) spouseId = husbId;
 
                 if (spouseId) {
-                    // Process Marriage Event in FAM
                     const marrNode = this._extractNode(fam, "MARR");
                     let dateStr = "";
                     let endReason = "";
@@ -336,26 +329,32 @@ export default class GedcomImporter {
                     if (marrNode) {
                         const d = this._extractTag(marrNode, "DATE");
                         if (d) dateStr = this._convertDate(d);
-                        // Also handle PLAC inside MARR to avoid warning
                         this._extractTag(marrNode, "PLAC");
                     }
 
                     const divNode = this._extractNode(fam, "DIV");
                     if (divNode) {
                         endReason = "DIV";
-                        // Handle DIV children (DATE etc)
                         this._extractTag(divNode, "DATE");
                     }
 
                     out.push(`UNION: ${spouseId} | MARR | ${dateStr} || ${endReason}`);
+
+                    // Collect and Attach Notes (UNION_NOTE)
+                    // 1. From the Shared Family Record
+                    this._writeNotesFrom(fam, "UNION", out);
+                    // 2. From the Marriage Event
+                    if (marrNode) this._writeNotesFrom(marrNode, "UNION", out);
+                    // 3. From the Divorce Event
+                    if (divNode) this._writeNotesFrom(divNode, "UNION", out);
                 }
             }
         });
 
-        // NOTES
+        // Record-Level Notes
         const noteNodes = indi.children.filter((c) => c.tag === "NOTE");
         noteNodes.forEach((n) => {
-            n.handled = true; // Mark handled
+            n.handled = true;
             const lines = n.value.split("\n");
             if (lines.length > 0) {
                 out.push(`NOTES: ${lines[0]}`);
@@ -371,67 +370,44 @@ export default class GedcomImporter {
         if (evtNode) {
             const date = this._convertDate(this._extractTag(evtNode, "DATE"));
 
-            // --- Place & Map Processing ---
             let fttPlace = "";
             const placNode = this._extractNode(evtNode, "PLAC");
 
             if (placNode) {
-                // Standard FTT delimiter conversion (Comma -> Semicolon)
                 fttPlace = (placNode.value || "").replace(/,/g, ";");
-
-                // Check for Geocoordinates (MAP structure)
                 const mapNode = this._extractNode(placNode, "MAP");
                 if (mapNode) {
                     const lat = this._extractTag(mapNode, "LATI");
                     const long = this._extractTag(mapNode, "LONG");
-
-                    if (lat && long) {
-                        // Append to place string in FTT format
-                        fttPlace += ` <${lat}, ${long}>`;
-                    }
+                    if (lat && long) fttPlace += ` <${lat}, ${long}>`;
                 }
             }
 
             out.push(`${fttKey}: ${date} | ${fttPlace}`);
 
-            // --- Citations & Quality ---
+            // Citations
             const sourNodes = evtNode.children.filter((c) => c.tag === "SOUR");
             let bestQuay = -1;
-
             sourNodes.forEach((s) => {
-                s.handled = true; // Mark handled
+                s.handled = true;
                 const sId = s.value.replace(/@/g, "");
                 const page = this._extractTag(s, "PAGE") || "";
-
-                // Check for QUAY in the citation
                 const quayNode = s.children.find((c) => c.tag === "QUAY");
                 if (quayNode) {
                     quayNode.handled = true;
                     const qVal = parseInt(quayNode.value, 10);
                     if (!isNaN(qVal) && qVal > bestQuay) bestQuay = qVal;
                 }
-
                 out.push(`${fttKey}_SRC: ^${sId} | ${page}`);
             });
 
-            // Map Best Quality to FTT _QUAL
             if (bestQuay !== -1) {
                 const qualStr = this._convertQuayToFtt(String(bestQuay));
                 if (qualStr) out.push(`${fttKey}_QUAL: ${qualStr}`);
             }
 
-            // --- Event Notes ---
-            const noteNodes = evtNode.children.filter((c) => c.tag === "NOTE");
-            noteNodes.forEach((n) => {
-                n.handled = true;
-                const lines = n.value.split("\n");
-                if (lines.length > 0) {
-                    out.push(`${fttKey}_NOTE: ${lines[0]}`);
-                    for (let i = 1; i < lines.length; i++) {
-                        out.push(`\n  ${lines[i]}`);
-                    }
-                }
-            });
+            // Notes
+            this._writeNotesFrom(evtNode, fttKey, out);
         }
     }
 
@@ -453,8 +429,6 @@ export default class GedcomImporter {
             RESI: "RESI"
         };
 
-        // Iterate over children to find matching tags
-        // We use a filter to handle multiple occurrences of the same event type (e.g. CENS)
         const events = indi.children.filter((c) =>
             Object.prototype.hasOwnProperty.call(EVENT_MAP, c.tag)
         );
@@ -464,7 +438,6 @@ export default class GedcomImporter {
             const fttType = EVENT_MAP[node.tag];
             const date = this._convertDate(this._extractTag(node, "DATE"));
 
-            // Place Processing
             let place = "";
             const placNode = this._extractNode(node, "PLAC");
             if (placNode) {
@@ -478,72 +451,66 @@ export default class GedcomImporter {
             }
 
             const details = (node.value || "").replace(/\n/g, " ").trim();
-
-            // EVENT: [TYPE] | [START_DATE] | [END_DATE] | [PLACE] | [DETAILS]
-            // We assume date is start date, end date empty for now.
             out.push(`EVENT: ${fttType} | ${date} || ${place} | ${details}`);
 
-            // Citations & Quality
             const sourNodes = node.children.filter((c) => c.tag === "SOUR");
             let bestQuay = -1;
-
             sourNodes.forEach((s) => {
                 s.handled = true;
                 const sId = s.value.replace(/@/g, "");
                 const page = this._extractTag(s, "PAGE") || "";
-
-                // Check for QUAY in the citation
                 const quayNode = s.children.find((c) => c.tag === "QUAY");
                 if (quayNode) {
                     quayNode.handled = true;
                     const qVal = parseInt(quayNode.value, 10);
                     if (!isNaN(qVal) && qVal > bestQuay) bestQuay = qVal;
                 }
-
                 out.push(`EVENT_SRC: ^${sId} | ${page}`);
             });
 
-            // Map Best Quality to FTT _QUAL (Generic Event uses EVENT_QUAL)
             if (bestQuay !== -1) {
                 const qualStr = this._convertQuayToFtt(String(bestQuay));
                 if (qualStr) out.push(`EVENT_QUAL: ${qualStr}`);
             }
 
-            // --- Event Notes ---
-            const noteNodes = node.children.filter((c) => c.tag === "NOTE");
-            noteNodes.forEach((n) => {
-                n.handled = true;
-                const lines = n.value.split("\n");
-                if (lines.length > 0) {
-                    out.push(`EVENT_NOTE: ${lines[0]}`);
-                    for (let i = 1; i < lines.length; i++) {
-                        out.push(`\n  ${lines[i]}`);
-                    }
+            // Notes
+            this._writeNotesFrom(node, "EVENT", out);
+        });
+    }
+
+    _writeNotesFrom(node, fttKey, out) {
+        const noteNodes = node.children.filter((c) => c.tag === "NOTE");
+        noteNodes.forEach((n) => {
+            n.handled = true;
+            const lines = n.value.split("\n");
+            if (lines.length > 0) {
+                out.push(`${fttKey}_NOTE: ${lines[0]}`);
+                for (let i = 1; i < lines.length; i++) {
+                    out.push(`\n  ${lines[i]}`);
                 }
-            });
+            }
         });
     }
 
     _convertQuayToFtt(quay) {
         switch (quay.trim()) {
             case "3":
-                return "DIRECT | PRIM | ORIG"; // Direct and primary evidence
+                return "DIRECT | PRIM | ORIG";
             case "2":
-                return "DIRECT | SEC | DERIV"; // Secondary evidence / recorded later
+                return "DIRECT | SEC | DERIV";
             case "1":
-                return "INDIRECT | UNK | DERIV"; // Questionable reliability
+                return "INDIRECT | UNK | DERIV";
             case "0":
-                return "UNK | UNK | UNK"; // Unreliable or estimated
+                return "UNK | UNK | UNK";
             default:
                 return null;
         }
     }
 
     // =========================================================================
-    // Extraction Helpers (The "Mark-as-Read" System)
+    // Extraction Helpers
     // =========================================================================
 
-    /** Returns value and marks node as handled */
     _extractTag(parentNode, targetTag) {
         const node = parentNode.children.find((c) => c.tag === targetTag);
         if (node) {
@@ -553,7 +520,6 @@ export default class GedcomImporter {
         return null;
     }
 
-    /** Returns node object and marks it as handled */
     _extractNode(parentNode, targetTag) {
         const node = parentNode.children.find((c) => c.tag === targetTag);
         if (node) {
@@ -563,13 +529,11 @@ export default class GedcomImporter {
         return null;
     }
 
-    /** Marks a tag handled without returning it (for Implicit usage) */
     _markTagHandled(parentNode, targetTag) {
         const node = parentNode.children.find((c) => c.tag === targetTag);
         if (node) node.handled = true;
     }
 
-    /** Peeks at value WITHOUT marking handled (for lookups that don't consume data) */
     _peekTag(parentNode, targetTag) {
         const node = parentNode.children.find((c) => c.tag === targetTag);
         return node ? node.value : null;
@@ -580,18 +544,14 @@ export default class GedcomImporter {
     // =========================================================================
 
     _auditNode(node, contextPath) {
-        // If this specific node wasn't handled, everything inside is lost
         if (!node.handled) {
             this._reportLoss(contextPath, node.tag, node.value, true);
             return;
         }
-
-        // Check children recursively
         node.children.forEach((child) => {
             if (!child.handled) {
                 this._reportLoss(contextPath, child.tag, child.value, false);
             } else {
-                // Recurse into handled children to find deeper unhandled tags
                 this._auditNode(child, `${contextPath}.${child.tag}`);
             }
         });
@@ -615,12 +575,11 @@ export default class GedcomImporter {
         this.lossReport.forEach((msg) => {
             lines.push(`# ${msg}`);
         });
-
         return lines.join("\n");
     }
 
     // =========================================================================
-    // Date Helpers (Existing logic)
+    // Date Helpers
     // =========================================================================
     _convertDate(gedDate) {
         if (!gedDate) return "";

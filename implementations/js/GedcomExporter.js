@@ -26,7 +26,6 @@ export default class GedcomExporter {
         const records = result.records;
 
         // 1b. Inject Implicit Placeholders
-        // Scan for ?IDs that are referenced but not defined, and create records for them.
         this._injectImplicitPlaceholders(records);
 
         const output = [];
@@ -41,7 +40,6 @@ export default class GedcomExporter {
 
         // 3. Process Individuals & Build Family Cache
         for (const [, rec] of Object.entries(records)) {
-            // Apply Privacy: Skip PRIVATE records entirely
             if (privacyEnabled) {
                 const privacy = this._getField(rec, "PRIVACY");
                 if (privacy === "PRIVATE") continue;
@@ -66,13 +64,9 @@ export default class GedcomExporter {
             fam.children.forEach((childId) => {
                 output.push(`1 CHIL @${childId}@`);
             });
+
+            // Family Events (MARR, DIV, etc.)
             fam.events.forEach((evt) => {
-                // If privacy is enabled, we need to check if we should mask Family Events.
-                // Spec implies masking marriage dates/places for Living people.
-                // Since Family events are shared, if one partner is Living, we usually mask.
-                // For simplicity, if privacyEnabled is passed, we mask dates/places on family events too.
-                // However, detailed logic requires checking the privacy status of partners.
-                // We'll mask if privacyEnabled is true to be safe.
                 const shouldMask = privacyEnabled;
 
                 if (evt.type === "PART") {
@@ -85,15 +79,25 @@ export default class GedcomExporter {
 
                 if (!shouldMask) {
                     if (evt.date) output.push(`2 DATE ${evt.date}`);
+
+                    // Attach Notes to the main event (usually MARR)
+                    if (evt.notes && evt.notes.length > 0) {
+                        evt.notes.forEach((n) => this._writeNote(n, output, 2));
+                    }
+
                     if (evt.reason === "DIV") {
                         output.push(`1 DIV`);
                         if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
+                        // If we had specific divorce notes, they would go here.
+                        // Currently UNION_NOTE is bucketed to the main Union event.
                     }
-                } else {
-                    // Privacy Mode: Mask dates
-                    // (Optional: output.push('2 NOTE Private'))
                 }
             });
+
+            // Generic Family Notes (if any were pushed to the root fam object)
+            if (fam.notes && fam.notes.length > 0) {
+                fam.notes.forEach((n) => this._writeNote(n, output, 1));
+            }
         }
 
         // 5. Append Audit Report
@@ -114,27 +118,19 @@ export default class GedcomExporter {
 
     _injectImplicitPlaceholders(records) {
         const referenced = new Set();
-
         const collect = (id) => {
             if (id && id.startsWith("?") && !records[id]) {
                 referenced.add(id);
             }
         };
-
         for (const rec of Object.values(records)) {
             if (rec.data.PARENT) rec.data.PARENT.forEach((p) => collect(p.parsed[0]));
             if (rec.data.UNION) rec.data.UNION.forEach((u) => collect(u.parsed[0]));
             if (rec.data.CHILD) rec.data.CHILD.forEach((c) => collect(c.parsed[0]));
             if (rec.data.ASSOC) rec.data.ASSOC.forEach((a) => collect(a.parsed[0]));
         }
-
         referenced.forEach((id) => {
-            records[id] = {
-                id: id,
-                type: "PLACEHOLDER",
-                data: {},
-                line: 0 // Synthetic
-            };
+            records[id] = { id: id, type: "PLACEHOLDER", data: {}, line: 0 };
             this._log(id, "Implicit placeholder converted to dummy INDI record.");
         });
     }
@@ -149,7 +145,6 @@ export default class GedcomExporter {
         const auth = this._getField(rec, "AUTHOR");
         if (auth) out.push(`1 AUTH ${auth}`);
 
-        // Export Notes
         if (rec.data.NOTES) {
             rec.data.NOTES.forEach((n) => {
                 this._writeNote(n.parsed[0], out, 1);
@@ -172,10 +167,7 @@ export default class GedcomExporter {
                 const type = nameField.parsed[2] || "";
                 const status = nameField.parsed[3] || "";
 
-                // Privacy: Show only Preferred Name
                 if (shouldMask && status !== "PREF" && rec.data.NAME.length > 1) {
-                    // If multiple names exist and this isn't preferred, skip it.
-                    // If no name is marked PREF, we might just output the first one.
                     const hasPref = rec.data.NAME.some((n) => n.parsed[3] === "PREF");
                     if (hasPref) return;
                 }
@@ -193,31 +185,31 @@ export default class GedcomExporter {
                 }
 
                 out.push(`1 NAME ${gedName}`);
-                if (type) {
-                    out.push(`2 TYPE ${type}`);
+                if (type) out.push(`2 TYPE ${type}`);
+
+                // Export NAME_NOTE
+                if (!shouldMask && nameField.modifiers && nameField.modifiers.NAME_NOTE) {
+                    nameField.modifiers.NAME_NOTE.forEach((note) => {
+                        this._writeNote(note.parsed[0], out, 2);
+                    });
                 }
             });
         } else if (rec.type === "PLACEHOLDER") {
             out.push(`1 NAME Unknown /Placeholder/`);
         }
 
-        // Placeholder Note
         if (rec.type === "PLACEHOLDER") {
             out.push(`1 NOTE This is a synthesized placeholder record from FTT.`);
         }
 
-        // Sex
         const sex = this._getField(rec, "SEX");
         if (sex) out.push(`1 SEX ${sex}`);
 
-        // Vital Events (Masked if Living)
         this._writeEvent(rec, "BORN", "BIRT", out, shouldMask);
         this._writeEvent(rec, "DIED", "DEAT", out, shouldMask);
-
-        // Generic Inline Events (Masked if Living)
         this._writeEvent(rec, "EVENT", "EVEN", out, shouldMask);
 
-        // Shared Events (Masked if Living)
+        // Shared Events
         if (rec.data.EVENT_REF) {
             rec.data.EVENT_REF.forEach((ref) => {
                 const evtId = ref.parsed[0];
@@ -225,10 +217,8 @@ export default class GedcomExporter {
                 if (sharedEvt) {
                     const type = this._getField(sharedEvt, "TYPE") || "EVENT";
                     const date = this._gedDate(this._getField(sharedEvt, "START_DATE"));
-
                     out.push(`1 EVEN`);
                     out.push(`2 TYPE ${type}`);
-
                     if (!shouldMask) {
                         if (date) out.push(`2 DATE ${date}`);
                         out.push(`2 NOTE Shared Event Reference: ${evtId}`);
@@ -237,7 +227,7 @@ export default class GedcomExporter {
             });
         }
 
-        // Associate Export
+        // Associations
         if (rec.data.ASSOC) {
             rec.data.ASSOC.forEach((assoc) => {
                 const targetId = assoc.parsed[0];
@@ -247,28 +237,23 @@ export default class GedcomExporter {
 
                 out.push(`1 ASSO @${targetId}@`);
                 out.push(`2 RELA ${role}`);
-
                 if (startDate) {
-                    this._log(
-                        rec.id,
-                        `ASSOC to ${targetId}: Date '${startDate}' stripped (Not supported in GEDCOM ASSO).`
-                    );
+                    this._log(rec.id, `ASSOC to ${targetId}: Date '${startDate}' stripped.`);
                 }
-
                 if (details && !shouldMask) {
                     out.push(`2 NOTE ${details}`);
                 }
             });
         }
 
-        // Export Notes (Skipped if Living to protect sensitive bio)
+        // Notes
         if (!shouldMask && rec.data.NOTES) {
             rec.data.NOTES.forEach((n) => {
                 this._writeNote(n.parsed[0], out, 1);
             });
         }
 
-        // Family Linkage (Spouse) - Links are preserved even if Living
+        // Unions (Spouse Links)
         if (rec.data.UNION) {
             rec.data.UNION.forEach((u) => {
                 const partnerId = u.parsed[0];
@@ -279,47 +264,71 @@ export default class GedcomExporter {
 
                 const fam = this._getFamily(rec.id, partnerId, allRecords);
 
+                // Collect UNION_NOTEs
+                const notes = [];
+                if (!shouldMask && u.modifiers && u.modifiers.UNION_NOTE) {
+                    u.modifiers.UNION_NOTE.forEach((n) => notes.push(n.parsed[0]));
+                }
+
                 if (!fam.hasMarr) {
-                    fam.events.push({ tag: "MARR", date, endDate, reason, type });
+                    fam.events.push({ tag: "MARR", date, endDate, reason, type, notes });
                     fam.hasMarr = true;
+                } else {
+                    // Append notes to existing marriage event if found
+                    const evt = fam.events.find((e) => e.tag === "MARR");
+                    if (evt && notes.length > 0) {
+                        // Avoid exact duplicate notes if spouse has same note
+                        notes.forEach((noteText) => {
+                            if (!evt.notes.includes(noteText)) evt.notes.push(noteText);
+                        });
+                    }
                 }
                 out.push(`1 FAMS ${fam.id}`);
             });
         }
 
-        // Family Linkage (Child) - Links are preserved even if Living
+        // Parents (Child Links)
         if (rec.data.PARENT) {
-            // 1. Group parents by Relationship Type
             const groups = {};
+            // We must preserve the object to access modifiers later
             rec.data.PARENT.forEach((p) => {
-                const pid = p.parsed[0];
                 const type = p.parsed[1] || "BIO";
                 if (!groups[type]) groups[type] = [];
-                groups[type].push(pid);
+                groups[type].push(p); // Store whole object
             });
 
-            // 2. Process each group
-            for (const [type, pids] of Object.entries(groups)) {
-                // Iterate in pairs (Standard Mom/Dad or single parents)
-                for (let i = 0; i < pids.length; i += 2) {
-                    const p1 = pids[i];
-                    const p2 = pids[i + 1] || null;
+            for (const [type, pObjs] of Object.entries(groups)) {
+                // Process in pairs of 2 for potential Mom/Dad grouping
+                for (let i = 0; i < pObjs.length; i += 2) {
+                    const p1Obj = pObjs[i];
+                    const p2Obj = pObjs[i + 1] || null;
+
+                    const p1 = p1Obj.parsed[0];
+                    const p2 = p2Obj ? p2Obj.parsed[0] : null;
 
                     const fam = this._getFamily(p1, p2, allRecords);
 
-                    // Link Child to Family
                     if (!fam.children.includes(rec.id)) {
                         fam.children.push(rec.id);
                     }
 
-                    // Write FAMC tag
                     out.push(`1 FAMC ${fam.id}`);
 
-                    // Apply Relationship Type (PEDI)
-                    if (type === "ADO") {
-                        out.push(`2 PEDI adopted`);
-                    } else if (type === "FOS") {
-                        out.push(`2 PEDI foster`);
+                    if (type === "ADO") out.push(`2 PEDI adopted`);
+                    else if (type === "FOS") out.push(`2 PEDI foster`);
+
+                    // Export PARENT_NOTE
+                    // Check notes on p1Obj
+                    if (!shouldMask && p1Obj.modifiers && p1Obj.modifiers.PARENT_NOTE) {
+                        p1Obj.modifiers.PARENT_NOTE.forEach((n) =>
+                            this._writeNote(n.parsed[0], out, 2)
+                        );
+                    }
+                    // Check notes on p2Obj
+                    if (p2Obj && !shouldMask && p2Obj.modifiers && p2Obj.modifiers.PARENT_NOTE) {
+                        p2Obj.modifiers.PARENT_NOTE.forEach((n) =>
+                            this._writeNote(n.parsed[0], out, 2)
+                        );
                     }
                 }
             }
@@ -348,43 +357,30 @@ export default class GedcomExporter {
             rec.data[fttKey].forEach((f) => {
                 let gedTag = defaultGedTag;
                 let writeType = false;
-                let typeIndex = -1;
-                let dateIndex = 0;
-                let placeIndex = 1;
-                let detailsIndex = -1;
+                let typeIndex = -1,
+                    dateIndex = 0,
+                    placeIndex = 1,
+                    detailsIndex = -1;
 
                 if (fttKey === "EVENT") {
-                    // EVENT: TYPE | DATE | END | PLACE | DETAILS
                     typeIndex = 0;
                     dateIndex = 1;
                     placeIndex = 3;
                     detailsIndex = 4;
-
                     const fttType = f.parsed[0];
-                    if (fttType && EVENT_MAP[fttType]) {
-                        gedTag = EVENT_MAP[fttType];
-                    } else {
-                        writeType = true;
-                    }
+                    if (fttType && EVENT_MAP[fttType]) gedTag = EVENT_MAP[fttType];
+                    else writeType = true;
                 }
 
-                // Get details (e.g. Occupation value)
                 const details = detailsIndex > -1 ? f.parsed[detailsIndex] : null;
+                if (details) out.push(`1 ${gedTag} ${details}`);
+                else out.push(`1 ${gedTag}`);
 
-                // Output Tag (with optional value)
-                if (details) {
-                    out.push(`1 ${gedTag} ${details}`);
-                } else {
-                    out.push(`1 ${gedTag}`);
-                }
-
-                // Generic Type
                 if (writeType) {
                     const type = f.parsed[typeIndex];
                     if (type) out.push(`2 TYPE ${type}`);
                 }
 
-                // Date & Place (MASKED if shouldMask is true)
                 if (!shouldMask) {
                     const date = this._gedDate(f.parsed[dateIndex]);
                     if (date) out.push(`2 DATE ${date}`);
@@ -392,7 +388,6 @@ export default class GedcomExporter {
                     const place = f.parsed[placeIndex];
                     if (place) {
                         out.push(`2 PLAC ${place.replace(/;\s*/g, ", ")}`);
-
                         if (f.metadata && f.metadata.coords) {
                             const [lat, long] = f.metadata.coords.split(",").map((s) => s.trim());
                             if (lat && long) {
@@ -409,9 +404,7 @@ export default class GedcomExporter {
                         }
                     }
 
-                    // Citations & Quality
                     if (f.modifiers) {
-                        // 1. Determine QUAY from _QUAL if present
                         let quayVal = null;
                         const qualKey = `${fttKey}_QUAL`;
                         if (f.modifiers[qualKey] && f.modifiers[qualKey].length > 0) {
@@ -425,11 +418,7 @@ export default class GedcomExporter {
                                     out.push(`2 SOUR @${srcId}@`);
                                     const page = m.parsed[1];
                                     if (page) out.push(`3 PAGE ${page}`);
-
-                                    // Append QUAY if derived from _QUAL
-                                    if (quayVal !== null) {
-                                        out.push(`3 QUAY ${quayVal}`);
-                                    }
+                                    if (quayVal !== null) out.push(`3 QUAY ${quayVal}`);
                                 });
                             }
                             if (modKey.endsWith("_NOTE")) {
@@ -439,9 +428,6 @@ export default class GedcomExporter {
                             }
                         }
                     }
-                } else {
-                    // Optional: Indicate data is masked
-                    // out.push(`2 NOTE Private`);
                 }
             });
         }
@@ -450,22 +436,11 @@ export default class GedcomExporter {
     _convertFttQualToQuay(parsedParts) {
         if (!parsedParts || parsedParts.length === 0) return null;
         const [evidence, info] = parsedParts.map((s) => s.trim().toUpperCase());
-
-        // Heuristic mapping: FTT (Evidence/Info) -> GEDCOM (0-3)
-        // 3: Direct & Primary
         if (evidence === "DIRECT" && info === "PRIM") return "3";
-
-        // 2: Direct & Secondary
         if (evidence === "DIRECT" || info === "PRIM") return "2";
-
-        // 1: Indirect or Negative
         if (evidence === "INDIRECT" || evidence === "NEG") return "1";
-
-        // 0: Unknown/Unreliable
         return "0";
     }
-
-    // --- Helpers ---
 
     _writeNote(text, out, level) {
         if (!text) return;
@@ -491,9 +466,7 @@ export default class GedcomExporter {
         const ids = [p1, p2].filter((x) => x).sort();
         const key = ids.join("|");
 
-        if (this.famCache.has(key)) {
-            return this.famCache.get(key);
-        }
+        if (this.famCache.has(key)) return this.famCache.get(key);
 
         const famId = `@F${this.famCounter++}@`;
         const famObj = {
@@ -502,6 +475,7 @@ export default class GedcomExporter {
             wives: [],
             children: [],
             events: [],
+            notes: [],
             hasMarr: false
         };
 
@@ -509,21 +483,12 @@ export default class GedcomExporter {
             const prec = allRecords[pid];
             const sex =
                 prec && prec.data.SEX && prec.data.SEX[0] ? prec.data.SEX[0].parsed[0] : "U";
-
-            if (sex === "M") {
-                famObj.husbs.push(pid);
-            } else if (sex === "F") {
-                famObj.wives.push(pid);
-            } else {
-                // Fallback for Unknown/Other:
-                // Try to fill empty slots to create valid structure.
-                if (famObj.husbs.length === 0) {
-                    famObj.husbs.push(pid);
-                } else if (famObj.wives.length === 0) {
-                    famObj.wives.push(pid);
-                } else {
-                    famObj.husbs.push(pid);
-                }
+            if (sex === "M") famObj.husbs.push(pid);
+            else if (sex === "F") famObj.wives.push(pid);
+            else {
+                if (famObj.husbs.length === 0) famObj.husbs.push(pid);
+                else if (famObj.wives.length === 0) famObj.wives.push(pid);
+                else famObj.husbs.push(pid);
             }
         });
 
@@ -549,14 +514,11 @@ export default class GedcomExporter {
         ];
 
         const isoMatch = fttDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (isoMatch) {
+        if (isoMatch)
             return `${parseInt(isoMatch[3])} ${months[parseInt(isoMatch[2]) - 1]} ${isoMatch[1]}`;
-        }
 
         const monthMatch = fttDate.match(/^(\d{4})-(\d{2})$/);
-        if (monthMatch) {
-            return `${months[parseInt(monthMatch[2]) - 1]} ${monthMatch[1]}`;
-        }
+        if (monthMatch) return `${months[parseInt(monthMatch[2]) - 1]} ${monthMatch[1]}`;
 
         if (/^\d{4}$/.test(fttDate)) return fttDate;
 
@@ -572,12 +534,10 @@ export default class GedcomExporter {
         if (rangeMatch) {
             const start = rangeMatch[1].trim();
             const end = rangeMatch[2].trim();
-
             if (!start && end) return `BEF ${end}`;
             if (start && !end) return `AFT ${start}`;
             return `BET ${start} AND ${end}`;
         }
-
         return fttDate;
     }
 }
