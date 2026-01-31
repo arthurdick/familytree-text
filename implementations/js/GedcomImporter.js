@@ -167,6 +167,19 @@ export default class GedcomImporter {
 
         const auth = this._extractTag(rec, "AUTH");
         if (auth) out.push(`AUTHOR: ${auth.replace(/\n/g, " ")}`);
+
+        // Source Notes
+        const noteNodes = rec.children.filter((c) => c.tag === "NOTE");
+        noteNodes.forEach((n) => {
+            n.handled = true;
+            const lines = n.value.split("\n");
+            if (lines.length > 0) {
+                out.push(`NOTES: ${lines[0]}`);
+                for (let i = 1; i < lines.length; i++) {
+                    out.push(`\n  ${lines[i]}`);
+                }
+            }
+        });
     }
 
     _writeIndividual(indi, out) {
@@ -406,6 +419,19 @@ export default class GedcomImporter {
                 const qualStr = this._convertQuayToFtt(String(bestQuay));
                 if (qualStr) out.push(`${fttKey}_QUAL: ${qualStr}`);
             }
+
+            // --- Event Notes ---
+            const noteNodes = evtNode.children.filter((c) => c.tag === "NOTE");
+            noteNodes.forEach((n) => {
+                n.handled = true;
+                const lines = n.value.split("\n");
+                if (lines.length > 0) {
+                    out.push(`${fttKey}_NOTE: ${lines[0]}`);
+                    for (let i = 1; i < lines.length; i++) {
+                        out.push(`\n  ${lines[i]}`);
+                    }
+                }
+            });
         }
     }
 
@@ -482,6 +508,19 @@ export default class GedcomImporter {
                 const qualStr = this._convertQuayToFtt(String(bestQuay));
                 if (qualStr) out.push(`EVENT_QUAL: ${qualStr}`);
             }
+
+            // --- Event Notes ---
+            const noteNodes = node.children.filter((c) => c.tag === "NOTE");
+            noteNodes.forEach((n) => {
+                n.handled = true;
+                const lines = n.value.split("\n");
+                if (lines.length > 0) {
+                    out.push(`EVENT_NOTE: ${lines[0]}`);
+                    for (let i = 1; i < lines.length; i++) {
+                        out.push(`\n  ${lines[i]}`);
+                    }
+                }
+            });
         });
     }
 
