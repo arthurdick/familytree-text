@@ -7,7 +7,7 @@ import FTTParser from "./FTTParser.js";
 export default class GedcomExporter {
     constructor() {
         this.parser = new FTTParser();
-        this.famCache = new Map(); // "ID1_ID2" -> { id: @F1@, ... }
+        this.famCache = new Map(); // "ID1|ID2" -> { id: @F1@, ... }
         this.famCounter = 1;
         this.downgradeLog = []; // Stores audit warnings
     }
@@ -533,8 +533,12 @@ export default class GedcomExporter {
 
         if (/^\d{4}$/.test(fttDate)) return fttDate;
 
-        if (fttDate.endsWith("~") || fttDate.endsWith("?")) {
-            return `ABT ${fttDate.replace(/[~?]/g, "")}`;
+        if (fttDate.endsWith("~")) {
+            return `ABT ${fttDate.replace("~", "")}`;
+        }
+
+        if (fttDate.endsWith("?")) {
+            return `EST ${fttDate.replace("?", "")}`;
         }
 
         const rangeMatch = fttDate.match(/^\[(.*?)\.\.(.*?)\]$/);
