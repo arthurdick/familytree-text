@@ -372,9 +372,6 @@ export default class GedcomExporter {
                 const details = detailsIndex > -1 ? f.parsed[detailsIndex] : null;
 
                 // Output Tag (with optional value)
-                // If masked, we might suppress details if sensitive, but Spec focuses on dates/places.
-                // We'll output the tag to indicate "something happened" or just skip if it has no semantic value without date.
-                // Spec: "Mask all birth/marriage dates and places."
                 if (details) {
                     out.push(`1 ${gedTag} ${details}`);
                 } else {
@@ -412,8 +409,15 @@ export default class GedcomExporter {
                         }
                     }
 
-                    // Citations & Notes
+                    // Citations & Quality
                     if (f.modifiers) {
+                        // 1. Determine QUAY from _QUAL if present
+                        let quayVal = null;
+                        const qualKey = `${fttKey}_QUAL`;
+                        if (f.modifiers[qualKey] && f.modifiers[qualKey].length > 0) {
+                            quayVal = this._convertFttQualToQuay(f.modifiers[qualKey][0].parsed);
+                        }
+
                         for (const [modKey, mods] of Object.entries(f.modifiers)) {
                             if (modKey.endsWith("_SRC")) {
                                 mods.forEach((m) => {
@@ -421,6 +425,11 @@ export default class GedcomExporter {
                                     out.push(`2 SOUR @${srcId}@`);
                                     const page = m.parsed[1];
                                     if (page) out.push(`3 PAGE ${page}`);
+
+                                    // Append QUAY if derived from _QUAL
+                                    if (quayVal !== null) {
+                                        out.push(`3 QUAY ${quayVal}`);
+                                    }
                                 });
                             }
                             if (modKey.endsWith("_NOTE")) {
@@ -436,6 +445,24 @@ export default class GedcomExporter {
                 }
             });
         }
+    }
+
+    _convertFttQualToQuay(parsedParts) {
+        if (!parsedParts || parsedParts.length === 0) return null;
+        const [evidence, info] = parsedParts.map((s) => s.trim().toUpperCase());
+
+        // Heuristic mapping: FTT (Evidence/Info) -> GEDCOM (0-3)
+        // 3: Direct & Primary
+        if (evidence === "DIRECT" && info === "PRIM") return "3";
+
+        // 2: Direct & Secondary
+        if (evidence === "DIRECT" || info === "PRIM") return "2";
+
+        // 1: Indirect or Negative
+        if (evidence === "INDIRECT" || evidence === "NEG") return "1";
+
+        // 0: Unknown/Unreliable
+        return "0";
     }
 
     // --- Helpers ---
