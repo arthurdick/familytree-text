@@ -201,6 +201,29 @@ describe("GedcomImporter", () => {
             expect(result).toContain("UNION: I2 | MARR |  || DIV");
         });
 
+        it("should import Common Law unions from generic EVEN tags", () => {
+            const input = `
+0 @I1@ INDI
+1 FAMS @F1@
+0 @I2@ INDI
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 EVEN
+2 TYPE Common Law
+2 DATE 1999
+`;
+            const ftt = importer.convert(input);
+
+            // Should detect TYPE "Common Law" and use PART
+            expect(ftt).toContain("UNION: I2 | PART | 1999 ||");
+            expect(ftt).toContain("UNION: I1 | PART | 1999 ||");
+
+            // Should NOT default to MARR
+            expect(ftt).not.toContain("| MARR |");
+        });
+
         it("should auto-repair 'Ghost Children' (Missing FAMC tags)", () => {
             // GEDCOM where Family lists Child, but Child doesn't list Family
             const ghostData = `

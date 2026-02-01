@@ -363,29 +363,59 @@ export default class GedcomImporter {
                 else if (indi.id === wifeId) spouseId = husbId;
 
                 if (spouseId) {
+                    // Union Logic: Detect Type (MARR vs PART)
+                    // Priority 1: Check for explicit MARR tag
                     const marrNode = this._extractNode(fam, "MARR");
+
+                    // Priority 2: Check for EVEN tag with TYPE "Common Law" or "Partner"
+                    const evenNodes = fam.children.filter((c) => c.tag === "EVEN");
+                    const partnerNode = evenNodes.find((n) => {
+                        const typeNode = n.children.find((c) => c.tag === "TYPE");
+                        // Mark TYPE as handled if matched
+                        if (typeNode && /Common Law|Partner/i.test(typeNode.value)) {
+                            n.handled = true;
+                            typeNode.handled = true;
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    // Priority 3: Check for DIV tag (Implies marriage ended)
+                    const divNode = this._extractNode(fam, "DIV");
+
+                    // Determine Union Type and Primary Event Node
+                    let unionType = "MARR";
+                    let primaryNode = marrNode;
+
+                    if (partnerNode && !marrNode) {
+                        unionType = "PART";
+                        primaryNode = partnerNode;
+                    }
+
                     let dateStr = "";
                     let endReason = "";
 
-                    if (marrNode) {
-                        const d = this._extractTag(marrNode, "DATE");
+                    // Extract Start Date from Primary Node
+                    if (primaryNode) {
+                        const d = this._extractTag(primaryNode, "DATE");
                         if (d) dateStr = this._convertDate(d);
-                        this._extractTag(marrNode, "PLAC");
+                        this._extractTag(primaryNode, "PLAC");
                     }
 
-                    const divNode = this._extractNode(fam, "DIV");
+                    // Extract End Reason/Date
                     if (divNode) {
                         endReason = "DIV";
                         this._extractTag(divNode, "DATE");
+                        // If we have a DIV but no MARR/PART, we default to MARR (standard behavior)
                     }
 
-                    out.push(`UNION: ${spouseId} | MARR | ${dateStr} || ${endReason}`);
+                    out.push(`UNION: ${spouseId} | ${unionType} | ${dateStr} || ${endReason}`);
 
                     // Collect and Attach Notes (UNION_NOTE)
                     // 1. From the Shared Family Record
                     this._writeNotesFrom(fam, "UNION", out);
-                    // 2. From the Marriage Event
-                    if (marrNode) this._writeNotesFrom(marrNode, "UNION", out);
+                    // 2. From the Primary Union Event (MARR or PART/EVEN)
+                    if (primaryNode) this._writeNotesFrom(primaryNode, "UNION", out);
                     // 3. From the Divorce Event
                     if (divNode) this._writeNotesFrom(divNode, "UNION", out);
                 }
