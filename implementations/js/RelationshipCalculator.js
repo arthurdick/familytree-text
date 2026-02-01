@@ -603,7 +603,6 @@ export class RelationshipCalculator {
                 rels.forEach((rel) => {
                     results.push({
                         type: "CO_AFFINAL",
-                        subType: "SPOUSES_ARE_RELATIVES", // Updated generic subtype
                         spouseA: spouseIdA,
                         spouseB: spouseIdB,
                         bloodRel: rel // Capture specific lineage for text generation

@@ -679,7 +679,6 @@ CHILD: WIFE2
             const rels = calc(data, "HUSB1", "HUSB2");
             expect(rels).toHaveLength(1);
             expect(rels[0].type).toBe("CO_AFFINAL");
-            expect(rels[0].subType).toBe("SPOUSES_ARE_RELATIVES");
             expect(rels[0].spouseA).toBe("WIFE1");
             expect(rels[0].spouseB).toBe("WIFE2");
 
