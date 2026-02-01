@@ -8,6 +8,7 @@ export class RelationshipCalculator {
         this.lineageParents = new Map(); // BIO, ADO, LEGL, SURR, DONR
         this.allParents = new Map(); // All types including STE, FOS + Inferred
         this.spouses = new Map(); // ID -> Map<SpouseID, { active, reason, type }>
+        this.associates = new Map(); // ID -> Map<TargetID, { role, start, end, details, active }>
         this.parentTypes = new Map(); // ID -> Map<ParentID, Type>
         this.childrenMap = new Map(); // ID -> Set<ChildID> (Helper for topology)
 
@@ -60,6 +61,30 @@ export class RelationshipCalculator {
                 });
             }
             this.spouses.set(rec.id, sMap);
+
+            // Process Associates (New)
+            const assocMap = new Map();
+            if (rec.data.ASSOC) {
+                rec.data.ASSOC.forEach((a) => {
+                    const targetId = a.parsed[0];
+                    const role = (a.parsed[1] || "ASSOC").toUpperCase().trim();
+                    const start = a.parsed[2];
+                    const end = a.parsed[3];
+                    const details = a.parsed[4];
+
+                    // Determine active status (similar to Union)
+                    const isEnded = !!end && end !== "..";
+
+                    assocMap.set(targetId, {
+                        role,
+                        start,
+                        end,
+                        details,
+                        active: !isEnded
+                    });
+                });
+            }
+            this.associates.set(rec.id, assocMap);
         });
 
         // 2. Second Pass: Inject Inferred Step-Parents
@@ -135,10 +160,14 @@ export class RelationshipCalculator {
         const stepSib = this._findStepSibling(idA, idB);
         if (stepSib) results.push(stepSib);
 
+        // 8. Check Associates (New)
+        const assocRels = this._findAssociateRelationships(idA, idB);
+        assocRels.forEach((r) => results.push(r));
+
         // Fallback
         if (results.length === 0) return [{ type: "NONE" }];
 
-        // 8. Deduplicate & Filter
+        // 9. Deduplicate & Filter
         results = this._deduplicateResults(results);
         return this._filterRedundant(results);
     }
@@ -151,6 +180,38 @@ export class RelationshipCalculator {
         const map = this.spouses.get(idA);
         if (map && map.has(idB)) return map.get(idB);
         return null;
+    }
+
+    _findAssociateRelationships(idA, idB) {
+        const results = [];
+
+        // Check if A lists B (Forward)
+        const aMap = this.associates.get(idA);
+        if (aMap && aMap.has(idB)) {
+            const d = aMap.get(idB);
+            results.push({
+                type: "ASSOCIATE",
+                direction: "FORWARD", // A defines B as [Role]
+                role: d.role,
+                active: d.active,
+                details: d.details
+            });
+        }
+
+        // Check if B lists A (Reverse/Reciprocal)
+        const bMap = this.associates.get(idB);
+        if (bMap && bMap.has(idA)) {
+            const d = bMap.get(idA);
+            results.push({
+                type: "ASSOCIATE",
+                direction: "REVERSE", // B defines A as [Role]
+                role: d.role,
+                active: d.active,
+                details: d.details
+            });
+        }
+
+        return results;
     }
 
     _findDirectStepRelationships(idA, idB) {
@@ -732,6 +793,9 @@ export class RelationshipCalculator {
             if (res.type === "STEP_SIBLING") {
                 key += `-${res.parentA}-${res.parentB}`;
             }
+            if (res.type === "ASSOCIATE") {
+                key += `-${res.direction}-${res.role}`;
+            }
 
             if (!unique.has(key)) unique.set(key, res);
         });
@@ -913,6 +977,27 @@ export class RelationText {
             return { term: t, detail: `Relationship ended${reason}.` };
         }
 
+        if (rel.type === "ASSOCIATE") {
+            const roleName = this._getRoleLabel(rel.role);
+            const prefix = rel.active ? "" : "Former ";
+
+            if (rel.direction === "FORWARD") {
+                // A defines B as [Role]
+                // Therefore A is the Reciprocal of [Role] (e.g. Godparent to Godchild)
+                return {
+                    term: `${prefix}${roleName} (Reciprocal)`,
+                    detail: `${nameA} lists ${nameB} as ${roleName}.`
+                };
+            } else {
+                // B defines A as [Role]
+                // Therefore A IS the [Role] (e.g. Godchild)
+                return {
+                    term: prefix + roleName,
+                    detail: `${nameB} lists ${nameA} as ${roleName}.`
+                };
+            }
+        }
+
         if (rel.type === "STEP_PARENT") {
             const prefix = rel.isEx ? "Former Step-" : "Step-";
             const t = genderA === "M" ? "Father" : genderA === "F" ? "Mother" : "Parent";
@@ -935,18 +1020,14 @@ export class RelationText {
 
         if (rel.type === "STEP_SIBLING") {
             const prefix = rel.parentsDivorced ? "Former " : "";
-
             const t =
                 genderA === "M" ? "Step-Brother" : genderA === "F" ? "Step-Sister" : "Step-Sibling";
-
             let status = "";
             if (rel.unionReason === "WID") status = " (Widowed)";
             else if (rel.unionReason === "DIV" || rel.parentsDivorced) status = " (Divorced)";
             else if (rel.unionReason) status = ` (${rel.unionReason})`;
-
             const pAName = getDisplayName(this.records[rel.parentA]);
             const pBName = getDisplayName(this.records[rel.parentB]);
-
             return {
                 term: prefix + t,
                 detail: `Parents linked via union${status}: ${pAName} and ${pBName}.`
@@ -956,9 +1037,6 @@ export class RelationText {
         if (rel.type === "CO_AFFINAL") {
             const spAName = getDisplayName(this.records[rel.spouseA]);
             const spBName = getDisplayName(this.records[rel.spouseB]);
-
-            // Dynamic term generation
-            // We use genderA to frame the "-in-law" term (e.g. "Co-Brother" vs "Co-Sister")
             const bloodTerm = this.getBloodTerm(
                 rel.bloodRel.distA,
                 rel.bloodRel.distB,
@@ -970,7 +1048,6 @@ export class RelationText {
                 rel.bloodRel.isExStep,
                 rel.bloodRel.isAmbiguous
             );
-
             return {
                 term: `Co-${bloodTerm}-in-law`,
                 detail: `${nameA}'s spouse (${spAName}) is the ${bloodTerm} of ${nameB}'s spouse (${spBName}).`
@@ -988,7 +1065,6 @@ export class RelationText {
                         : genderA === "F"
                           ? "Sister-in-law"
                           : "Sibling-in-law";
-
                 const relativeTerm = this.getBloodTerm(
                     rel.bloodRel.distA,
                     rel.bloodRel.distB,
@@ -1013,7 +1089,6 @@ export class RelationText {
                         : spouseGender === "F"
                           ? "Sister-in-law"
                           : "Sibling-in-law";
-
                 const relativeTerm = this.getBloodTerm(
                     rel.bloodRel.distA,
                     rel.bloodRel.distB,
@@ -1066,11 +1141,9 @@ export class RelationText {
         if (rel.type === "LINEAGE") {
             let specialPrefix = "";
             let handledAdoptive = false;
-
             if (!rel.isStep && !rel.isExStep) {
                 if (rel.distB === 1) {
                     if (rel.distA === 0) {
-                        // Support Donor/Surrogate Terminology
                         if (rel.lineageA === "DONR") {
                             specialPrefix = "Sperm Donor";
                             handledAdoptive = true;
@@ -1103,16 +1176,13 @@ export class RelationText {
                     }
                 }
             }
-
             if (!handledAdoptive && (rel.lineageA === "ADO" || rel.lineageB === "ADO")) {
                 specialPrefix += "(Adoptive) ";
             }
-
-            // If Donor/Surrogate handled above, we don't need 'Father/Mother' appended unless it's pure prefix
             let term = "";
             if (handledAdoptive && (rel.lineageA === "DONR" || rel.lineageA === "SURR")) {
                 term = specialPrefix;
-                specialPrefix = ""; // Clear prefix so it isn't duplicated
+                specialPrefix = "";
             } else {
                 term = this.getBloodTerm(
                     rel.distA,
@@ -1126,19 +1196,15 @@ export class RelationText {
                     rel.isAmbiguous
                 );
             }
-
             const commonName = getDisplayName(this.records[rel.ancestorIds[0]]);
             const lcaCount = rel.ancestorIds.length;
             const sA = rel.distA === 1 ? "step" : "steps";
             const sB = rel.distB === 1 ? "step" : "steps";
-
             let det = `Common Ancestor: ${commonName}`;
             if (lcaCount > 1) det += ` (+ ${lcaCount - 1} other${lcaCount > 2 ? "s" : ""})`;
             det += ` (${rel.distA} ${sA} up, ${rel.distB} ${sB} up).`;
-
             if (rel.isStep) det += ` [via Step-Relationship]`;
             if (rel.isExStep) det += ` [via Former Step-Relationship]`;
-
             return { term: specialPrefix + term, detail: det };
         }
 
@@ -1158,7 +1224,6 @@ export class RelationText {
         const prefixEx = (t) => (rel.isExUnion ? `Former ${t}` : t);
         const isStep = rel.bloodRel.isStep;
         const isExStep = rel.bloodRel.isExStep;
-
         const getBaseTerm = (dA, dB, g) => {
             return this.getBloodTerm(
                 dA,
@@ -1172,8 +1237,6 @@ export class RelationText {
                 rel.bloodRel.isAmbiguous
             );
         };
-
-        // Helper to handle Step-Prefixing consistent with other Affinal terms
         const applyStep = (coreTerm) => {
             if (isExStep) return `Former Step-${coreTerm}`;
             if (isStep) return `Step-${coreTerm}`;
@@ -1184,83 +1247,46 @@ export class RelationText {
         let detail = "";
 
         if (rel.subType === "VIA_SPOUSE") {
-            // CASE 1: Child-in-law (Spouse's Child)
             if (bloodDistB === 0) {
                 const core = this.getDescendantTerm(bloodDistA, genderA);
                 term = prefixEx(`${core}-in-law`);
-            }
-            // CASE 2: Parent-in-law (Spouse's Parent)
-            else if (bloodDistA === 0) {
+            } else if (bloodDistA === 0) {
                 const core = this.getAncestorTerm(bloodDistB, genderA);
-                // Note: Step-Parents are typically handled by "STEP_PARENT" type,
-                // but this covers "Step-Mother-in-law" (Spouse's Step-Mom)
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 3: Sibling-in-law (Spouse's Sibling)
-            else if (bloodDistA === 1 && bloodDistB === 1) {
+            } else if (bloodDistA === 1 && bloodDistB === 1) {
                 const core = genderA === "M" ? "Brother" : genderA === "F" ? "Sister" : "Sibling";
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 4: Aunt/Uncle-in-law (Spouse's Aunt/Uncle)
-            else if (bloodDistA === 1 && bloodDistB > 1) {
-                // Spouse (A in lineage) is Child of Ancestor. Target (B) is Grandchild+.
-                // Spouse is Uncle/Aunt. I am Uncle/Aunt-in-law.
+            } else if (bloodDistA === 1 && bloodDistB > 1) {
                 const core = this.getNiblingTerm(bloodDistB - 1, genderA, true);
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 5: Niece/Nephew-in-law (Spouse's Niece/Nephew)
-            else if (bloodDistB === 1 && bloodDistA > 1) {
-                // Spouse (A) is Grandchild+. Target (B) is Child of Ancestor.
-                // Spouse is Nibling. I am Niece/Nephew-in-law.
+            } else if (bloodDistB === 1 && bloodDistA > 1) {
                 const core = this.getNiblingTerm(bloodDistA - 1, genderA, false);
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // FALLBACK: Cousin-in-law, etc.
-            else {
+            } else {
                 term = prefixEx(`${getBaseTerm(bloodDistA, bloodDistB, genderA)}-in-law`);
             }
-
             detail = `${nameA} is the ${rel.isExUnion ? "former " : ""}spouse of ${spouseName}, who is the ${getBaseTerm(bloodDistA, bloodDistB, bloodGender)} of ${nameB}.`;
         } else if (rel.subType === "VIA_BLOOD_SPOUSE") {
-            // CASE 1: Parent-in-law (Spouse of Parent)
             if (bloodDistA === 0) {
                 const core = this.getAncestorTerm(bloodDistB, genderA);
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 2: Child-in-law (Spouse of Child)
-            else if (bloodDistB === 0) {
+            } else if (bloodDistB === 0) {
                 const core = this.getDescendantTerm(bloodDistA, genderA);
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 3: Sibling-in-law (Spouse of Sibling)
-            else if (bloodDistA === 1 && bloodDistB === 1) {
+            } else if (bloodDistA === 1 && bloodDistB === 1) {
                 const core = genderA === "M" ? "Brother" : genderA === "F" ? "Sister" : "Sibling";
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 4: Aunt/Uncle-in-law (Spouse of Aunt/Uncle)
-            else if (bloodDistA === 1 && bloodDistB > 1) {
-                // I (A) am Child of Ancestor. Relative (R) is Grandchild+.
-                // I am Uncle/Aunt. B is Spouse of Nibling.
-                // This makes me the Uncle/Aunt-in-law of B.
+            } else if (bloodDistA === 1 && bloodDistB > 1) {
                 const core = this.getNiblingTerm(bloodDistB - 1, genderA, true);
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // CASE 5: Niece/Nephew-in-law (Spouse of Niece/Nephew)
-            else if (bloodDistB === 1 && bloodDistA > 1) {
-                // I (A) am Grandchild+. Relative (R) is Child of Ancestor.
-                // I am Nibling. B is Spouse of Uncle.
-                // This makes me the Niece/Nephew-in-law of B.
+            } else if (bloodDistB === 1 && bloodDistA > 1) {
                 const core = this.getNiblingTerm(bloodDistA - 1, genderA, false);
                 term = prefixEx(`${applyStep(core)}-in-law`);
-            }
-            // FALLBACK
-            else {
+            } else {
                 term = prefixEx(`${getBaseTerm(bloodDistA, bloodDistB, genderA)}-in-law`);
             }
-
             detail = `${nameB} is the ${rel.isExUnion ? "former " : ""}spouse of ${nameA}'s relative, ${spouseName}.`;
         }
-
         return { term, detail };
     }
 
@@ -1355,6 +1381,34 @@ export class RelationText {
         if (removed === 0) return ord;
         if (removed === 1) return `${ord} 1x Removed`;
         return `${ord} ${removed}x Removed`;
+    }
+
+    _getRoleLabel(code) {
+        const MAP = {
+            GODP: "Godparent",
+            GODC: "Godchild",
+            SPON: "Sponsor",
+            OFFI: "Officiant",
+            WITN: "Witness",
+            EXEC: "Executor",
+            GUAR: "Guardian",
+            WARD: "Ward",
+            INFO: "Informant",
+            MAST: "Master",
+            APPR: "Apprentice",
+            SERV: "Servant",
+            NEIG: "Neighbor",
+            ENSL: "Enslaved By",
+            OWNR: "Enslaver"
+        };
+        return MAP[code] || this._formatTitle(code);
+    }
+
+    _formatTitle(str) {
+        return str
+            .replace(/_/g, " ")
+            .toLowerCase()
+            .replace(/\b\w/g, (c) => c.toUpperCase());
     }
 }
 

@@ -1867,4 +1867,56 @@ PARENT: MOM | BIO
             expect(rels[0].type).toBe("NONE");
         });
     });
+
+    describe("Describe Association", () => {
+        const data = `
+ID: GODFATHER
+SEX: M
+ASSOC: GODCHILD | GODC | 2010-01-01 || Baptism Sponsor
+
+ID: GODCHILD
+SEX: F
+`;
+
+        it("should identify Godchild (Forward Definition)", () => {
+            const rels = calc(data, "GODFATHER", "GODCHILD");
+
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe("ASSOCIATE");
+            expect(rels[0].role).toBe("GODC");
+            expect(rels[0].direction).toBe("FORWARD");
+            expect(rels[0].details).toBe("Baptism Sponsor");
+        });
+
+        it("should generate correct text 'Godchild (Reciprocal)' for the Definer", () => {
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const textGen = new RelationText(result.records);
+            const rels = calc(data, "GODFATHER", "GODCHILD");
+
+            // "GODFATHER lists GODCHILD as Godchild"
+            // Therefore GODFATHER is the Reciprocal of Godchild.
+            const desc = textGen.describe(rels[0], "M", "GODCHILD", "GODFATHER");
+            expect(desc.term).toBe("Godchild (Reciprocal)");
+        });
+
+        it("should identify Godchild via Reverse Lookup", () => {
+            // Checking relationship from Child -> Godfather
+            const rels = calc(data, "GODCHILD", "GODFATHER");
+
+            expect(rels).toHaveLength(1);
+            expect(rels[0].type).toBe("ASSOCIATE");
+            expect(rels[0].role).toBe("GODC");
+            expect(rels[0].direction).toBe("REVERSE");
+        });
+
+        it("should textually describe the reverse link as the direct Role", () => {
+            const result = parser.parse(`HEAD_FORMAT: FTT v0.1\n${data}`);
+            const textGen = new RelationText(result.records);
+            const rels = calc(data, "GODCHILD", "GODFATHER");
+
+            const desc = textGen.describe(rels[0], "F", "GODFATHER", "GODCHILD");
+
+            expect(desc.term).toBe("Godchild");
+        });
+    });
 });
