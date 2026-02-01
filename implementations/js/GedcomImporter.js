@@ -14,6 +14,7 @@ export default class GedcomImporter {
     convert(gedcomData) {
         this._reset();
         this._firstPassParse(gedcomData);
+        this._repairGraph(); // Inject missing reciprocal links
         const fttOutput = this._generateFTT();
         const reportOutput = this._generateLossReport();
 
@@ -106,6 +107,44 @@ export default class GedcomImporter {
                 }
             }
         });
+    }
+
+    // =========================================================================
+    // Pass 1.5: Graph Repair (Ensure Reciprocity)
+    // =========================================================================
+    _repairGraph() {
+        // Spec 8.3.1 Ghost Child Rule:
+        // A child must explicitly point back to the parent.
+        // GEDCOM allows 1-way links (FAM -> CHIL) without (INDI -> FAMC).
+        // We must auto-repair this to prevent FTT Parser Fatal Errors.
+
+        for (const [famId, fam] of this.families) {
+            const chilNodes = fam.children.filter((c) => c.tag === "CHIL");
+
+            chilNodes.forEach((chil) => {
+                const childId = chil.value.replace(/@/g, "");
+                const childRecord = this.individuals.get(childId);
+
+                if (childRecord) {
+                    // Check if child already links back to this family via FAMC
+                    const hasBackLink = childRecord.children.some(
+                        (c) => c.tag === "FAMC" && c.value.replace(/@/g, "") === famId
+                    );
+
+                    if (!hasBackLink) {
+                        // Inject missing FAMC tag to ensure FTT validity
+                        childRecord.children.push({
+                            tag: "FAMC",
+                            value: `@${famId}@`,
+                            children: [], // No PEDI or NOTES for synthetic link
+                            handled: false,
+                            lineNum: 0 // Synthetic
+                        });
+                        // We do not log this as "Loss" because we are adding data.
+                    }
+                }
+            });
+        }
     }
 
     // =========================================================================

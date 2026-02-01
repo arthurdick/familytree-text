@@ -200,6 +200,32 @@ describe("GedcomImporter", () => {
             // Should map to DIV reason
             expect(result).toContain("UNION: I2 | MARR |  || DIV");
         });
+
+        it("should auto-repair 'Ghost Children' (Missing FAMC tags)", () => {
+            // GEDCOM where Family lists Child, but Child doesn't list Family
+            const ghostData = `
+0 @P1@ INDI
+1 NAME Dad /./
+1 SEX M
+1 FAMS @F1@
+
+0 @C1@ INDI
+1 NAME Ghost /Child/
+// Intentionally missing: 1 FAMC @F1@
+
+0 @F1@ FAM
+1 HUSB @P1@
+1 CHIL @C1@
+`;
+            const result = importer.convert(ghostData);
+
+            // The importer should have detected the one-way link
+            // and injected the PARENT tag into C1's record.
+            expect(result).toMatch(/ID: C1[\s\S]*PARENT: P1 \| BIO/);
+
+            // It should NOT treat this valid repair as data loss
+            expect(result).not.toContain("Unhandled CHIL");
+        });
     });
 
     // ==========================================
