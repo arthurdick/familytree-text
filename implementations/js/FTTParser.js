@@ -73,8 +73,11 @@ export default class FTTParser {
      * @returns {object} { headers, records, errors, warnings }
      */
     parse(rawText) {
+        // Strip UTF-8 BOM if present
+        const cleanText = rawText.startsWith("\uFEFF") ? rawText.slice(1) : rawText;
+
         const session = new ParseSession(this.SUPPORTED_VERSION);
-        return session.run(this._createLineIterator(rawText));
+        return session.run(this._createLineIterator(cleanText));
     }
 
     /**
