@@ -7,7 +7,7 @@ import FTTParser from "./FTTParser.js";
 export default class GedcomExporter {
     constructor() {
         this.parser = new FTTParser();
-        this.famCache = new Map(); // "ID1|ID2" -> { id: @F1@, ... }
+        this.famCache = new Map(); // "ID1|ID2" -> [ { id: @F1@, startDate: "1990", ... } ]
         this.famCounter = 1;
         this.downgradeLog = []; // Stores audit warnings
     }
@@ -28,6 +28,9 @@ export default class GedcomExporter {
         // 1b. Inject Implicit Placeholders
         this._injectImplicitPlaceholders(records);
 
+        // 1c. Pre-build Family Cache (Handle Remarriages)
+        this._buildFamilyCache(records);
+
         const output = [];
 
         // 2. Header
@@ -38,7 +41,7 @@ export default class GedcomExporter {
         output.push(`2 FORM LINEAGE-LINKED`);
         output.push(`1 CHAR UTF-8`);
 
-        // 3. Process Individuals & Build Family Cache
+        // 3. Process Individuals
         for (const [, rec] of Object.entries(records)) {
             if (privacyEnabled) {
                 const privacy = this._getField(rec, "PRIVACY");
@@ -54,50 +57,53 @@ export default class GedcomExporter {
             }
         }
 
-        // 4. Process Families
-        for (const fam of this.famCache.values()) {
-            output.push(`0 ${fam.id} FAM`);
+        // 4. Process Families (Output from Cache)
+        for (const famList of this.famCache.values()) {
+            famList.forEach((fam) => {
+                output.push(`0 ${fam.id} FAM`);
 
-            fam.husbs.forEach((h) => output.push(`1 HUSB @${h}@`));
-            fam.wives.forEach((w) => output.push(`1 WIFE @${w}@`));
+                fam.husbs.forEach((h) => output.push(`1 HUSB @${h}@`));
+                fam.wives.forEach((w) => output.push(`1 WIFE @${w}@`));
 
-            fam.children.forEach((childId) => {
-                output.push(`1 CHIL @${childId}@`);
-            });
+                fam.children.forEach((childId) => {
+                    output.push(`1 CHIL @${childId}@`);
+                });
 
-            // Family Events (MARR, DIV, etc.)
-            fam.events.forEach((evt) => {
-                const shouldMask = privacyEnabled;
+                // Family Events (MARR, DIV, etc.)
+                fam.events.forEach((evt) => {
+                    const shouldMask = privacyEnabled;
 
-                if (evt.type === "PART") {
-                    output.push(`1 MARR`);
-                    output.push(`2 TYPE Common Law / Partner`);
-                    this._log(fam.id, `Union Type 'PART' exported as 'MARR' (Semantic downgrade).`);
-                } else {
-                    output.push(`1 ${evt.tag}`);
-                }
-
-                if (!shouldMask) {
-                    if (evt.date) output.push(`2 DATE ${evt.date}`);
-
-                    // Attach Notes to the main event (usually MARR)
-                    if (evt.notes && evt.notes.length > 0) {
-                        evt.notes.forEach((n) => this._writeNote(n, output, 2));
+                    if (evt.type === "PART") {
+                        output.push(`1 MARR`);
+                        output.push(`2 TYPE Common Law / Partner`);
+                        this._log(
+                            fam.id,
+                            `Union Type 'PART' exported as 'MARR' (Semantic downgrade).`
+                        );
+                    } else {
+                        output.push(`1 ${evt.tag}`);
                     }
 
-                    if (evt.reason === "DIV") {
-                        output.push(`1 DIV`);
-                        if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
-                        // If we had specific divorce notes, they would go here.
-                        // Currently UNION_NOTE is bucketed to the main Union event.
+                    if (!shouldMask) {
+                        if (evt.date) output.push(`2 DATE ${evt.date}`);
+
+                        // Attach Notes to the main event
+                        if (evt.notes && evt.notes.length > 0) {
+                            evt.notes.forEach((n) => this._writeNote(n, output, 2));
+                        }
+
+                        if (evt.reason === "DIV") {
+                            output.push(`1 DIV`);
+                            if (evt.endDate) output.push(`2 DATE ${evt.endDate}`);
+                        }
                     }
+                });
+
+                // Generic Family Notes
+                if (fam.notes && fam.notes.length > 0) {
+                    fam.notes.forEach((n) => this._writeNote(n, output, 1));
                 }
             });
-
-            // Generic Family Notes (if any were pushed to the root fam object)
-            if (fam.notes && fam.notes.length > 0) {
-                fam.notes.forEach((n) => this._writeNote(n, output, 1));
-            }
         }
 
         // 5. Append Audit Report
@@ -133,6 +139,28 @@ export default class GedcomExporter {
             records[id] = { id: id, type: "PLACEHOLDER", data: {}, line: 0 };
             this._log(id, "Implicit placeholder converted to dummy INDI record.");
         });
+    }
+
+    _buildFamilyCache(records) {
+        // Pre-scan all unions to create distinct families based on Date
+        for (const rec of Object.values(records)) {
+            if (rec.data.UNION) {
+                rec.data.UNION.forEach((u) => {
+                    const partnerId = u.parsed[0];
+                    const startDateRaw = u.parsed[2];
+                    const endDateRaw = u.parsed[3];
+
+                    // Register this specific union segment
+                    this._registerFamilySegment(
+                        rec.id,
+                        partnerId,
+                        startDateRaw,
+                        endDateRaw,
+                        records
+                    );
+                });
+            }
+        }
     }
 
     // --- Writers ---
@@ -202,10 +230,17 @@ export default class GedcomExporter {
             out.push(`1 NOTE This is a synthesized placeholder record from FTT.`);
         }
 
+        // SEX Handling (Remapped O -> U)
         if (rec.data.SEX && rec.data.SEX.length > 0) {
             const sexObj = rec.data.SEX[0];
             const sexVal = sexObj.parsed[0];
-            out.push(`1 SEX ${sexVal}`);
+
+            if (sexVal === "O") {
+                out.push(`1 SEX U`);
+                out.push(`2 NOTE Sex recorded as 'O' (Other) in FTT.`);
+            } else {
+                out.push(`1 SEX ${sexVal}`);
+            }
 
             if (!shouldMask && sexObj.modifiers && sexObj.modifiers.SEX_NOTE) {
                 sexObj.modifiers.SEX_NOTE.forEach((note) => {
@@ -274,10 +309,12 @@ export default class GedcomExporter {
                 const partnerId = u.parsed[0];
                 const type = u.parsed[1] || "MARR";
                 const date = this._gedDate(u.parsed[2]);
+                const rawStartDate = u.parsed[2]; // Use raw for lookup
                 const endDate = this._gedDate(u.parsed[3]);
                 const reason = u.parsed[4];
 
-                const fam = this._getFamily(rec.id, partnerId, allRecords);
+                // Retrieve Specific Family by Date
+                const fam = this._getFamily(rec.id, partnerId, rawStartDate);
 
                 // Collect UNION_NOTEs
                 const notes = [];
@@ -289,10 +326,8 @@ export default class GedcomExporter {
                     fam.events.push({ tag: "MARR", date, endDate, reason, type, notes });
                     fam.hasMarr = true;
                 } else {
-                    // Append notes to existing marriage event if found
                     const evt = fam.events.find((e) => e.tag === "MARR");
                     if (evt && notes.length > 0) {
-                        // Avoid exact duplicate notes if spouse has same note
                         notes.forEach((noteText) => {
                             if (!evt.notes.includes(noteText)) evt.notes.push(noteText);
                         });
@@ -305,15 +340,13 @@ export default class GedcomExporter {
         // Parents (Child Links)
         if (rec.data.PARENT) {
             const groups = {};
-            // We must preserve the object to access modifiers later
             rec.data.PARENT.forEach((p) => {
                 const type = p.parsed[1] || "BIO";
                 if (!groups[type]) groups[type] = [];
-                groups[type].push(p); // Store whole object
+                groups[type].push(p);
             });
 
             for (const [type, pObjs] of Object.entries(groups)) {
-                // Process in pairs of 2 for potential Mom/Dad grouping
                 for (let i = 0; i < pObjs.length; i += 2) {
                     const p1Obj = pObjs[i];
                     const p2Obj = pObjs[i + 1] || null;
@@ -321,7 +354,9 @@ export default class GedcomExporter {
                     const p1 = p1Obj.parsed[0];
                     const p2 = p2Obj ? p2Obj.parsed[0] : null;
 
-                    const fam = this._getFamily(p1, p2, allRecords);
+                    // Match Child to Family based on Child's Birth Date
+                    const birthDateRaw = this._getField(rec, "BORN"); // Extract BORN date
+                    const fam = this._getFamilyForChild(p1, p2, birthDateRaw);
 
                     if (!fam.children.includes(rec.id)) {
                         fam.children.push(rec.id);
@@ -332,14 +367,11 @@ export default class GedcomExporter {
                     if (type === "ADO") out.push(`2 PEDI adopted`);
                     else if (type === "FOS") out.push(`2 PEDI foster`);
 
-                    // Export PARENT_NOTE
-                    // Check notes on p1Obj
                     if (!shouldMask && p1Obj.modifiers && p1Obj.modifiers.PARENT_NOTE) {
                         p1Obj.modifiers.PARENT_NOTE.forEach((n) =>
                             this._writeNote(n.parsed[0], out, 2)
                         );
                     }
-                    // Check notes on p2Obj
                     if (p2Obj && !shouldMask && p2Obj.modifiers && p2Obj.modifiers.PARENT_NOTE) {
                         p2Obj.modifiers.PARENT_NOTE.forEach((n) =>
                             this._writeNote(n.parsed[0], out, 2)
@@ -477,15 +509,31 @@ export default class GedcomExporter {
         return null;
     }
 
-    _getFamily(p1, p2, allRecords) {
+    // --- Family Logic ---
+
+    _registerFamilySegment(p1, p2, startDateRaw, endDateRaw, allRecords) {
         const ids = [p1, p2].filter((x) => x).sort();
         const key = ids.join("|");
 
-        if (this.famCache.has(key)) return this.famCache.get(key);
+        if (!this.famCache.has(key)) {
+            this.famCache.set(key, []);
+        }
+
+        const families = this.famCache.get(key);
+
+        // Dedup: Check if exact start date already exists
+        const existing = families.find((f) => f.startDateRaw === startDateRaw);
+        if (existing) return;
 
         const famId = `@F${this.famCounter++}@`;
+        const startYear = this._extractYear(startDateRaw);
+        const endYear = this._extractYear(endDateRaw);
+
         const famObj = {
             id: famId,
+            startDateRaw: startDateRaw, // Store raw for exact matching
+            startYear: startYear,
+            endYear: endYear,
             husbs: [],
             wives: [],
             children: [],
@@ -507,8 +555,77 @@ export default class GedcomExporter {
             }
         });
 
-        this.famCache.set(key, famObj);
-        return famObj;
+        families.push(famObj);
+
+        // Keep sorted by date for better fallback logic
+        families.sort((a, b) => (a.startYear || 0) - (b.startYear || 0));
+    }
+
+    _getFamily(p1, p2, startDateRaw) {
+        const ids = [p1, p2].filter((x) => x).sort();
+        const key = ids.join("|");
+        const families = this.famCache.get(key);
+
+        if (!families || families.length === 0) {
+            // Should not happen if _buildFamilyCache was run, but fallback safety:
+            // Create a generic family on the fly
+            const dummyRecs = {};
+            dummyRecs[p1] = { data: { SEX: [{ parsed: ["U"] }] } };
+            if (p2) dummyRecs[p2] = dummyRecs[p1];
+            this._registerFamilySegment(p1, p2, startDateRaw, null, dummyRecs);
+            return this.famCache.get(key)[0];
+        }
+
+        // 1. Exact Date Match
+        const match = families.find((f) => f.startDateRaw === startDateRaw);
+        if (match) return match;
+
+        // 2. Fallback: Return the first family (Main union)
+        return families[0];
+    }
+
+    _getFamilyForChild(p1, p2, childBirthDateRaw) {
+        const ids = [p1, p2].filter((x) => x).sort();
+        const key = ids.join("|");
+        const families = this.famCache.get(key);
+
+        // Case A: No Families (Parents never married in file)
+        if (!families || families.length === 0) {
+            // Create a "Natural" family container on the fly
+            const dummyRecs = {};
+            dummyRecs[p1] = { data: { SEX: [{ parsed: ["U"] }] } };
+            if (p2) dummyRecs[p2] = dummyRecs[p1];
+            this._registerFamilySegment(p1, p2, null, null, dummyRecs);
+            return this.famCache.get(key)[0];
+        }
+
+        // Case B: Single Family -> Easy match
+        if (families.length === 1) return families[0];
+
+        // Case C: Multiple Marriages -> Time Matching
+        if (childBirthDateRaw) {
+            const birthYear = this._extractYear(childBirthDateRaw);
+            if (birthYear) {
+                // Find family where birth year falls within range (or shortly after end)
+                // Relaxed logic: If birth is within [Start, End + 1 Year]
+                const match = families.find((f) => {
+                    const s = f.startYear || -9999;
+                    const e = f.endYear || 9999;
+                    return birthYear >= s && birthYear <= e + 1;
+                });
+                if (match) return match;
+            }
+        }
+
+        // Case D: Fallback (e.g. unknown birth date)
+        // Default to the *first* family as it's typically the primary lineage anchor
+        return families[0];
+    }
+
+    _extractYear(dateStr) {
+        if (!dateStr) return null;
+        const match = dateStr.match(/[0-9]{4}/);
+        return match ? parseInt(match[0], 10) : null;
     }
 
     _gedDate(fttDate) {
