@@ -1836,4 +1836,36 @@ SEX: F
             expect(rel.isAdoptive).toBe(false);
         });
     });
+
+    describe("Non-Marital Partner Breakups (The Loophole)", () => {
+        const data = `
+ID: DAD
+UNION: MOM | PART | 1990 | 1995 | SEP
+CHILD: SON
+
+ID: MOM
+UNION: DAD | PART | 1990 | 1995 | SEP
+CHILD: DAUGHTER
+
+ID: SON
+PARENT: DAD | BIO
+
+ID: DAUGHTER
+PARENT: MOM | BIO
+`;
+
+        it("should NOT identify Former Step-Siblings for broken-up Partners", () => {
+            const rels = calc(data, "SON", "DAUGHTER");
+            // Should return NONE because they are not related by blood
+            // and the 'PART' break-up should prevent 'STEP_SIBLING'.
+            expect(rels[0].type).toBe("NONE");
+        });
+
+        it("should NOT identify Former Step-Parent for broken-up Partners", () => {
+            const rels = calc(data, "DAD", "DAUGHTER");
+            // Should return NONE because the link was only via the partner
+            // and the partner link is now broken and was type 'PART'.
+            expect(rels[0].type).toBe("NONE");
+        });
+    });
 });

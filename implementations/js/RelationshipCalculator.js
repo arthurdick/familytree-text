@@ -78,6 +78,9 @@ export class RelationshipCalculator {
                     const existingParents = this.allParents.get(childId);
 
                     if (!existingParents.includes(spouseId)) {
+                        // Only formal unions (MARR, CIVL) create persistent former step-relationships.
+                        if (!status.active && status.type === "PART") return;
+
                         existingParents.push(spouseId);
 
                         let type = "STE_EX";
@@ -217,6 +220,9 @@ export class RelationshipCalculator {
                     );
 
                     if (!shareLineageParent) {
+                        // Children of broken-up non-marital partners are not "Former Step-Siblings".
+                        if (!uStatus.active && uStatus.type === "PART") continue;
+
                         return {
                             type: "STEP_SIBLING",
                             parentA: pA,
@@ -545,6 +551,9 @@ export class RelationshipCalculator {
     _findAffinalRelationships(idA, idB, results) {
         const spousesA = this.spouses.get(idA) || new Map();
         spousesA.forEach((status, spouseId) => {
+            // Broken-up partnerships do not generate former affinal links
+            if (!status.active && status.type === "PART") return;
+
             if (spouseId === idB) return;
             const rels = this._findLineageRelationships(spouseId, idB);
             rels.forEach((rel) => {
@@ -561,6 +570,9 @@ export class RelationshipCalculator {
 
         const spousesB = this.spouses.get(idB) || new Map();
         spousesB.forEach((status, spouseId) => {
+            // Broken-up partnerships do not generate former affinal links
+            if (!status.active && status.type === "PART") return;
+
             if (spouseId === idA) return;
             const rels = this._findLineageRelationships(idA, spouseId);
             rels.forEach((rel) => {

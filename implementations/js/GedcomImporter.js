@@ -225,12 +225,12 @@ export default class GedcomImporter {
                 const rawName = nameNode.value || "";
                 const display = rawName.replace(/\//g, "").trim();
                 const match = rawName.match(/(.*)\/(.*)\/(.*)/);
-                
+
                 let sortKey = "";
                 if (match) {
                     const given = (match[1] + " " + match[3]).trim();
                     const sur = match[2].trim();
-                    
+
                     if (sur && given) {
                         sortKey = `${sur}, ${given}`;
                     } else if (sur) {
