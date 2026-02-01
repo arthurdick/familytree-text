@@ -274,25 +274,38 @@ To define a span of time (Duration), records use distinct **Start Date** and **E
 - **Start Field:** `[1920..1922]` (Started at one specific moment between '20 and '22).
 - **End Field:** `1930` (Ended exactly in 1930).
 
-### **4.4 Name Syntax: Display & Indexing**
+### **4.4 Name Syntax: Display & Sorting**
 
-To ensure accurate sorting without cluttering the text with delimiters like slashes, the `NAME` key uses a **Display | Sort** logic.
+To ensure accurate alphabetical sorting across diverse languages and cultures without imposing a single Western schema, the `NAME` key separates the visual representation from the sorting logic.
 
-- **Field 1 (Display):** The literal text to display on charts (e.g., "Dr. John Smith").
-- **Field 2 (Index/Sort):** (Optional) The strictly formatted sorting key in **"Surname, Given"** format.
+- **Field 1 (Display):** The literal text to display on charts and reports (e.g., "Dr. John Smith", "Mao Zedong", "Björk").
+- **Field 2 (Sort Key):** (Optional) A string explicitly defining the record's position in an alphabetized index.
 
 **Syntax:**
 `NAME: [Display_String] | [Sort_Key] | [TYPE] | [STATUS]`
 
-#### **4.4.1 Sort Key Logic (The Comma Rule)**
+#### **4.4.1 Sort Key Logic**
 
-To define the Surname and Given Name explicitly, users **must** use the second pipe-delimited field with a **comma separator**.
+The **Sort Key** is the exact byte sequence used by parsers for collation (alphabetical ordering).
 
-- **Format:** `Surname, Given Names`
-- **Behavior:**
-- Text **before** the comma is indexed as the **Surname**.
-- Text **after** the comma is indexed as the **Given Name**.
-- This field is **never displayed**; it is used strictly for sorting and database indexing.
+- **Principle of Least Surprise:** Parsers **must** use the Sort Key for indexing if it is present.
+- **Default Behavior:** If the Sort Key is empty (`||`), the parser must default to sorting based on the **Display String**.
+- **Case Sensitivity:** Sorting behavior (case-sensitive vs. case-insensitive) is implementation-dependent, but the Sort Key itself preserves case (e.g., `MacDonald` vs `Macdonald`).
+
+#### 4.4.2 Convention Strategies
+
+FTT v0.1 does not enforce a strict delimiter (such as a comma) within the Sort Key. Users should construct the key based on the specific cultural or directory convention relevant to the individual.
+
+| Convention     | Strategy           | Example Display          | Example Sort Key          |
+| -------------- | ------------------ | ------------------------ | ------------------------- |
+| **Western**    | `Surname, Given`   | `Dr. John Smith`         | `Smith, John`             |
+| **Compound**   | `Surnames, Given`  | `Gabriel García Márquez` | `García Márquez, Gabriel` |
+| **CJK**        | `Family Given`     | `Mao Zedong`             | `Mao Zedong`              |
+| **Patronymic** | `Given Patronymic` | `Jón Einarsson`          | `Jón Einarsson`           |
+| **Mononym**    | `Name`             | `Plato`                  | `Plato`                   |
+| **Historical** | `Name, Title`      | `Catherine the Great`    | `Catherine, Great`        |
+
+**Implementation Note:** Parsers generating "Surname" lists for UI filters should infer the surname structure based on the specific `[TYPE]` of the name or use heuristic detection (e.g., splitting by the first comma), but must not enforce valid validation based on the presence of a comma.
 
 ---
 

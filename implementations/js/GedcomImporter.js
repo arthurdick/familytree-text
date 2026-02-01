@@ -225,11 +225,19 @@ export default class GedcomImporter {
                 const rawName = nameNode.value || "";
                 const display = rawName.replace(/\//g, "").trim();
                 const match = rawName.match(/(.*)\/(.*)\/(.*)/);
+                
                 let sortKey = "";
                 if (match) {
                     const given = (match[1] + " " + match[3]).trim();
                     const sur = match[2].trim();
-                    sortKey = `${sur}, ${given}`;
+                    
+                    if (sur && given) {
+                        sortKey = `${sur}, ${given}`;
+                    } else if (sur) {
+                        sortKey = sur; // e.g. "Smith" (Unknown given name)
+                    } else if (given) {
+                        sortKey = given; // e.g. "Plato" (Mononym)
+                    }
                 }
 
                 // 2. Extract Type
