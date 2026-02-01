@@ -188,17 +188,13 @@ export default class GedcomExporter {
         const shouldMask = privacyEnabled && isLiving;
 
         // Name Parsing
-        if (rec.data.NAME) {
+        if (shouldMask) {
+            out.push("1 NAME <Living> //");
+        } else if (rec.data.NAME) {
             rec.data.NAME.forEach((nameField) => {
                 const display = nameField.parsed[0] || "Unknown";
                 const sort = nameField.parsed[1] || "";
                 const type = nameField.parsed[2] || "";
-                const status = nameField.parsed[3] || "";
-
-                if (shouldMask && status !== "PREF" && rec.data.NAME.length > 1) {
-                    const hasPref = rec.data.NAME.some((n) => n.parsed[3] === "PREF");
-                    if (hasPref) return;
-                }
 
                 let gedName = display;
                 if (sort.includes(",")) {
@@ -216,7 +212,7 @@ export default class GedcomExporter {
                 if (type) out.push(`2 TYPE ${type}`);
 
                 // Export NAME_NOTE
-                if (!shouldMask && nameField.modifiers && nameField.modifiers.NAME_NOTE) {
+                if (nameField.modifiers && nameField.modifiers.NAME_NOTE) {
                     nameField.modifiers.NAME_NOTE.forEach((note) => {
                         this._writeNote(note.parsed[0], out, 2);
                     });
