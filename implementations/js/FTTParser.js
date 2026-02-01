@@ -516,8 +516,23 @@ class ParseSession {
 
             const forgottenChildren = actualChildren.filter((c) => !manifestIds.has(c.id));
             forgottenChildren.sort((a, b) => {
-                const dateA = this._getSortableDate(a);
+                const dateA = this._getSortableDate(a); // e.g., "-1000", "2000-12", "9999"
                 const dateB = this._getSortableDate(b);
+
+                const isNegA = dateA.startsWith("-");
+                const isNegB = dateB.startsWith("-");
+
+                // Case 1: Mixed Eras (BCE vs CE)
+                if (isNegA !== isNegB) {
+                    return isNegA ? -1 : 1;
+                }
+
+                // Case 2: Both BCE (Negative)
+                if (isNegA) {
+                    return dateB.localeCompare(dateA);
+                }
+
+                // Case 3: Both CE (Positive)
                 return dateA.localeCompare(dateB);
             });
 
@@ -541,7 +556,7 @@ class ParseSession {
         if (!record.data["BORN"] || !record.data["BORN"][0]) return "9999";
         const rawDate = record.data["BORN"][0].parsed[0];
         if (!rawDate) return "9999";
-        const match = rawDate.match(/([0-9]{4}(?:-[0-9]{2})?(?:-[0-9]{2})?)/);
+        const match = rawDate.match(/(-?[0-9]{4}(?:-[0-9]{2})?(?:-[0-9]{2})?)/);
         return match ? match[1] : "9999";
     }
 
