@@ -247,7 +247,7 @@ ID: ?UNK
             expect(gedcom).toContain("1 NAME Unknown /Placeholder/");
         });
 
-        it("should create an Audit Note for semantic downgrades (e.g. PART -> MARR)", () => {
+        it("should export PART unions as generic EVEN tags (Safe Harbor)", () => {
             const input = `
 ID: P1
 UNION: P2 | PART
@@ -255,14 +255,15 @@ ID: P2
 `;
             const gedcom = convertWithHeader(input);
 
-            // FTT "PART" (Partner) becomes GEDCOM "MARR" with a Type note
-            expect(gedcom).toContain("1 MARR");
-            expect(gedcom).toContain("2 TYPE Common Law / Partner");
+            // FTT "PART" (Partner) becomes generic GEDCOM "EVEN"
+            expect(gedcom).toContain("1 EVEN");
+            expect(gedcom).toContain("2 TYPE Common Law");
 
-            // Check for Audit Report at the end
-            expect(gedcom).toContain("0 @NOTE_AUDIT@ NOTE");
-            expect(gedcom).toContain("FTT -> GEDCOM DOWNGRADE REPORT");
-            expect(gedcom).toContain("Union Type 'PART' exported as 'MARR'");
+            // Ensure we do NOT create a misleading MARR tag
+            expect(gedcom).not.toContain("1 MARR");
+
+            // Ensure this is NOT logged as a downgrade anymore
+            expect(gedcom).not.toContain("Union Type 'PART' exported as 'MARR'");
         });
     });
 

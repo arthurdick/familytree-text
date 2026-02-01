@@ -74,12 +74,9 @@ export default class GedcomExporter {
                     const shouldMask = privacyEnabled;
 
                     if (evt.type === "PART") {
-                        output.push(`1 MARR`);
-                        output.push(`2 TYPE Common Law / Partner`);
-                        this._log(
-                            fam.id,
-                            `Union Type 'PART' exported as 'MARR' (Semantic downgrade).`
-                        );
+                        // Use EVEN tag for Partners/Common Law to avoid implying legal marriage
+                        output.push(`1 EVEN`);
+                        output.push(`2 TYPE Common Law`);
                     } else {
                         output.push(`1 ${evt.tag}`);
                     }
