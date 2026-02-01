@@ -392,24 +392,38 @@ export default class GedcomImporter {
                         primaryNode = partnerNode;
                     }
 
-                    let dateStr = "";
+                    let startDateStr = "";
+                    let endDateStr = "";
                     let endReason = "";
 
-                    // Extract Start Date from Primary Node
+                    // Extract Start/End Date from Primary Node (Period support)
                     if (primaryNode) {
                         const d = this._extractTag(primaryNode, "DATE");
-                        if (d) dateStr = this._convertDate(d);
+                        const dateStruct = this._parseGedcomDate(d);
+                        startDateStr = dateStruct.start;
+                        // Use end date if provided (e.g., Partner FROM X TO Y), otherwise empty
+                        endDateStr = dateStruct.end || "";
                         this._extractTag(primaryNode, "PLAC");
                     }
 
-                    // Extract End Reason/Date
+                    // Extract End Reason/Date (Overwrite endDateStr if DIV provides specific end)
                     if (divNode) {
                         endReason = "DIV";
-                        this._extractTag(divNode, "DATE");
-                        // If we have a DIV but no MARR/PART, we default to MARR (standard behavior)
+                        const d = this._extractTag(divNode, "DATE");
+                        const divDateStruct = this._parseGedcomDate(d);
+                        // Preference: DIV date > Primary Node End Date
+                        if (divDateStruct.start) {
+                            endDateStr = divDateStruct.start;
+                        } else if (!endDateStr) {
+                            // If no DIV date and no Primary End Date, use "?" if we know it ended
+                            endDateStr = "?";
+                        }
                     }
 
-                    out.push(`UNION: ${spouseId} | ${unionType} | ${dateStr} || ${endReason}`);
+                    // UNION: [ID] | [TYPE] | [START] | [END] | [REASON]
+                    out.push(
+                        `UNION: ${spouseId} | ${unionType} | ${startDateStr} | ${endDateStr} | ${endReason}`
+                    );
 
                     // Collect and Attach Notes (UNION_NOTE)
                     // 1. From the Shared Family Record
@@ -429,7 +443,15 @@ export default class GedcomImporter {
     _writeEvent(parentNode, gedTag, fttKey, out) {
         const evtNode = this._extractNode(parentNode, gedTag);
         if (evtNode) {
-            const date = this._convertDate(this._extractTag(evtNode, "DATE"));
+            const dateStruct = this._parseGedcomDate(this._extractTag(evtNode, "DATE"));
+
+            // For BORN/DIED (Point-in-Time), if we get a period (FROM X TO Y),
+            // we map it to a Bounding Window [X..Y] because a person cannot be born over a duration.
+            // If it's just a Start Date, we use that.
+            let dateStr = dateStruct.start;
+            if (dateStruct.end) {
+                dateStr = `[${dateStruct.start}..${dateStruct.end}]`;
+            }
 
             let fttPlace = "";
             const placNode = this._extractNode(evtNode, "PLAC");
@@ -444,7 +466,7 @@ export default class GedcomImporter {
                 }
             }
 
-            out.push(`${fttKey}: ${date} | ${fttPlace}`);
+            out.push(`${fttKey}: ${dateStr} | ${fttPlace}`);
 
             // Citations
             const sourNodes = evtNode.children.filter((c) => c.tag === "SOUR");
@@ -497,7 +519,9 @@ export default class GedcomImporter {
         events.forEach((node) => {
             node.handled = true;
             const fttType = EVENT_MAP[node.tag];
-            const date = this._convertDate(this._extractTag(node, "DATE"));
+
+            // Use the new parser to get Start and End
+            const { start, end } = this._parseGedcomDate(this._extractTag(node, "DATE"));
 
             let place = "";
             const placNode = this._extractNode(node, "PLAC");
@@ -512,7 +536,8 @@ export default class GedcomImporter {
             }
 
             const details = (node.value || "").replace(/\n/g, " ").trim();
-            out.push(`EVENT: ${fttType} | ${date} || ${place} | ${details}`);
+            // EVENT: [TYPE] | [START] | [END] | [PLACE] | [DETAILS]
+            out.push(`EVENT: ${fttType} | ${start} | ${end} | ${place} | ${details}`);
 
             const sourNodes = node.children.filter((c) => c.tag === "SOUR");
             let bestQuay = -1;
@@ -643,9 +668,47 @@ export default class GedcomImporter {
     // =========================================================================
     // Date Helpers
     // =========================================================================
-    _convertDate(gedDate) {
-        if (!gedDate) return "";
-        let d = gedDate.trim().toUpperCase();
+
+    /**
+     * Parses a GEDCOM Date string into FTT structure
+     * Returns { start: string, end: string }
+     */
+    _parseGedcomDate(gedDate) {
+        if (!gedDate) return { start: "", end: "" };
+        const d = gedDate.trim().toUpperCase();
+
+        // CASE 1: Period (FROM X TO Y)
+        if (d.startsWith("FROM")) {
+            const parts = d.replace("FROM", "").split("TO");
+            if (parts.length === 2) {
+                return {
+                    start: this._parseStandardDate(parts[0].trim()),
+                    end: this._parseStandardDate(parts[1].trim())
+                };
+            }
+            // Malformed FROM? Treat as string
+            return { start: this._parseStandardDate(d), end: "" };
+        }
+
+        // CASE 2: Range (BET X AND Y) -> FTT [X..Y] (Bounding Window)
+        if (d.startsWith("BET")) {
+            const parts = d.replace("BET", "").split("AND");
+            if (parts.length === 2) {
+                const s = this._parseStandardDate(parts[0].trim());
+                const e = this._parseStandardDate(parts[1].trim());
+                return { start: `[${s}..${e}]`, end: "" };
+            }
+        }
+
+        // CASE 3: Standard or other prefixes (ABT, EST, BEF, AFT)
+        return { start: this._convertSimpleDateString(d), end: "" };
+    }
+
+    /**
+     * Legacy converter for single date strings (ABT, BEF, AFT, etc.)
+     * Used by _parseGedcomDate for non-period cases.
+     */
+    _convertSimpleDateString(d) {
         if (d.startsWith("ABT")) return this._parseStandardDate(d.replace("ABT", "").trim()) + "~";
         if (d.startsWith("EST") || d.startsWith("CAL"))
             return this._parseStandardDate(d.replace(/EST|CAL/, "").trim()) + "~";
@@ -653,12 +716,6 @@ export default class GedcomImporter {
             return `[..${this._parseStandardDate(d.replace("BEF", "").trim())}]`;
         if (d.startsWith("AFT"))
             return `[${this._parseStandardDate(d.replace("AFT", "").trim())}..]`;
-        if (d.startsWith("BET")) {
-            const parts = d.replace("BET", "").split("AND");
-            if (parts.length === 2) {
-                return `[${this._parseStandardDate(parts[0].trim())}..${this._parseStandardDate(parts[1].trim())}]`;
-            }
-        }
         return this._parseStandardDate(d);
     }
 

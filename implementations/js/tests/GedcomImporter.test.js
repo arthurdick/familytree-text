@@ -167,9 +167,9 @@ describe("GedcomImporter", () => {
         it("should create UNION records on spouses", () => {
             const result = importer.convert(familyData);
             // HUSB should link to WIFE
-            expect(result).toMatch(/ID: HUSB[\s\S]*UNION: WIFE \| MARR \| 1990 \|\|/);
+            expect(result).toMatch(/ID: HUSB[\s\S]*UNION: WIFE \| MARR \| 1990 \| {2}\|/);
             // WIFE should link to HUSB
-            expect(result).toMatch(/ID: WIFE[\s\S]*UNION: HUSB \| MARR \| 1990 \|\|/);
+            expect(result).toMatch(/ID: WIFE[\s\S]*UNION: HUSB \| MARR \| 1990 \| {2}\|/);
         });
 
         it("should create PARENT links on the child", () => {
@@ -197,8 +197,9 @@ describe("GedcomImporter", () => {
 2 DATE 2000
       `;
             const result = importer.convert(divData);
-            // Should map to DIV reason
-            expect(result).toContain("UNION: I2 | MARR |  || DIV");
+            // Expectation: Should map to DIV reason with empty start date
+            // Output format: | Start | End | Reason
+            expect(result).toContain("UNION: I2 | MARR |  | 2000 | DIV");
         });
 
         it("should import Common Law unions from generic EVEN tags", () => {
@@ -216,9 +217,10 @@ describe("GedcomImporter", () => {
 `;
             const ftt = importer.convert(input);
 
-            // Should detect TYPE "Common Law" and use PART
-            expect(ftt).toContain("UNION: I2 | PART | 1999 ||");
-            expect(ftt).toContain("UNION: I1 | PART | 1999 ||");
+            // Expectation: Should detect TYPE "Common Law" and use PART
+            // Output format: | Start | End | Reason
+            expect(ftt).toContain("UNION: I2 | PART | 1999 |  |");
+            expect(ftt).toContain("UNION: I1 | PART | 1999 |  |");
 
             // Should NOT default to MARR
             expect(ftt).not.toContain("| MARR |");
