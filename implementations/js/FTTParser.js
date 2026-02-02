@@ -379,7 +379,7 @@ class ParseSession {
     }
 
     // =========================================================================
-    // 3. Buffer Flushing
+    // 3. Buffer Flushing & Text Parsing
     // =========================================================================
 
     _flushBuffer() {
@@ -407,28 +407,57 @@ class ParseSession {
         this.currentKey = null;
     }
 
+    /**
+     * Splits string by pipes and unescapes content.
+     */
     _parsePipes(text) {
-        const values = [];
-        let currentVal = "";
-        let isEscaped = false;
+        return this._splitByPipe(text).map((segment) => this._unescape(segment).normalize("NFC"));
+    }
 
+    /**
+     * Splits text by the pipe delimiter `|`, respecting escaped pipes `\|`.
+     * Does NOT unescape other characters. Returns raw segments.
+     */
+    _splitByPipe(text) {
+        const segments = [];
+        let current = "";
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
-
-            if (isEscaped) {
-                currentVal += char;
-                isEscaped = false;
-            } else if (char === "\\") {
-                isEscaped = true;
+            if (char === "\\") {
+                // If escape detected, capture it and the next char to preserve for later unescaping
+                current += char;
+                if (i + 1 < text.length) {
+                    current += text[i + 1];
+                    i++;
+                }
             } else if (char === "|") {
-                values.push(currentVal.trim().normalize("NFC"));
-                currentVal = "";
+                segments.push(current.trim());
+                current = "";
             } else {
-                currentVal += char;
+                current += char;
             }
         }
-        values.push(currentVal.trim().normalize("NFC"));
-        return values;
+        segments.push(current.trim());
+        return segments;
+    }
+
+    /**
+     * Standard unescaping: strips backslashes not used for special syntax logic.
+     */
+    _unescape(text) {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (char === "\\") {
+                if (i + 1 < text.length) {
+                    result += text[i + 1];
+                    i++;
+                }
+            } else {
+                result += char;
+            }
+        }
+        return result;
     }
 
     // =========================================================================
@@ -577,35 +606,151 @@ class ParseSession {
                 if (placeIdx === undefined) continue;
 
                 for (const field of fields) {
-                    if (field.parsed.length > placeIdx) {
-                        const rawPlace = field.parsed[placeIdx];
-                        if (rawPlace && (rawPlace.includes("{=") || rawPlace.includes("<"))) {
-                            const { display, geo, coords } = this._parsePlaceString(rawPlace);
-                            field.parsed[placeIdx] = display;
-                            if (!field.metadata) field.metadata = {};
-                            if (geo) field.metadata.geo = geo;
-                            if (coords) field.metadata.coords = coords;
-                        }
+                    // IMPORTANT: We must parse from the RAW string to respect escaping of
+                    // braces {} and angle brackets <>.
+                    const rawSegments = this._splitByPipe(field.raw);
+                    const rawPlace = rawSegments[placeIdx];
+
+                    if (rawPlace) {
+                        const { display, geo, coords } = this._parsePlaceStringRaw(rawPlace);
+                        // Update the parsed display string (unescaped)
+                        field.parsed[placeIdx] = display.normalize("NFC");
+
+                        // Store geo/coords in metadata
+                        if (!field.metadata) field.metadata = {};
+                        if (geo) field.metadata.geo = geo.normalize("NFC");
+                        if (coords) field.metadata.coords = coords;
                     }
                 }
             }
         }
     }
 
-    _parsePlaceString(str) {
-        const coordsRegex = /<(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)>/;
-        const coordsMatch = str.match(coordsRegex);
+    /**
+     * Parses a place string from RAW input (preserving escapes) to correctly
+     * identify {=...} and <...> syntax versus literal characters.
+     * Reassembles the string based on hierarchy units (semicolons).
+     */
+    _parsePlaceStringRaw(raw) {
+        let displaySegments = [];
+        let geoSegments = [];
         let coords = null;
-        if (coordsMatch) {
-            coords = `${coordsMatch[1]}, ${coordsMatch[2]}`;
+
+        // Buffers for the current hierarchy unit (delimited by ;)
+        let bufferDisplay = "";
+        let bufferGeoRepl = "";
+
+        // State Flags
+        let hasRepl = false; // Does the current unit have a {=...} block?
+        let inRepl = false; // Are we currently inside {=...}?
+        let inCoords = false; // Are we currently inside <...>?
+        let bufferCoords = ""; // Accumulator for coords
+
+        for (let i = 0; i < raw.length; i++) {
+            const char = raw[i];
+
+            // 1. ESCAPE HANDLING
+            // If escape detected, capture it and the next char to preserve for later unescaping.
+            // This prevents syntax chars like \{ from triggering logic.
+            if (char === "\\") {
+                const pair = i + 1 < raw.length ? char + raw[i + 1] : char;
+                if (inCoords) {
+                    bufferCoords += pair;
+                } else if (inRepl) {
+                    bufferGeoRepl += pair;
+                } else {
+                    bufferDisplay += pair;
+                }
+                if (i + 1 < raw.length) i++; // Advance
+                continue;
+            }
+
+            // 2. COORDINATES <...>
+            // Extract coords separately from hierarchy units.
+            if (inCoords) {
+                if (char === ">") {
+                    const candidate = this._unescape(bufferCoords).trim();
+                    // Basic validation for lat,long format
+                    if (/^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(candidate)) {
+                        coords = candidate;
+                    } else {
+                        // Invalid coords -> Treat as literal text
+                        bufferDisplay += "<" + bufferCoords + ">";
+                    }
+                    inCoords = false;
+                    bufferCoords = "";
+                } else {
+                    bufferCoords += char;
+                }
+                continue;
+            }
+
+            if (char === "<") {
+                inCoords = true;
+                bufferCoords = "";
+                continue;
+            }
+
+            // 3. REPLACEMENT {=...}
+            if (inRepl) {
+                if (char === "}") {
+                    inRepl = false;
+                } else {
+                    bufferGeoRepl += char;
+                }
+                continue;
+            }
+
+            // Check for start of replacement
+            if (char === "{" && raw[i + 1] === "=") {
+                hasRepl = true;
+                inRepl = true;
+                i++; // Skip '='
+                continue;
+            }
+
+            // 4. HIERARCHY DELIMITER (;)
+            if (char === ";") {
+                // End of Unit. Flush buffers.
+                displaySegments.push(this._unescape(bufferDisplay).trim());
+                geoSegments.push(
+                    hasRepl
+                        ? this._unescape(bufferGeoRepl).trim()
+                        : this._unescape(bufferDisplay).trim()
+                );
+
+                // Reset for next unit
+                bufferDisplay = "";
+                bufferGeoRepl = "";
+                hasRepl = false;
+                continue;
+            }
+
+            // 5. NORMAL TEXT
+            bufferDisplay += char;
         }
-        let display = str
-            .replace(/\s*\{=.*?\}/g, "")
-            .replace(coordsRegex, "")
-            .trim();
-        const geoRaw = str.replace(/([^{;]+?)\s*\{=([^}]+)\}/g, "$2");
-        const geo = geoRaw.replace(coordsRegex, "").trim();
-        return { display, geo, coords };
+
+        // Flush remaining buffer at end of string
+        if (bufferDisplay.trim() || bufferGeoRepl.trim() || hasRepl) {
+            displaySegments.push(this._unescape(bufferDisplay).trim());
+            geoSegments.push(
+                hasRepl
+                    ? this._unescape(bufferGeoRepl).trim()
+                    : this._unescape(bufferDisplay).trim()
+            );
+        }
+
+        // If we ended inside unclosed coords/braces, append appropriately (fallback)
+        if (inCoords) displaySegments[displaySegments.length - 1] += "<" + bufferCoords;
+
+        const display = displaySegments.join("; ");
+        const geo = geoSegments.join("; ");
+
+        return {
+            display,
+            geo: geo === display ? null : geo, // Only set geo if it differs
+            coords
+        };
     }
 
     // =========================================================================

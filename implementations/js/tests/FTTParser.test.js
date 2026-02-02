@@ -588,4 +588,79 @@ ID: ^SRC-1
             expect(born.modifiers["BORN_NOTE"]).toBeDefined();
         });
     });
+
+    // ==========================================
+    // 6. Location Escaping
+    // ==========================================
+    describe("Location Escaping Tests", () => {
+        it("should handle escaped syntax characters in Place Hierarchies", () => {
+            // Bug: Previous parser stripped backslashes too early, causing \{ to be parsed as {
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: A
+# Literal braces should NOT trigger geocoding logic
+BORN: 1980 | Old Name \\{=Modern Name\\}; Region
+`;
+            const result = parser.parse(input);
+            const field = result.records["A"].data.BORN[0];
+
+            // Should display literal curly braces
+            expect(field.parsed[1]).toBe("Old Name {=Modern Name}; Region");
+            // Should NOT have extracted "Modern Name" as the geo override
+            expect(field.metadata.geo).toBeUndefined();
+        });
+
+        it("should handle escaped angle brackets in Place Hierarchies", () => {
+            // Bug: Previous parser regex treated \<...\> as coordinates
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: A
+# Literal angle brackets should NOT trigger coordinate logic
+BORN: 1980 | The Pub \\<Old\\>; London
+`;
+            const result = parser.parse(input);
+            const field = result.records["A"].data.BORN[0];
+
+            expect(field.parsed[1]).toBe("The Pub <Old>; London");
+            expect(field.metadata.coords).toBeUndefined();
+        });
+
+        it("should parse complex mixed escaping and syntax in Places", () => {
+            // Complex case: Real coords mixed with escaped brackets and pipe separation
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: A
+# "City {=Modern} <10,10>" (Valid Syntax) + "; Literal \\<Part\\>" (Escaped)
+BORN: 1980 | City {=Modern} <10.0, 10.0>; Literal \\<Part\\>
+`;
+            const result = parser.parse(input);
+            const field = result.records["A"].data.BORN[0];
+
+            // 1. Display String: "City" (stripped Modern) + "; Literal <Part>" (Unescaped)
+            expect(field.parsed[1]).toBe("City; Literal <Part>");
+
+            // 2. Geo Metadata: "Modern" (extracted) + "; Literal <Part>" (Unescaped)
+            expect(field.metadata.geo).toBe("Modern; Literal <Part>");
+
+            // 3. Coords: Extracted from the first segment
+            expect(field.metadata.coords).toBe("10.0, 10.0");
+        });
+
+        it("should handle escaped pipes within escaped place strings", () => {
+            const input = `
+HEAD_FORMAT: FTT v0.1
+
+ID: A
+# Pipe inside place name: "City | Name"
+BORN: 1980 | City \\| Name; Country
+`;
+            const result = parser.parse(input);
+            const field = result.records["A"].data.BORN[0];
+
+            expect(field.parsed[1]).toBe("City | Name; Country");
+        });
+    });
 });
