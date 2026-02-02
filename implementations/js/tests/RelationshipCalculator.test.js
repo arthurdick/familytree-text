@@ -1919,4 +1919,68 @@ SEX: F
             expect(desc.term).toBe("Godchild");
         });
     });
+
+    describe("Intra-Family Adoption", () => {
+        const data = `
+HEAD_FORMAT: FTT v0.1
+
+# The Grandparents (Common Ancestors)
+ID: GP-1
+SEX: M
+UNION: GM-1 | MARR
+
+ID: GM-1
+SEX: F
+UNION: GP-1 | MARR
+
+# The Biological Father
+ID: DAD-1
+SEX: M
+PARENT: GP-1 | BIO
+PARENT: GM-1 | BIO
+CHILD: KID-1
+
+# The Uncle (who becomes Adoptive Father)
+ID: UNCLE-1
+SEX: M
+PARENT: GP-1 | BIO
+PARENT: GM-1 | BIO
+# Uncle adopts the child
+CHILD: KID-1
+
+# The Child
+ID: KID-1
+SEX: M
+PARENT: DAD-1 | BIO
+PARENT: UNCLE-1 | ADO
+`;
+
+        it("should NOT return redundant 'Adoptive Nephew' relationship", () => {
+            const parser = new FTTParser();
+            const result = parser.parse(data);
+
+            if (result.errors.length > 0) {
+                throw new Error(result.errors[0].message);
+            }
+
+            const calculator = new RelationshipCalculator(result.records);
+            const rels = calculator.calculate("KID-1", "UNCLE-1");
+
+            // We expect exactly 2 relationships:
+            // 1. Lineage: Adoptive Father (Distance 1)
+            // 2. Lineage: Uncle (Distance 2, via Bio Dad)
+            expect(rels).toHaveLength(2);
+
+            // Verify Adoptive Father
+            const adoFather = rels.find((r) => r.distA === 1 && r.distB === 0 && r.isAdoptive);
+            expect(adoFather).toBeDefined();
+
+            // Verify Biological Uncle
+            const bioUncle = rels.find((r) => r.distA === 2 && r.distB === 1 && !r.isAdoptive);
+            expect(bioUncle).toBeDefined();
+
+            const bugRel = rels.find((r) => r.distA === 2 && r.distB === 1 && r.isAdoptive);
+            expect(bugRel).toBeUndefined();
+        });
+    });
 });

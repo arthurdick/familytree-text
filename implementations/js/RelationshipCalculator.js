@@ -371,6 +371,14 @@ export class RelationshipCalculator {
 
                     if (candidate.initialBranchB === other.initialBranchB) return true;
 
+                    // If the "Closer" relationship (other) is the Subject themselves (Type=SELF),
+                    // we must check the *Subject's* initialBranch (Side A or B) to detect redundancy.
+                    // (Standard logic above fails because "Self" often has undefined initialBranch).
+                    if (other.typeB === "SELF" && candidate.initialBranchA === other.initialBranchA)
+                        return true;
+                    if (other.typeA === "SELF" && candidate.initialBranchB === other.initialBranchB)
+                        return true;
+
                     // Fallback for cases where initialBranch might be identical/null (e.g. siblings)
                     // but lineage types differ significantly (Double/Ghost relationships).
                     const sameLineageA = candidate.lineageA === other.lineageA;
