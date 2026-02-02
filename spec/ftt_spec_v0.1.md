@@ -758,11 +758,11 @@ Vital events (`BORN`, `DIED`) and relationship events (`MARR`, `DIV`) are handle
 
 The `PRIVACY:` key dictates how parsers and exporters must handle the record during serialization (e.g., exporting to the web or sharing files).
 
-| Type      | Meaning        | Export Behavior                                                                                                             |
-| --------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `OPEN`    | **Public**     | **Default.** All data is exported and visible.                                                                              |
-| `LIVING`  | **Living**     | Treat as a living person. **Mask** all birth/marriage dates and places. **Show** only the Preferred Name and kinship links. |
-| `PRIVATE` | **Restricted** | **Exclude** the entire record from public exports, or render strictly as "Private Record" with no identifiable data.        |
+| Type      | Meaning        | Export Behavior                                                                                                                               |
+| --------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPEN`    | **Public**     | **Default.** All data is exported and visible.                                                                                                |
+| `LIVING`  | **Living**     | Treat as a living person. **Mask** the Name and all vital details (dates/places). **Show** only kinship links to preserve graph connectivity. |
+| `PRIVATE` | **Restricted** | **Exclude** the entire record from public exports to ensure zero identifiable data or topological leakage.                                    |
 
 ---
 
