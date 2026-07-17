@@ -127,10 +127,10 @@ export default class GedcomExporter {
             }
         };
         for (const rec of Object.values(records)) {
-            if (rec.data.PARENT) rec.data.PARENT.forEach((p) => collect(p.parsed[0]));
-            if (rec.data.UNION) rec.data.UNION.forEach((u) => collect(u.parsed[0]));
-            if (rec.data.CHILD) rec.data.CHILD.forEach((c) => collect(c.parsed[0]));
-            if (rec.data.ASSOC) rec.data.ASSOC.forEach((a) => collect(a.parsed[0]));
+            if (rec.data.PARENT) rec.data.PARENT.forEach((p) => collect(p.parentId));
+            if (rec.data.UNION) rec.data.UNION.forEach((u) => collect(u.partnerId));
+            if (rec.data.CHILD) rec.data.CHILD.forEach((c) => collect(c.childId));
+            if (rec.data.ASSOC) rec.data.ASSOC.forEach((a) => collect(a.targetId));
         }
         referenced.forEach((id) => {
             records[id] = { id: id, type: "PLACEHOLDER", data: {}, line: 0 };
@@ -143,9 +143,9 @@ export default class GedcomExporter {
         for (const rec of Object.values(records)) {
             if (rec.data.UNION) {
                 rec.data.UNION.forEach((u) => {
-                    const partnerId = u.parsed[0];
-                    const startDateRaw = u.parsed[2];
-                    const endDateRaw = u.parsed[3];
+                    const partnerId = u.partnerId;
+                    const startDateRaw = u.startDate;
+                    const endDateRaw = u.endDate;
 
                     // Register this specific union segment
                     this._registerFamilySegment(
@@ -172,7 +172,7 @@ export default class GedcomExporter {
 
         if (rec.data.NOTES) {
             rec.data.NOTES.forEach((n) => {
-                this._writeNote(n.parsed[0], out, 1);
+                this._writeNote(n.text, out, 1);
             });
         }
     }
@@ -189,9 +189,9 @@ export default class GedcomExporter {
             out.push("1 NAME <Living> //");
         } else if (rec.data.NAME) {
             rec.data.NAME.forEach((nameField) => {
-                const display = nameField.parsed[0] || "Unknown";
-                const sort = nameField.parsed[1] || "";
-                const type = nameField.parsed[2] || "";
+                const display = nameField.display || "Unknown";
+                const sort = nameField.sortKey || "";
+                const type = nameField.nameType || "";
 
                 let gedName = display;
                 if (sort.includes(",")) {
@@ -211,7 +211,7 @@ export default class GedcomExporter {
                 // Export NAME_NOTE
                 if (nameField.modifiers && nameField.modifiers.NAME_NOTE) {
                     nameField.modifiers.NAME_NOTE.forEach((note) => {
-                        this._writeNote(note.parsed[0], out, 2);
+                        this._writeNote(note.text, out, 2);
                     });
                 }
             });
@@ -226,7 +226,7 @@ export default class GedcomExporter {
         // SEX Handling (Remapped O -> U)
         if (rec.data.SEX && rec.data.SEX.length > 0) {
             const sexObj = rec.data.SEX[0];
-            const sexVal = sexObj.parsed[0];
+            const sexVal = sexObj.value;
 
             if (sexVal === "O") {
                 out.push(`1 SEX U`);
@@ -237,7 +237,7 @@ export default class GedcomExporter {
 
             if (!shouldMask && sexObj.modifiers && sexObj.modifiers.SEX_NOTE) {
                 sexObj.modifiers.SEX_NOTE.forEach((note) => {
-                    this._writeNote(note.parsed[0], out, 2);
+                    this._writeNote(note.text, out, 2);
                 });
             }
         }
@@ -249,7 +249,7 @@ export default class GedcomExporter {
         // Shared Events
         if (rec.data.EVENT_REF) {
             rec.data.EVENT_REF.forEach((ref) => {
-                const evtId = ref.parsed[0];
+                const evtId = ref.eventId;
                 const sharedEvt = allRecords[evtId];
                 if (sharedEvt) {
                     const type = this._getField(sharedEvt, "TYPE") || "EVENT";
@@ -267,10 +267,10 @@ export default class GedcomExporter {
         // Associations
         if (rec.data.ASSOC) {
             rec.data.ASSOC.forEach((assoc) => {
-                const targetId = assoc.parsed[0];
-                const role = assoc.parsed[1] || "ASSOCIATE";
-                const startDate = assoc.parsed[2];
-                const details = assoc.parsed[4];
+                const targetId = assoc.targetId;
+                const role = assoc.role || "ASSOCIATE";
+                const startDate = assoc.startDate;
+                const details = assoc.details;
 
                 out.push(`1 ASSO @${targetId}@`);
                 out.push(`2 RELA ${role}`);
@@ -283,7 +283,7 @@ export default class GedcomExporter {
 
                 if (!shouldMask && assoc.modifiers && assoc.modifiers.ASSOC_NOTE) {
                     assoc.modifiers.ASSOC_NOTE.forEach((n) => {
-                        this._writeNote(n.parsed[0], out, 2);
+                        this._writeNote(n.text, out, 2);
                     });
                 }
             });
@@ -292,19 +292,19 @@ export default class GedcomExporter {
         // Notes
         if (!shouldMask && rec.data.NOTES) {
             rec.data.NOTES.forEach((n) => {
-                this._writeNote(n.parsed[0], out, 1);
+                this._writeNote(n.text, out, 1);
             });
         }
 
         // Unions (Spouse Links)
         if (rec.data.UNION) {
             rec.data.UNION.forEach((u) => {
-                const partnerId = u.parsed[0];
-                const type = u.parsed[1] || "MARR";
-                const date = this._gedDate(u.parsed[2]);
-                const rawStartDate = u.parsed[2]; // Use raw for lookup
-                const endDate = this._gedDate(u.parsed[3]);
-                const reason = u.parsed[4];
+                const partnerId = u.partnerId;
+                const type = u.unionType || "MARR";
+                const date = this._gedDate(u.startDate);
+                const rawStartDate = u.startDate; // Use raw for lookup
+                const endDate = this._gedDate(u.endDate);
+                const reason = u.endReason;
 
                 // Retrieve Specific Family by Date
                 const fam = this._getFamily(rec.id, partnerId, rawStartDate);
@@ -312,7 +312,7 @@ export default class GedcomExporter {
                 // Collect UNION_NOTEs
                 const notes = [];
                 if (!shouldMask && u.modifiers && u.modifiers.UNION_NOTE) {
-                    u.modifiers.UNION_NOTE.forEach((n) => notes.push(n.parsed[0]));
+                    u.modifiers.UNION_NOTE.forEach((n) => notes.push(n.text));
                 }
 
                 if (!fam.hasMarr) {
@@ -334,7 +334,7 @@ export default class GedcomExporter {
         if (rec.data.PARENT) {
             const groups = {};
             rec.data.PARENT.forEach((p) => {
-                const type = p.parsed[1] || "BIO";
+                const type = p.relType || "BIO";
                 if (!groups[type]) groups[type] = [];
                 groups[type].push(p);
             });
@@ -344,8 +344,8 @@ export default class GedcomExporter {
                     const p1Obj = pObjs[i];
                     const p2Obj = pObjs[i + 1] || null;
 
-                    const p1 = p1Obj.parsed[0];
-                    const p2 = p2Obj ? p2Obj.parsed[0] : null;
+                    const p1 = p1Obj.parentId;
+                    const p2 = p2Obj ? p2Obj.parentId : null;
 
                     // Match Child to Family based on Child's Birth Date
                     const birthDateRaw = this._getField(rec, "BORN"); // Extract BORN date
@@ -361,14 +361,10 @@ export default class GedcomExporter {
                     else if (type === "FOS") out.push(`2 PEDI foster`);
 
                     if (!shouldMask && p1Obj.modifiers && p1Obj.modifiers.PARENT_NOTE) {
-                        p1Obj.modifiers.PARENT_NOTE.forEach((n) =>
-                            this._writeNote(n.parsed[0], out, 2)
-                        );
+                        p1Obj.modifiers.PARENT_NOTE.forEach((n) => this._writeNote(n.text, out, 2));
                     }
                     if (p2Obj && !shouldMask && p2Obj.modifiers && p2Obj.modifiers.PARENT_NOTE) {
-                        p2Obj.modifiers.PARENT_NOTE.forEach((n) =>
-                            this._writeNote(n.parsed[0], out, 2)
-                        );
+                        p2Obj.modifiers.PARENT_NOTE.forEach((n) => this._writeNote(n.text, out, 2));
                     }
                 }
             }
@@ -397,37 +393,28 @@ export default class GedcomExporter {
             rec.data[fttKey].forEach((f) => {
                 let gedTag = defaultGedTag;
                 let writeType = false;
-                let typeIndex = -1,
-                    dateIndex = 0,
-                    placeIndex = 1,
-                    detailsIndex = -1;
 
+                // Use Semantic Properties directly, eliminating index tracking
                 if (fttKey === "EVENT") {
-                    typeIndex = 0;
-                    dateIndex = 1;
-                    placeIndex = 3;
-                    detailsIndex = 4;
-                    const fttType = f.parsed[0];
-                    if (fttType && EVENT_MAP[fttType]) gedTag = EVENT_MAP[fttType];
+                    if (f.eventType && EVENT_MAP[f.eventType]) gedTag = EVENT_MAP[f.eventType];
                     else writeType = true;
                 }
 
-                const details = detailsIndex > -1 ? f.parsed[detailsIndex] : null;
-                if (details) out.push(`1 ${gedTag} ${details}`);
+                if (f.details) out.push(`1 ${gedTag} ${f.details}`);
                 else out.push(`1 ${gedTag}`);
 
-                if (writeType) {
-                    const type = f.parsed[typeIndex];
-                    if (type) out.push(`2 TYPE ${type}`);
+                if (writeType && f.eventType) {
+                    out.push(`2 TYPE ${f.eventType}`);
                 }
 
                 if (!shouldMask) {
-                    const date = this._gedDate(f.parsed[dateIndex]);
+                    // Start Date handles BORN/DIED/EVENT transparently now
+                    const dateVal = f.startDate || f.date;
+                    const date = this._gedDate(dateVal);
                     if (date) out.push(`2 DATE ${date}`);
 
-                    const place = f.parsed[placeIndex];
-                    if (place) {
-                        out.push(`2 PLAC ${place.replace(/;\s*/g, ", ")}`);
+                    if (f.place) {
+                        out.push(`2 PLAC ${f.place.replace(/;\s*/g, ", ")}`);
                         if (f.metadata && f.metadata.coords) {
                             const [lat, long] = f.metadata.coords.split(",").map((s) => s.trim());
                             if (lat && long) {
@@ -448,22 +435,26 @@ export default class GedcomExporter {
                         let quayVal = null;
                         const qualKey = `${fttKey}_QUAL`;
                         if (f.modifiers[qualKey] && f.modifiers[qualKey].length > 0) {
-                            quayVal = this._convertFttQualToQuay(f.modifiers[qualKey][0].parsed);
+                            const qualField = f.modifiers[qualKey][0];
+                            // Reconstruct the array logic expected by _convertFttQualToQuay
+                            quayVal = this._convertFttQualToQuay([
+                                qualField.evidence,
+                                qualField.info
+                            ]);
                         }
 
                         for (const [modKey, mods] of Object.entries(f.modifiers)) {
                             if (modKey.endsWith("_SRC")) {
                                 mods.forEach((m) => {
-                                    const srcId = m.parsed[0].replace("^", "");
+                                    const srcId = m.sourceId.replace("^", ""); // Semantic
                                     out.push(`2 SOUR @${srcId}@`);
-                                    const page = m.parsed[1];
-                                    if (page) out.push(`3 PAGE ${page}`);
+                                    if (m.detail) out.push(`3 PAGE ${m.detail}`); // Semantic
                                     if (quayVal !== null) out.push(`3 QUAY ${quayVal}`);
                                 });
                             }
                             if (modKey.endsWith("_NOTE")) {
                                 mods.forEach((m) => {
-                                    this._writeNote(m.parsed[0], out, 2);
+                                    this._writeNote(m.text, out, 2); // Semantic
                                 });
                             }
                         }
@@ -497,7 +488,9 @@ export default class GedcomExporter {
 
     _getField(rec, key) {
         if (rec.data[key] && rec.data[key][0]) {
-            return rec.data[key][0].parsed[0];
+            const field = rec.data[key][0];
+            // Prefer semantic scalar values, fallback to raw parsed array if needed
+            return field.value || field.text || field.display || field.date || field.parsed[0];
         }
         return null;
     }
@@ -537,8 +530,7 @@ export default class GedcomExporter {
 
         ids.forEach((pid) => {
             const prec = allRecords[pid];
-            const sex =
-                prec && prec.data.SEX && prec.data.SEX[0] ? prec.data.SEX[0].parsed[0] : "U";
+            const sex = prec && prec.data.SEX && prec.data.SEX[0] ? prec.data.SEX[0].value : "U";
             if (sex === "M") famObj.husbs.push(pid);
             else if (sex === "F") famObj.wives.push(pid);
             else {

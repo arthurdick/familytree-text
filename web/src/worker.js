@@ -58,7 +58,7 @@ function calculateGenerations(records) {
     Object.values(records).forEach((rec) => {
         if (rec.data.UNION) {
             rec.data.UNION.forEach((u) => {
-                const partner = u.parsed[0];
+                const partner = u.partnerId;
                 if (records[partner]) union(rec.id, partner);
             });
         }
@@ -78,7 +78,7 @@ function calculateGenerations(records) {
         if (child.data.PARENT) {
             const childCluster = clusterMap.get(child.id);
             child.data.PARENT.forEach((p) => {
-                const parentId = p.parsed[0];
+                const parentId = p.parentId;
                 if (records[parentId]) {
                     const parentCluster = clusterMap.get(parentId);
                     if (parentCluster !== childCluster) {
@@ -142,7 +142,7 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
                 let parentCount = 0;
 
                 rec.data.PARENT.forEach((p) => {
-                    const pId = p.parsed[0];
+                    const pId = p.parentId;
                     if (visualOrder.has(pId)) {
                         parentScoreSum += visualOrder.get(pId);
                         parentCount++;
@@ -158,11 +158,11 @@ function calculateNodeVisualOrder(records, ranks, allNodeIds) {
                 let foundExplicit = false;
 
                 rec.data.PARENT.forEach((p) => {
-                    const pId = p.parsed[0];
+                    const pId = p.parentId;
                     const parentRec = records[pId];
                     if (parentRec && parentRec.data.CHILD) {
                         // Find the entry for this child in this parent's list
-                        const childEntry = parentRec.data.CHILD.find((c) => c.parsed[0] === id);
+                        const childEntry = parentRec.data.CHILD.find((c) => c.childId === id);
                         if (childEntry) {
                             const idx = parentRec.data.CHILD.indexOf(childEntry);
                             // Check if this entry is from an Explicit CHILD tag or Implicitly appended
@@ -216,7 +216,7 @@ function convertToCytoscape(parsedData, ranks) {
         if (rec.data.CHILD) {
             parentToChildren.set(
                 id,
-                rec.data.CHILD.map((c) => c.parsed[0])
+                rec.data.CHILD.map((c) => c.childId)
             );
         }
     }
@@ -225,7 +225,7 @@ function convertToCytoscape(parsedData, ranks) {
     for (const [childId, childRec] of Object.entries(records)) {
         if (childRec.data.PARENT) {
             childRec.data.PARENT.forEach((p) => {
-                const parentId = p.parsed[0];
+                const parentId = p.parentId;
                 allNodeIds.add(parentId); // Ensure implicit parent is in node list
 
                 if (!parentToChildren.has(parentId)) {
@@ -247,8 +247,8 @@ function convertToCytoscape(parsedData, ranks) {
     for (const [pId, children] of parentToChildren) {
         if (!records[pId]) {
             children.sort((a, b) => {
-                const dA = records[a]?.data.BORN?.[0]?.parsed[0] || "9999";
-                const dB = records[b]?.data.BORN?.[0]?.parsed[0] || "9999";
+                const dA = records[a]?.data.BORN?.[0]?.date || "9999";
+                const dB = records[b]?.data.BORN?.[0]?.date || "9999";
                 return dA.localeCompare(dB);
             });
         }
@@ -303,20 +303,20 @@ function convertToCytoscape(parsedData, ranks) {
 
         if (rec.type === "INDIVIDUAL" || rec.type === "PLACEHOLDER") {
             if (rec.data.NAME && rec.data.NAME.length > 0) {
-                label = rec.data.NAME[0].parsed[0] || id;
-                const prefName = rec.data.NAME.find((n) => n.parsed[3] === "PREF");
-                if (prefName) label = prefName.parsed[0];
+                label = rec.data.NAME[0].display || id;
+                const prefName = rec.data.NAME.find((n) => n.status === "PREF");
+                if (prefName) label = prefName.display;
             }
             if (rec.data.BORN && rec.data.BORN.length > 0) {
-                const prefBorn = rec.data.BORN.find((b) => (b.parsed[2] || "").trim() === "PREF");
+                const prefBorn = rec.data.BORN.find((b) => (b.status || "").trim() === "PREF");
                 const targetBorn = prefBorn || rec.data.BORN[0];
-                if (targetBorn && targetBorn.parsed[0]) {
-                    subLabel = targetBorn.parsed[0];
+                if (targetBorn && targetBorn.date) {
+                    subLabel = targetBorn.date;
                 }
             }
             // Extract Privacy Status
             if (rec.data.PRIVACY && rec.data.PRIVACY.length > 0) {
-                privacy = rec.data.PRIVACY[0].parsed[0] || "OPEN";
+                privacy = rec.data.PRIVACY[0].value || "OPEN";
             }
         }
         addNode(id, label, subLabel, rec.type, privacy);
@@ -357,7 +357,7 @@ function convertToCytoscape(parsedData, ranks) {
         const rec = records[id];
         if (rec && rec.data.UNION) {
             rec.data.UNION.forEach((u) => {
-                const partnerId = u.parsed[0];
+                const partnerId = u.partnerId;
                 if (!partnerId) return;
                 ensurePlaceholderNode(partnerId);
                 const [p1, p2] = [id, partnerId].sort();
@@ -378,18 +378,18 @@ function convertToCytoscape(parsedData, ranks) {
             const childRec = records[childId];
             if (!childRec || !childRec.data.PARENT) return;
 
-            const myParentTag = childRec.data.PARENT.find((p) => p.parsed[0] === parentId);
+            const myParentTag = childRec.data.PARENT.find((p) => p.parentId === parentId);
             if (!myParentTag) return;
 
-            const relationType = (myParentTag.parsed[1] || "BIO").toUpperCase();
+            const relationType = (myParentTag.relType || "BIO").toUpperCase();
             const isBio = relationType === "BIO";
 
             // Resolve Partner
             let partnerId = null;
             if (parentRec.data.UNION) {
                 partnerId = parentRec.data.UNION.find((u) =>
-                    childRec.data.PARENT.some((p) => p.parsed[0] === u.parsed[0])
-                )?.parsed[0];
+                    childRec.data.PARENT.some((p) => p.parentId === u.partnerId)
+                )?.partnerId;
             }
 
             // Get Hub
@@ -419,8 +419,8 @@ function convertToCytoscape(parsedData, ranks) {
         const rec = records[id];
         if (rec && rec.data.ASSOC) {
             rec.data.ASSOC.forEach((assoc) => {
-                const targetId = assoc.parsed[0];
-                const role = assoc.parsed[1] || "ASSOC";
+                const targetId = assoc.targetId;
+                const role = assoc.role || "ASSOC";
                 if (!targetId) return;
                 ensurePlaceholderNode(targetId);
                 elements.push({

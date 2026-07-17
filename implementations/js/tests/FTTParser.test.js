@@ -50,12 +50,12 @@ ID: A
 NAME: John ||| PREF
 `;
             const result = parser.parse(input);
-            const name = result.records["A"].data.NAME[0].parsed;
+            const name = result.records["A"].data.NAME[0];
 
-            expect(name[0]).toBe("John");
-            expect(name[1]).toBe(""); // Empty
-            expect(name[2]).toBe(""); // Empty
-            expect(name[3]).toBe("PREF");
+            expect(name.display).toBe("John");
+            expect(name.sortKey).toBe("John"); // Fallback
+            expect(name.nameType).toBe(""); // Empty
+            expect(name.status).toBe("PREF");
         });
 
         it("should handle escaped pipes", () => {
@@ -187,7 +187,7 @@ ID: A
 BORN: 1980 | City; Region; Country
 `;
             const result = parser.parse(input);
-            const place = result.records["A"].data.BORN[0].parsed[1];
+            const place = result.records["A"].data.BORN[0].place;
             expect(place).toBe("City; Region; Country");
         });
 
@@ -201,7 +201,7 @@ BORN: 1980 | Berlin {=Kitchener}; Ontario
             const result = parser.parse(input);
             const field = result.records["A"].data.BORN[0];
 
-            expect(field.parsed[1]).toBe("Berlin; Ontario");
+            expect(field.place).toBe("Berlin; Ontario");
             expect(field.metadata.geo).toBe("Kitchener; Ontario");
         });
 
@@ -214,7 +214,7 @@ BORN: 1980 | City <51.5, -0.1>
 `;
             const result = parser.parse(input);
             const field = result.records["A"].data.BORN[0];
-            expect(field.parsed[1]).toBe("City");
+            expect(field.place).toBe("City");
             expect(field.metadata.coords).toBe("51.5, -0.1");
         });
     });
@@ -606,7 +606,7 @@ BORN: 1980 | Old Name \\{=Modern Name\\}; Region
             const field = result.records["A"].data.BORN[0];
 
             // Should display literal curly braces
-            expect(field.parsed[1]).toBe("Old Name {=Modern Name}; Region");
+            expect(field.place).toBe("Old Name {=Modern Name}; Region");
             // Should NOT have extracted "Modern Name" as the geo override
             expect(field.metadata.geo).toBeUndefined();
         });
@@ -623,7 +623,7 @@ BORN: 1980 | The Pub \\<Old\\>; London
             const result = parser.parse(input);
             const field = result.records["A"].data.BORN[0];
 
-            expect(field.parsed[1]).toBe("The Pub <Old>; London");
+            expect(field.place).toBe("The Pub <Old>; London");
             expect(field.metadata.coords).toBeUndefined();
         });
 
@@ -640,7 +640,7 @@ BORN: 1980 | City {=Modern} <10.0, 10.0>; Literal \\<Part\\>
             const field = result.records["A"].data.BORN[0];
 
             // 1. Display String: "City" (stripped Modern) + "; Literal <Part>" (Unescaped)
-            expect(field.parsed[1]).toBe("City; Literal <Part>");
+            expect(field.place).toBe("City; Literal <Part>");
 
             // 2. Geo Metadata: "Modern" (extracted) + "; Literal <Part>" (Unescaped)
             expect(field.metadata.geo).toBe("Modern; Literal <Part>");
@@ -660,7 +660,7 @@ BORN: 1980 | City \\| Name; Country
             const result = parser.parse(input);
             const field = result.records["A"].data.BORN[0];
 
-            expect(field.parsed[1]).toBe("City | Name; Country");
+            expect(field.place).toBe("City | Name; Country");
         });
     });
 });

@@ -23,8 +23,8 @@ export class RelationshipCalculator {
             // Process Parents
             if (rec.data.PARENT) {
                 rec.data.PARENT.forEach((p) => {
-                    const pId = p.parsed[0];
-                    const pType = (p.parsed[1] || "BIO").toUpperCase().trim();
+                    const pId = p.parentId;
+                    const pType = (p.relType || "BIO").toUpperCase().trim();
 
                     aList.push(pId);
                     typeMap.set(pId, pType);
@@ -46,10 +46,10 @@ export class RelationshipCalculator {
             const sMap = new Map();
             if (rec.data.UNION) {
                 rec.data.UNION.forEach((u) => {
-                    const partnerId = u.parsed[0];
-                    const type = (u.parsed[1] || "MARR").toUpperCase();
-                    const endDate = u.parsed[3];
-                    const endReason = u.parsed[4];
+                    const partnerId = u.partnerId;
+                    const type = (u.unionType || "MARR").toUpperCase();
+                    const endDate = u.endDate;
+                    const endReason = u.endReason;
 
                     const isEnded = !!endReason || (!!endDate && endDate !== "..");
 
@@ -66,11 +66,11 @@ export class RelationshipCalculator {
             const assocMap = new Map();
             if (rec.data.ASSOC) {
                 rec.data.ASSOC.forEach((a) => {
-                    const targetId = a.parsed[0];
-                    const role = (a.parsed[1] || "ASSOC").toUpperCase().trim();
-                    const start = a.parsed[2];
-                    const end = a.parsed[3];
-                    const details = a.parsed[4];
+                    const targetId = a.targetId;
+                    const role = (a.role || "ASSOC").toUpperCase().trim();
+                    const start = a.startDate;
+                    const end = a.endDate;
+                    const details = a.details;
 
                     // Determine active status (similar to Union)
                     const isEnded = !!end && end !== "..";
@@ -1423,16 +1423,16 @@ export class RelationText {
 export function getDisplayName(rec) {
     if (!rec) return "Unknown";
     if (rec.data.NAME) {
-        const pref = rec.data.NAME.find((n) => n.parsed[3] === "PREF");
-        if (pref) return pref.parsed[0];
-        if (rec.data.NAME[0]) return rec.data.NAME[0].parsed[0];
+        const pref = rec.data.NAME.find((n) => n.status === "PREF");
+        if (pref) return pref.display;
+        if (rec.data.NAME[0]) return rec.data.NAME[0].display;
     }
     return rec.id;
 }
 
 export function getGender(rec) {
     if (rec && rec.data.SEX && rec.data.SEX[0]) {
-        return rec.data.SEX[0].parsed[0].trim().toUpperCase();
+        return rec.data.SEX[0].value.trim().toUpperCase();
     }
     return "U";
 }

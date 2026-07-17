@@ -1,5 +1,5 @@
 /**
- * FamilyTree-Text (FTT) Reference Parser v0.1.4
+ * FamilyTree-Text (FTT) Reference Parser v0.1.5
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
  */
@@ -468,6 +468,7 @@ class ParseSession {
         this._injectImplicitUnions();
         this._reconcileChildLists();
         this._processPlaceHierarchies();
+        this._applySemanticProperties();
     }
 
     _injectImplicitUnions() {
@@ -606,23 +607,143 @@ class ParseSession {
                 if (placeIdx === undefined) continue;
 
                 for (const field of fields) {
-                    // IMPORTANT: We must parse from the RAW string to respect escaping of
-                    // braces {} and angle brackets <>.
                     const rawSegments = this._splitByPipe(field.raw);
                     const rawPlace = rawSegments[placeIdx];
 
                     if (rawPlace) {
                         const { display, geo, coords } = this._parsePlaceStringRaw(rawPlace);
-                        // Update the parsed display string (unescaped)
-                        field.parsed[placeIdx] = display.normalize("NFC");
 
-                        // Store geo/coords in metadata
+                        field.place = display.normalize("NFC");
+
                         if (!field.metadata) field.metadata = {};
                         if (geo) field.metadata.geo = geo.normalize("NFC");
                         if (coords) field.metadata.coords = coords;
                     }
                 }
             }
+        }
+    }
+
+    _applySemanticProperties() {
+        for (const record of this.records.values()) {
+            for (const [key, fields] of Object.entries(record.data)) {
+                for (const field of fields) {
+                    // 1. Map the primary field properties
+                    this._mapProperties(key, field);
+
+                    // 2. Map the properties for any attached modifiers
+                    if (field.modifiers) {
+                        for (const [modKey, mods] of Object.entries(field.modifiers)) {
+                            for (const mod of mods) {
+                                this._mapProperties(modKey, mod, true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    _mapProperties(key, field, isModifier = false) {
+        const p = field.parsed || [];
+        // Helper to safely fetch, trim, and normalize array elements
+        const safe = (idx) => (p[idx] || "").trim().normalize("NFC");
+
+        if (isModifier) {
+            if (key.endsWith("_SRC")) {
+                field.sourceId = safe(0);
+                field.detail = safe(1);
+            } else if (key.endsWith("_QUAL")) {
+                field.evidence = safe(0);
+                field.info = safe(1);
+                field.source = safe(2);
+            } else if (key.endsWith("_NOTE")) {
+                field.text = p[0] ? p[0].normalize("NFC") : ""; // Preserve whitespace for notes
+            }
+            return;
+        }
+
+        switch (key) {
+            case "NAME":
+                field.display = p[0] ? p[0].normalize("NFC") : "";
+                field.sortKey = safe(1) ? safe(1) : field.display; // Fallback logic
+                field.nameType = safe(2);
+                field.status = safe(3);
+                break;
+            case "BORN":
+            case "DIED":
+                field.date = safe(0);
+                field.place = field.place || (p[1] ? p[1].normalize("NFC") : ""); // Respect pre-existing place
+                field.status = safe(2);
+                break;
+            case "EVENT":
+                field.eventType = safe(0);
+                field.startDate = safe(1);
+                field.endDate = safe(2);
+                field.place = field.place || (p[1] ? p[1].normalize("NFC") : ""); // Respect pre-existing place
+                field.details = safe(4);
+                break;
+            case "EVENT_REF":
+                field.eventId = safe(0);
+                field.role = safe(1);
+                field.details = safe(2);
+                break;
+            case "PARENT":
+                field.parentId = safe(0);
+                field.relType = safe(1);
+                field.startDate = safe(2);
+                field.endDate = safe(3);
+                break;
+            case "UNION":
+                field.partnerId = safe(0);
+                field.unionType = safe(1);
+                field.startDate = safe(2);
+                field.endDate = safe(3);
+                field.endReason = safe(4);
+                break;
+            case "ASSOC":
+                field.targetId = safe(0);
+                field.role = safe(1);
+                field.startDate = safe(2);
+                field.endDate = safe(3);
+                field.details = safe(4);
+                break;
+            case "MEDIA":
+                field.path = safe(0);
+                field.date = safe(1);
+                field.caption = safe(2);
+                break;
+            case "CHILD":
+                field.childId = safe(0);
+                break;
+            case "SRC":
+                field.sourceId = safe(0);
+                break;
+            case "SEX":
+            case "TYPE":
+            case "PRIVACY":
+                field.value = safe(0);
+                break;
+            case "START_DATE":
+            case "END_DATE":
+                field.date = safe(0);
+                break;
+            case "PLACE":
+                field.place = field.place || (p[1] ? p[1].normalize("NFC") : ""); // Respect pre-existing place
+                break;
+            case "NOTES":
+            case "TITLE":
+            case "AUTHOR":
+            case "REPO":
+            case "URL":
+                field.text = p[0] ? p[0].normalize("NFC") : ""; // Preserve whitespace
+                break;
+            default:
+                // Handle user-defined extensions (e.g. _EYE_COLOR)
+                if (key.startsWith("_")) {
+                    field.value = p[0] ? p[0].normalize("NFC") : "";
+                }
+                break;
         }
     }
 
