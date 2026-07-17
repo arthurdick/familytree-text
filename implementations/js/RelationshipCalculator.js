@@ -1045,7 +1045,21 @@ export class RelationText {
         if (rel.type === "CO_AFFINAL") {
             const spAName = getDisplayName(this.records[rel.spouseA]);
             const spBName = getDisplayName(this.records[rel.spouseB]);
-            const bloodTerm = this.getBloodTerm(
+            const spAGender = getGender(this.records[rel.spouseA]);
+
+            const spouseBloodTerm = this.getBloodTerm(
+                rel.bloodRel.distA,
+                rel.bloodRel.distB,
+                spAGender,
+                rel.bloodRel.isHalf,
+                rel.bloodRel.isDouble,
+                rel.bloodRel.isAdoptive,
+                rel.bloodRel.isStep,
+                rel.bloodRel.isExStep,
+                rel.bloodRel.isAmbiguous
+            );
+
+            const subjectBloodTerm = this.getBloodTerm(
                 rel.bloodRel.distA,
                 rel.bloodRel.distB,
                 genderA,
@@ -1056,9 +1070,10 @@ export class RelationText {
                 rel.bloodRel.isExStep,
                 rel.bloodRel.isAmbiguous
             );
+
             return {
-                term: `Co-${bloodTerm}-in-law`,
-                detail: `${nameA}'s spouse (${spAName}) is the ${bloodTerm} of ${nameB}'s spouse (${spBName}).`
+                term: `Co-${subjectBloodTerm}-in-law`,
+                detail: `${nameA}'s spouse (${spAName}) is the ${spouseBloodTerm} of ${nameB}'s spouse (${spBName}).`
             };
         }
 
