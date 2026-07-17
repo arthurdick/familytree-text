@@ -1,5 +1,5 @@
 /**
- * FamilyTree-Text (FTT) Reference Parser v0.1.5
+ * FamilyTree-Text (FTT) Reference Parser v0.1.6
  * const parser = new FTTParser();
  * const result = parser.parse(fileContentString);
  */
@@ -940,26 +940,35 @@ class ParseSession {
             }
         });
 
-        // 3. Cycle Detection
+        // 3. Cycle Detection (Optimized with O(1) path lookup)
         const visited = new Set();
         for (const rootId of this.ids) {
             if (this._determineRecordType(rootId) !== "INDIVIDUAL") continue;
             if (visited.has(rootId)) continue;
 
-            const stack = [{ id: rootId, path: [], processed: false }];
+            const stack = [{ id: rootId, processed: false }];
+            const pathSet = new Set();
+            const pathArray = [];
 
             while (stack.length > 0) {
                 const frame = stack[stack.length - 1];
+
+                // When a frame is fully processed (its children are done),
+                // we backtrack: remove it from the current path and mark as globally visited.
                 if (frame.processed) {
                     visited.add(frame.id);
+                    pathSet.delete(frame.id);
+                    pathArray.pop();
                     stack.pop();
                     continue;
                 }
-                frame.processed = true;
-                const { id, path } = frame;
 
-                if (path.includes(id)) {
-                    const cyclePath = [...path, id].join(" -> ");
+                frame.processed = true;
+                const id = frame.id;
+
+                // O(1) cycle detection via the shared pathSet
+                if (pathSet.has(id)) {
+                    const cyclePath = [...pathArray, id].join(" -> ");
                     this._error(
                         "CIRCULAR_LINEAGE",
                         `Circular Lineage Detected: ${cyclePath}`,
@@ -969,18 +978,22 @@ class ParseSession {
                     continue;
                 }
 
+                // If we've already fully processed this node in a different branch, we can skip it.
                 if (visited.has(id)) {
                     stack.pop();
                     continue;
                 }
 
+                // Going deeper: Add to our current traversal path
+                pathSet.add(id);
+                pathArray.push(id);
+
                 const record = this.records.get(id);
                 if (record && record.data["PARENT"]) {
-                    const nextPath = [...path, id];
                     for (const pField of record.data["PARENT"]) {
                         const parentId = pField.parsed[0];
                         if (parentId && this.records.has(parentId)) {
-                            stack.push({ id: parentId, path: nextPath, processed: false });
+                            stack.push({ id: parentId, processed: false });
                         }
                     }
                 }
