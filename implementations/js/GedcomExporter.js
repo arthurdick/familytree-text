@@ -196,8 +196,13 @@ export default class GedcomExporter {
                 let gedName = display;
                 if (sort.includes(",")) {
                     const surname = sort.split(",")[0].trim();
-                    if (display.includes(surname)) {
-                        gedName = display.replace(surname, `/${surname}/`);
+                    const surnameIndex = display.lastIndexOf(surname); // Target the true family name at the end
+
+                    if (surnameIndex !== -1) {
+                        gedName =
+                            display.slice(0, surnameIndex) +
+                            `/${surname}/` +
+                            display.slice(surnameIndex + surname.length);
                     } else {
                         gedName = `${display} /${surname}/`;
                     }

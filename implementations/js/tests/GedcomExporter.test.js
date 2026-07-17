@@ -104,6 +104,18 @@ BORN: 1900 | Berlin {=Kitchener}; Ontario
             // The exporter attaches the metadata as a note on the PLAC
             expect(gedcom).toContain("3 NOTE Standardized/Modern Place: Kitchener, Ontario");
         });
+
+        it("should correctly handle individuals where the surname is a substring of the given name", () => {
+            const input = `
+ID: P2
+NAME: William Will | Will, William
+SEX: M
+`;
+            const gedcom = convertWithHeader(input);
+
+            expect(gedcom).toContain("1 NAME William /Will/");
+            expect(gedcom).not.toContain("1 NAME /Will/iam Will");
+        });
     });
 
     // ==========================================
