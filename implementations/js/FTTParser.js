@@ -940,7 +940,7 @@ class ParseSession {
             }
         });
 
-        // 3. Cycle Detection (Optimized with O(1) path lookup)
+        // 3. Cycle Detection
         const visited = new Set();
         for (const rootId of this.ids) {
             if (this._determineRecordType(rootId) !== "INDIVIDUAL") continue;
@@ -966,18 +966,6 @@ class ParseSession {
                 frame.processed = true;
                 const id = frame.id;
 
-                // O(1) cycle detection via the shared pathSet
-                if (pathSet.has(id)) {
-                    const cyclePath = [...pathArray, id].join(" -> ");
-                    this._error(
-                        "CIRCULAR_LINEAGE",
-                        `Circular Lineage Detected: ${cyclePath}`,
-                        this.records.get(id)?.line || 0
-                    );
-                    stack.pop();
-                    continue;
-                }
-
                 // If we've already fully processed this node in a different branch, we can skip it.
                 if (visited.has(id)) {
                     stack.pop();
@@ -992,8 +980,18 @@ class ParseSession {
                 if (record && record.data["PARENT"]) {
                     for (const pField of record.data["PARENT"]) {
                         const parentId = pField.parsed[0];
+
                         if (parentId && this.records.has(parentId)) {
-                            stack.push({ id: parentId, processed: false });
+                            if (pathSet.has(parentId)) {
+                                const cyclePath = [...pathArray, parentId].join(" -> ");
+                                this._error(
+                                    "CIRCULAR_LINEAGE",
+                                    `Circular Lineage Detected: ${cyclePath}`,
+                                    pField.line || record.line
+                                );
+                            } else if (!visited.has(parentId)) {
+                                stack.push({ id: parentId, processed: false });
+                            }
                         }
                     }
                 }
