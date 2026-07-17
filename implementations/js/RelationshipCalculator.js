@@ -1079,7 +1079,8 @@ export class RelationText {
 
         if (rel.type === "EXTENDED_AFFINAL") {
             const spouseName = getDisplayName(this.records[rel.spouseId]);
-            const spouseGender = getGender(this.records[rel.spouseId]);
+            const spouseRecord = this.records[rel.spouseId];
+            const spouseGender = getGender(spouseRecord);
 
             if (rel.subType === "VIA_SIBLING_SPOUSE") {
                 const myInLawTerm =
@@ -1088,10 +1089,12 @@ export class RelationText {
                         : genderA === "F"
                           ? "Sister-in-law"
                           : "Sibling-in-law";
+
+                const actualRelativeGender = getGender(this.records[rel.bloodRel.viaNode]);
                 const relativeTerm = this.getBloodTerm(
                     rel.bloodRel.distA,
                     rel.bloodRel.distB,
-                    spouseGender,
+                    actualRelativeGender,
                     rel.bloodRel.isHalf,
                     rel.bloodRel.isDouble,
                     rel.bloodRel.isAdoptive,
@@ -1112,6 +1115,7 @@ export class RelationText {
                         : spouseGender === "F"
                           ? "Sister-in-law"
                           : "Sibling-in-law";
+
                 const relativeTerm = this.getBloodTerm(
                     rel.bloodRel.distA,
                     rel.bloodRel.distB,
@@ -1147,13 +1151,8 @@ export class RelationText {
                     bloodRel: rel.relB,
                     isExUnion: false
                 };
-                const s1Gender = getGender(this.records[rel.spouse1Id]);
-                const termS1toB = this.describeAffinal(
-                    mockAffinalRel,
-                    s1Gender,
-                    nameB,
-                    "TEMP"
-                ).term;
+
+                const termS1toB = this.describeAffinal(mockAffinalRel, genderA, nameB, "TEMP").term;
                 return {
                     term: `${termA} of ${termS1toB}`,
                     detail: `${nameA} is the ${termA} of ${termS1toB}, ${getDisplayName(this.records[rel.spouse1Id])}.`
