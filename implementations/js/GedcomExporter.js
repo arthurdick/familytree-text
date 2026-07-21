@@ -69,10 +69,24 @@ export default class GedcomExporter {
                     output.push(`1 CHIL @${childId}@`);
                 });
 
+                // Evaluate Family Privacy (Mask if any spouse is LIVING or PRIVATE)
+                let isFamLiving = false;
+                const spouseIds = [...fam.husbs, ...fam.wives];
+                for (const spouseId of spouseIds) {
+                    const spouseRec = records[spouseId];
+                    if (spouseRec) {
+                        const priv = this._getField(spouseRec, "PRIVACY");
+                        if (priv === "LIVING" || priv === "PRIVATE") {
+                            isFamLiving = true;
+                            break;
+                        }
+                    }
+                }
+
+                const shouldMask = privacyEnabled && isFamLiving;
+
                 // Family Events (MARR, DIV, etc.)
                 fam.events.forEach((evt) => {
-                    const shouldMask = privacyEnabled;
-
                     if (evt.type === "PART") {
                         // Use EVEN tag for Partners/Common Law to avoid implying legal marriage
                         output.push(`1 EVEN`);

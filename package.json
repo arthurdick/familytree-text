@@ -1,6 +1,6 @@
 {
   "name": "familytree-text",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "FTT Reference Implementation",
   "type": "module",
   "scripts": {
